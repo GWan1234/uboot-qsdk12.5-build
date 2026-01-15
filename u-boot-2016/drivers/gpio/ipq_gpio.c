@@ -16,7 +16,7 @@
 #include <asm/types.h>
 #include <fdtdec.h>
 #include <asm/arch-qca-common/gpio.h>
-#if defined(CONFIG_CMD_HTTPD)
+#if defined(CONFIG_HTTPD)
 #include <ipq_api.h>
 #endif
 
@@ -142,7 +142,7 @@ int qca_gpio_deinit(int offset)
 	return 0;
 }
 
-#if defined(CONFIG_CMD_HTTPD)
+#if defined(CONFIG_HTTPD)
 void ipq_gpio_init(const char *gpio_name)
 {
 	int node;

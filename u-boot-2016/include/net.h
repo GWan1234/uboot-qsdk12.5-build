@@ -330,6 +330,9 @@ struct vlan_ethernet_hdr {
 
 #define IPPROTO_ICMP	 1	/* Internet Control Message Protocol	*/
 #define IPPROTO_UDP	17	/* User Datagram Protocol		*/
+#if defined(CONFIG_TCP)
+#define IPPROTO_TCP 6       /* Transmission Control Protocol        */
+#endif
 
 /*
  *	Internet Protocol (IP) header.
@@ -520,8 +523,11 @@ extern ushort		net_native_vlan;	/* Our Native VLAN */
 extern int		net_restart_wrap;	/* Tried all network devices */
 extern int 		tftp_our_port;
 enum proto_t {
-	BOOTP, RARP, ARP, TFTPGET, DHCP, PING, DNS, NFS, CDP, NETCONS, SNTP,
-	TFTPSRV, TFTPPUT, LINKLOCAL, HTTPD
+	BOOTP, RARP, ARP, TFTPGET, DHCP, PING, DNS, NFS,
+	CDP, NETCONS, SNTP, TFTPSRV, TFTPPUT, LINKLOCAL,
+#if defined(CONFIG_TCP)
+	TCP,
+#endif
 };
 
 extern char	net_boot_file_name[1024];/* Boot File name */
@@ -529,14 +535,6 @@ extern char	net_boot_file_name[1024];/* Boot File name */
 extern u32	net_boot_file_size;
 /* Boot file size in blocks as reported by the DHCP server */
 extern u32	net_boot_file_expected_size_in_blocks;
-
-#if defined(CONFIG_CMD_HTTPD)
-extern int webfailsafe_is_running;
-extern int webfailsafe_ready_for_upgrade;
-extern int webfailsafe_upgrade_type;
-extern unsigned char *webfailsafe_data_pointer;
-extern struct in_addr net_httpd_ip; /* the ip address to httpd */
-#endif
 
 #if defined(CONFIG_CMD_DNS)
 extern char *net_dns_resolve;		/* The host to resolve  */
@@ -588,6 +586,10 @@ int net_update_ether(struct ethernet_hdr *et, uchar *addr, uint prot);
 
 /* Set IP header */
 void net_set_ip_header(uchar *pkt, struct in_addr dest, struct in_addr source);
+#if defined(CONFIG_TCP)
+void net_set_ip_header_tcp(uchar *pkt, struct in_addr dest, struct in_addr source,
+		       u16 pkt_len, u8 proto);
+#endif
 void net_set_udp_header(uchar *pkt, struct in_addr dest, int dport,
 				int sport, int len);
 

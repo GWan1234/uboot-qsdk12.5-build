@@ -17,7 +17,7 @@
 #include <asm/arch-qca-common/smem.h>
 #include <asm/arch-qca-common/clk.h>
 
-#if !defined(CONFIG_CMD_HTTPD)
+#if !defined(CONFIG_HTTPD)
 #include <asm/arch-qca-common/gpio.h>
 #endif
 

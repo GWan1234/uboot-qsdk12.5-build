@@ -1,488 +1,932 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- *	Copyright 1994, 1995, 2000 Neil Russell.
- *	(See License)
- *	Copyright 2000, 2001 DENX Software Engineering, Wolfgang Denk, wd@denx.de
+ * Copyright (C) 2022 MediaTek Inc. All Rights Reserved.
+ *
+ * Author: Weijie Gao <weijie.gao@mediatek.com>
+ *
+ * Simple HTTP server implementation
  */
 
 #include <common.h>
-#include <command.h>
+#include <errno.h>
+#include <malloc.h>
 #include <net.h>
-#include <asm/byteorder.h>
-#include "httpd.h"
-
-#include "../httpd/uipopt.h"
-#include "../httpd/uip.h"
-#include "../httpd/uip_arp.h"
+#include <net/tcp.h>
+#include <net/httpd.h>
+#include <failsafe/failsafe.h>
 #include <ipq_api.h>
-#include <asm/gpio.h>
-#include <asm/arch-qca-common/smem.h>
 
-static char buf[576];
-static uint32_t flash_type;
-static qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-static int fw_type;
-static int arptimer = 0;
-struct in_addr net_httpd_ip;
+static ulong transfer_start_time;
+static ulong last_progress;
 
-// start http daemon
-void HttpdStart(void) {
-	struct uip_eth_addr eaddr;
-	unsigned short int ip[2];
-	ulong tmp_ip_addr = ntohl(net_ip.s_addr);
+struct httpd_instance {
+	struct list_head node;
 
-	printf("HTTP server is starting at IP: %lu.%lu.%lu.%lu\n",
-		(tmp_ip_addr & 0xFF000000) >> 24,
-		(tmp_ip_addr & 0x00FF0000) >> 16,
-		(tmp_ip_addr & 0x0000FF00) >> 8,
-		(tmp_ip_addr & 0x000000FF)
-	);
+	u16 port;
+	struct list_head uri_handlers;
+};
 
-	// set MAC address
-	memcpy(eaddr.addr, net_ethaddr, sizeof(net_ethaddr));
-	uip_setethaddr(eaddr);
+struct _httpd_uri_handler {
+	struct list_head node;
 
-	uip_init();
-	httpd_init();
+	struct httpd_uri_handler urih;
+};
 
-	// set Host addr
-	ip[0] = htons((tmp_ip_addr & 0xFFFF0000) >> 16);
-	ip[1] = htons(tmp_ip_addr & 0x0000FFFF);
-	uip_sethostaddr(ip);
-	ip[0] = ntohs(uip_hostaddr[0]);
-	ip[1] = ntohs(uip_hostaddr[1]);
-	printf("Host addr is set to IP: %hu.%hu.%hu.%hu\n",
-		(ip[0] & 0xFF00) >> 8,
-		(ip[0] & 0x00FF),
-		(ip[1] & 0xFF00) >> 8,
-		(ip[1] & 0x00FF)
-	);
+enum httpd_session_status {
+	HTTPD_S_NEW = 0,
+	HTTPD_S_HEADER_RECVING,
+	HTTPD_S_PAYLOAD_RECVING,
+	HTTPD_S_FULL_RCVD,
+	HTTPD_S_RESPONDING,
+	HTTPD_S_CLOSING
+};
 
-	// set network mask (255.255.255.0 -> local network)
-	net_netmask = string_to_ip("255.255.255.0");
-	ip[0] = htons((0xFFFFFF00 & 0xFFFF0000) >> 16);
-	ip[1] = htons(0xFFFFFF00 & 0x0000FFFF);
-	uip_setnetmask(ip);
+struct httpd_tcp_pdata {
+	enum httpd_session_status status;
 
-	// should we also set default router ip address?
-	//uip_setdraddr();
-	do_http_progress(WEBFAILSAFE_PROGRESS_START);
-	webfailsafe_is_running = 1;
-}
+	char buf[4096];
+	u32 bufsize;
 
-void HttpdStop(void) {
-	webfailsafe_is_running = 0;
-	webfailsafe_ready_for_upgrade = 0;
-	webfailsafe_upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE;
-	do_http_progress(WEBFAILSAFE_PROGRESS_UPGRADE_FAILED);
-}
+	char *uri;
+	char *boundary;
 
-void HttpdDone(void) {
-	webfailsafe_is_running = 0;
-	webfailsafe_ready_for_upgrade = 0;
-	webfailsafe_upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE;
-	do_http_progress(WEBFAILSAFE_PROGRESS_UPGRADE_READY);
-}
+	int is_uploading;
+	char *upload_ptr;
+	u32 payload_size;
+	u32 upload_size;
 
-#ifdef CONFIG_MD5
-#include <u-boot/md5.h>
+	struct httpd_request request;
+	struct httpd_response response;
 
-void printChecksumMd5(int address, unsigned int size)
+	int resp_std_cnt;
+};
+
+struct http_response_code {
+	u32 code;
+	const char *text;
+};
+
+static struct http_response_code http_resp_codes[] = {
+	{ 200, "OK" },
+	{ 302, "Found" },
+	{ 307, "Temporary Redirect" },
+	{ 400, "Bad Request" },
+	{ 403, "Forbidden" },
+	{ 404, "Not Found" },
+	{ 405, "Method Not Allowed" },
+	{ 413, "Request Entity Too Large" },
+	{ 431, "Request Header Fields Too Large" },
+	{ 500, "Internal Server Error" },
+	{ 503, "Service Unavailable" }
+};
+
+u32 upload_id = (u32) -1;
+
+static int is_uploading;
+static LIST_HEAD(inst_head);
+
+static void httpd_tcp_callback(struct tcp_cb_data *cbd);
+static void httpd_std_err_response(struct tcp_cb_data *cbd, u32 code);
+
+void __weak *httpd_get_upload_buffer_ptr(size_t size)
 {
-	void *buf = (void*)(address);
-	int i = 0;
-	u8 output[16];
-	md5_wd(buf, size, output, CHUNKSZ_MD5);
-	printf("md5 for 0x%08x ... 0x%08x ==> ", address, address + size);
-	for (i = 0; i < 16; i++)
-		printf("%02x", output[i] & 0xFF);
-	printf("\n");
+	return (void *)CONFIG_SYS_LOAD_ADDR;
 }
-#else
-void printChecksumMd5(int address, unsigned int size)
+
+static void dummy_urih_cb(enum httpd_uri_handler_status status,
+			  struct httpd_request *request,
+			  struct httpd_response *response)
 {
 }
-#endif
 
-// info about current progress of failsafe mode
-int do_http_progress(const int state) {
-	/* toggle LED's here */
-	switch(state) {
-		case WEBFAILSAFE_PROGRESS_START:
-			led_off("power_led");
-			led_on("blink_led");
-			led_off("system_led");
-			printf("HTTP server is ready!\n\n");
-			break;
+static struct httpd_uri_handler dummy_urih = {
+	.uri = "",
+	.cb = dummy_urih_cb
+};
 
-		case WEBFAILSAFE_PROGRESS_TIMEOUT:
-			//printf("Waiting for request...\n");
-			break;
+struct httpd_instance *httpd_find_instance(u16 port)
+{
+	struct list_head *lh;
+	struct httpd_instance *i;
 
-		case WEBFAILSAFE_PROGRESS_UPLOAD_READY:
-			printf("HTTP upload is done! Upgrading...\n");
-			break;
+	list_for_each(lh, &inst_head) {
+		i = list_entry(lh, struct httpd_instance, node);
+		if (i->port == port)
+			return i;
+	}
 
-		case WEBFAILSAFE_PROGRESS_UPGRADE_READY:
-			led_off("power_led");
-			led_off("blink_led");
-			led_on("system_led");
-			printf("HTTP upgrade is done! Rebooting...\n\n");
-			mdelay(3000);
-			break;
+	return NULL;
+}
 
-		case WEBFAILSAFE_PROGRESS_UPGRADE_FAILED:
-			led_on("power_led");
-			led_off("blink_led");
-			led_off("system_led");
-			printf("## Error: HTTP upgrade failed!\n\n");
+struct httpd_instance *httpd_create_instance(u16 port)
+{
+	struct httpd_instance *inst;
+
+	if (httpd_find_instance(port))
+		return NULL;
+
+	inst = malloc(sizeof(*inst));
+	if (!inst)
+		return NULL;
+
+	inst->port = port;
+	INIT_LIST_HEAD(&inst->uri_handlers);
+
+	if (tcp_listen(htons(port), httpd_tcp_callback)) {
+		free(inst);
+		return NULL;
+	}
+
+	list_add_tail(&inst->node, &inst_head);
+
+	return inst;
+}
+
+void httpd_free_instance(struct httpd_instance *httpd_inst)
+{
+	struct list_head *lh, *n;
+	struct httpd_instance *inst;
+	struct _httpd_uri_handler *u;
+
+	tcp_listen_stop(htons(httpd_inst->port));
+
+	inst = httpd_find_instance(httpd_inst->port);
+	if (inst) {
+		list_del(&inst->node);
+
+		list_for_each_safe(lh, n, &inst->uri_handlers) {
+			u = list_entry(lh, struct _httpd_uri_handler, node);
+			list_del(&u->node);
+			free(u);
+		}
+
+		free(inst);
+	}
+}
+
+int httpd_free_instance_by_port(u16 port)
+{
+	struct httpd_instance *inst;
+
+	inst = httpd_find_instance(port);
+	if (inst) {
+		httpd_free_instance(inst);
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+int httpd_register_uri_handler(struct httpd_instance *httpd_inst,
+			       const char *uri,
+			       httpd_uri_handler_cb cb,
+			       struct httpd_uri_handler **returih)
+{
+	struct _httpd_uri_handler *u;
+
+	if (!httpd_inst || !uri || !cb)
+		return -EINVAL;
+
+	u = calloc(1, sizeof(*u));
+	if (!u)
+		return -ENOMEM;
+
+	u->urih.uri = uri;
+	u->urih.cb = cb;
+
+	list_add_tail(&u->node, &httpd_inst->uri_handlers);
+
+	if (returih)
+		*returih = &u->urih;
+
+	return 0;
+}
+
+int httpd_unregister_uri_handler(struct httpd_instance *httpd_inst,
+				 struct httpd_uri_handler *urih)
+{
+	struct list_head *lh, *n;
+	struct _httpd_uri_handler *u;
+
+	if (!httpd_inst || !urih)
+		return -EINVAL;
+
+	list_for_each_safe(lh, n, &httpd_inst->uri_handlers) {
+		u = list_entry(lh, struct _httpd_uri_handler, node);
+		if (&u->urih == urih) {
+			list_del(&u->node);
+			free(u);
 			break;
+		}
 	}
 
 	return 0;
 }
 
-void NetSendHttpd(void) {
+struct httpd_uri_handler *httpd_find_uri_handler(
+	struct httpd_instance *httpd_inst, const char *uri)
+{
+	struct list_head *lh;
+	struct _httpd_uri_handler *u;
 
-	volatile uchar *tmpbuf = net_tx_packet;
-	int i;
+	if (!httpd_inst || !uri)
+		return NULL;
 
-	for (i = 0; i < 40 + UIP_LLH_LEN; i++) {
-
-		tmpbuf[i] = uip_buf[i];
+	list_for_each(lh, &httpd_inst->uri_handlers) {
+		u = list_entry(lh, struct _httpd_uri_handler, node);
+		if (!strcmp(u->urih.uri, uri))
+			return &u->urih;
 	}
 
-	for (; i < uip_len; i++) {
-
-		tmpbuf[i] = uip_appdata[i - 40 - UIP_LLH_LEN];
+	list_for_each(lh, &httpd_inst->uri_handlers) {
+		u = list_entry(lh, struct _httpd_uri_handler, node);
+		if (!strcmp(u->urih.uri, ""))
+			return &u->urih;
 	}
 
-	eth_send(net_tx_packet, uip_len);
+	return NULL;
 }
 
-void NetReceiveHttpd(volatile uchar * inpkt, int len) {
+u32 http_make_response_header(struct http_response_info *info, char *buff,
+			      u32 size)
+{
+	int http_ver = 1;
+	char *p = buff;
 
-	memcpy(uip_buf, (const void *)inpkt, len);
-	uip_len = len;
-	struct uip_eth_hdr * tmp = (struct uip_eth_hdr *)&uip_buf[0];
-	if (tmp->type == htons(UIP_ETHTYPE_IP)) {
-		uip_arp_ipin();
-		uip_input();
+	if (info->http_1_0)
+		http_ver = 0;
 
-		if (uip_len > 0) {
-			uip_arp_out();
-			NetSendHttpd();
-		}
-	} else if (tmp->type == htons(UIP_ETHTYPE_ARP)) {
-		uip_arp_arpin();
-
-		if (uip_len > 0)
-			NetSendHttpd();
-	}
-}
-
-void HttpdHandler(void) {
-	int i;
-
-	for (i = 0; i < UIP_CONNS; i++) {
-		uip_periodic(i);
-
-		if (uip_len > 0) {
-			uip_arp_out();
-			NetSendHttpd();
+	for (int i = 0; i < ARRAY_SIZE(http_resp_codes); i++) {
+		if (http_resp_codes[i].code == info->code) {
+			p += snprintf(p, buff + size - p,
+				    "HTTP/1.%d %u %s\r\n", http_ver,
+				    info->code, http_resp_codes[i].text);
+			break;
 		}
 	}
 
-	if (++arptimer == 20) {
-		uip_arp_timer();
-		arptimer = 0;
-	}
+	if (p == buff)
+		p += snprintf(p, buff + size - p, "HTTP/1.%d %u\r\n",
+			    http_ver, info->code);
+
+	if (p >= buff + size)
+		return size;
+
+	if (info->content_type)
+		p += snprintf(p, buff + size - p, "Content-Type: %s\r\n",
+			    info->content_type);
+
+	if (p >= buff + size)
+		return size;
+
+	if (info->content_length >= 0)
+		p += snprintf(p, buff + size - p, "Content-Length: %d\r\n",
+			    info->content_length);
+
+	if (p >= buff + size)
+		return size;
+
+	p += snprintf(p, buff + size - p,
+		"Cache-Control: no-store, no-cache, must-revalidate, max-age=0\r\n");
+
+	if (p >= buff + size)
+		return size;
+
+	p += snprintf(p, buff + size - p, "Pragma: no-cache\r\n");
+
+	if (p >= buff + size)
+		return size;
+
+	p += snprintf(p, buff + size - p, "Expires: 0\r\n");
+
+	if (p >= buff + size)
+		return size;
+
+	if (info->location)
+		p += snprintf(p, buff + size - p, "Location: %s\r\n",
+			    info->location);
+
+	if (p >= buff + size)
+		return size;
+
+	if (info->chunked_encoding)
+		p += snprintf(p, buff + size - p,
+			      "Transfer-Encoding: chunked\r\n");
+
+	if (p >= buff + size)
+		return size;
+
+	if (info->connection_close)
+		p += snprintf(p, buff + size - p, "Connection: close\r\n");
+
+	if (p >= buff + size)
+		return size;
+
+	p += snprintf(p, buff + size - p, "\r\n");
+
+	return p - buff;
 }
 
-static uint32_t check_flash_type(void) {
-	switch (sfi->flash_type) {
-		case SMEM_BOOT_SPI_FLASH:
-			if (sfi->flash_secondary_type == SMEM_BOOT_MMC_FLASH)
-				return SMEM_BOOT_NORPLUSEMMC;
-			else
-				return SMEM_BOOT_SPI_FLASH;
-		default:
-			return sfi->flash_type;
-	}
-}
+static int httpd_recv_hdr(struct httpd_instance *inst,
+			    struct tcp_cb_data *cbd)
+{
+	struct httpd_tcp_pdata *pdata = cbd->pdata;
+	char *p, *payload_ptr, *uri_ptr, *fields_ptr;
+	char *cl_ptr, *ct_ptr, *b_ptr;
+	enum httpd_request_method method;
+	u32 size_rcvd, hdr_size, err_code = 400;
+	int ret = 0;
+	ulong progress;
+	ulong transfer_duration;
 
-static int do_firmware_upgrade(const ulong size) {
-	switch (flash_type) {
-#if defined(MACHINE_FLASH_TYPE_EMMC) || \
-	defined(MACHINE_FLASH_TYPE_NORPLUSEMMC)
-		case SMEM_BOOT_MMC_FLASH:
-		case SMEM_BOOT_NORPLUSEMMC:
-			if (fw_type == FW_TYPE_FACTORY_KERNEL6M) {
-				printf("\n\n******************************\n* FACTORY FIRMWARE UPGRADING *\n* FIRMWARE KERNEL SIZE: 6MB  *\n*  DO NOT POWER OFF DEVICE!  *\n******************************\n\n");
-				sprintf(buf,
-					"flash 0:HLOS 0x%lx 0x%lx && flash rootfs 0x%lx 0x%lx && "
-					"bootconfig set primary",
-					// factory.bin 由 kernel + rootfs 组成，其中 kernel 固定 6MB 大小
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS,
-					(ulong)0x600000,
-					(ulong)(WEBFAILSAFE_UPLOAD_RAM_ADDRESS + 0x600000),
-					(ulong)(size - 0x600000)
-				);
-			} else if (fw_type == FW_TYPE_FACTORY_KERNEL12M) {
-				printf("\n\n******************************\n* FACTORY FIRMWARE UPGRADING *\n* FIRMWARE KERNEL SIZE: 12MB *\n*  DO NOT POWER OFF DEVICE!  *\n******************************\n\n");
-				sprintf(buf,
-					"flash 0:HLOS 0x%lx 0x%lx && flash rootfs 0x%lx 0x%lx && "
-					"bootconfig set primary",
-					// factory.bin 由 kernel + rootfs 组成，其中 kernel 固定 12MB 大小
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS,
-					(ulong)0xC00000,
-					(ulong)(WEBFAILSAFE_UPLOAD_RAM_ADDRESS + 0xC00000),
-					(ulong)(size - 0xC00000)
-				);
-			} else if (fw_type == FW_TYPE_JDCLOUD) {
-				printf("\n\n*******************************\n* JDCLOUD FIRMWARE UPGRADING  *\n*  DO NOT POWER OFF DEVICE!   *\n*******************************\n\n");
-				sprintf(buf,
-					"imxtract 0x%lx hlos-0cc33b23252699d495d79a843032498bfa593aba && flash 0:HLOS $fileaddr $filesize && imxtract 0x%lx rootfs-f3c50b484767661151cfb641e2622703e45020fe && flash rootfs $fileaddr $filesize && imxtract 0x%lx wififw-45b62ade000c18bfeeb23ae30e5a6811eac05e2f && flash 0:WIFIFW $fileaddr $filesize && flasherase rootfs_data && "
-					"bootconfig set primary",
-					// 执行 imxtract 时不带目标地址，则不进行复制，但会修改环境变量 $fileaddr $filesize，可以直接用
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS,
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS,
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS
-				);
-			} else if (fw_type == FW_TYPE_SYSUPGRADE) {
-				printf("\n\n*********************************\n* SYSUPGRADE FIRMWARE UPGRADING *\n*   DO NOT POWER OFF DEVICE!    *\n*********************************\n\n");
-				sprintf(buf,
-					"untar 0x%lx 0x%lx && flash 0:HLOS $kernel_addr $kernel_size && flash rootfs $rootfs_addr $rootfs_size && "
-					"bootconfig set primary",
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS,
-					(ulong)size
-				);
-			} else {
-				return (-1);
-			}
-			break;
-#endif
-#if defined(MACHINE_FLASH_TYPE_NAND)
-		case SMEM_BOOT_NAND_FLASH:
-			if (fw_type == FW_TYPE_UBI) {
-				printf("\n\n******************************\n* FACTORY FIRMWARE UPGRADING *\n*  DO NOT POWER OFF DEVICE!  *\n******************************\n\n");
-				sprintf(buf,
-					"flash rootfs 0x%lx 0x%lx && "
-					"bootconfig set primary",
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS,
-					(ulong)size);
-			} else {
-				return (-1);
-			}
-			break;
-#endif
-		default:
-			printf("\n\n* Update FIRMWARE is NOT supported for this FLASH TYPE yet!! *\n\n");
-			return (-1);
+	static const char content_length_str[] = "Content-Length:";
+	static const char content_type_str[] = "Content-Type:";
+	static const char boundary_str[] = "boundary=";
+
+	transfer_start_time = get_timer(0);
+
+	/* copy TCP data into cache */
+	size_rcvd = min_t(size_t, cbd->datalen,
+			  sizeof(pdata->buf) - pdata->bufsize - 1);
+
+	memcpy(pdata->buf + pdata->bufsize, cbd->data, size_rcvd);
+	pdata->bufsize += size_rcvd;
+	pdata->buf[pdata->bufsize] = 0;
+
+	/* check if request header has been fully received*/
+	payload_ptr = strstr(pdata->buf, "\r\n\r\n");
+	if (!payload_ptr) {
+		/* not fully received, waiting for next rx */
+		if (size_rcvd == cbd->datalen)
+			return 1;
+
+		/* request entity too large */
+		err_code = 413;
+		goto bad_request;
 	}
 
-	printf("Executing: %s\n\n", buf);
+	/* start of payload */
+	*payload_ptr = 0;
+	payload_ptr += 4;
 
-	return (run_command(buf, 0));
-}
+	/* accurate size of request header */
+	hdr_size = payload_ptr - pdata->buf;
 
-static int do_uboot_upgrade(const ulong size) {
+	/* parse HTTP response header */
+	fields_ptr = strstr(pdata->buf, "\r\n");
+	if (!fields_ptr)
+		goto bad_request;
 
-	printf("\n\n****************************\n*     U-BOOT UPGRADING     *\n* DO NOT POWER OFF DEVICE! *\n****************************\n\n");
+	/* start of header fields */
+	*fields_ptr = 0;
+	fields_ptr += 2;
 
-	switch (flash_type) {
-		case SMEM_BOOT_MMC_FLASH:
-		case SMEM_BOOT_NAND_FLASH:
-		case SMEM_BOOT_NORPLUSEMMC:
-		case SMEM_BOOT_SPI_FLASH:
-			if (fw_type == FW_TYPE_ELF) {
-				sprintf(buf,
-					"flash 0:APPSBL 0x%lx $filesize && flash 0:APPSBL_1 0x%lx $filesize",
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS,
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS
-				);
-			} else {
-				return (-1);
-			}
-			break;
-		default:
-			printf("\n\n* Update U-boot is NOT supported for this FLASH TYPE yet!! *\n\n");
-			return (-1);
-	}
+	/* parse method & uri */
+	p = strchr(pdata->buf, ' ');
+	if (!p)
+		goto bad_request;
 
-	printf("Executing: %s\n\n", buf);
+	*p = 0;
+	uri_ptr = p + 1;
 
-	return (run_command(buf, 0));
-}
-
-static int do_art_upgrade(const ulong size) {
-
-	printf("\n\n****************************\n*      ART  UPGRADING      *\n* DO NOT POWER OFF DEVICE! *\n****************************\n\n");
-
-	switch (flash_type) {
-		case SMEM_BOOT_MMC_FLASH:
-		case SMEM_BOOT_NAND_FLASH:
-		case SMEM_BOOT_NORPLUSEMMC:
-		case SMEM_BOOT_SPI_FLASH:
-			sprintf(buf,
-				"flash 0:ART 0x%lx $filesize",
-				(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS
-			);
-			break;
-		default:
-			printf("\n\n* Update ART is NOT supported for this FLASH TYPE yet!! *\n\n");
-			return (-1);
-	}
-
-	printf("Executing: %s\n\n", buf);
-
-	return (run_command(buf, 0));
-}
-
-static int do_cdt_upgrade(const ulong size) {
-
-	printf("\n\n****************************\n*      CDT  UPGRADING      *\n* DO NOT POWER OFF DEVICE! *\n****************************\n\n");
-
-	switch (flash_type) {
-		case SMEM_BOOT_MMC_FLASH:
-		case SMEM_BOOT_NAND_FLASH:
-		case SMEM_BOOT_NORPLUSEMMC:
-		case SMEM_BOOT_SPI_FLASH:
-			if (fw_type == FW_TYPE_CDT) {
-				sprintf(buf,
-					"flash 0:CDT 0x%lx $filesize && flash 0:CDT_1 0x%lx $filesize",
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS,
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS
-				);
-			} else {
-				return (-1);
-			}
-			break;
-		default:
-			printf("\n\n* Update CDT is NOT supported for this FLASH TYPE yet!! *\n\n");
-			return (-1);
-	}
-
-	printf("Executing: %s\n\n", buf);
-
-	return (run_command(buf, 0));
-}
-
-static int do_img_upgrade(const ulong size) {
-	switch (flash_type) {
-#if defined(MACHINE_FLASH_TYPE_EMMC)
-		case SMEM_BOOT_MMC_FLASH:
-			if (fw_type == FW_TYPE_EMMC) {
-				printf("\n\n****************************\n*    EMMC IMG UPGRADING    *\n* DO NOT POWER OFF DEVICE! *\n****************************\n\n");
-				sprintf(buf,
-					"mmc erase 0x0 0x%lx && mmc write 0x%lx 0x0 0x%lx",
-					(ulong)((size - 1) / 512 + 1),
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS,
-					(ulong)((size - 1) / 512 + 1)
-				);
-			} else {
-				return (-1);
-			}
-			break;
-#endif
-#if defined(MACHINE_FLASH_TYPE_NORPLUSEMMC)
-		case SMEM_BOOT_NORPLUSEMMC:
-			if (fw_type == FW_TYPE_EMMC) {
-				printf("\n\n****************************\n*    EMMC IMG UPGRADING    *\n* DO NOT POWER OFF DEVICE! *\n****************************\n\n");
-				sprintf(buf,
-					"mmc erase 0x0 0x%lx && mmc write 0x%lx 0x0 0x%lx",
-					(ulong)((size - 1) / 512 + 1),
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS,
-					(ulong)((size - 1) / 512 + 1)
-				);
-			} else if (fw_type == FW_TYPE_MIBIB_NOR) {
-				printf("\n\n****************************\n*      MIBIB UPGRADING     *\n* DO NOT POWER OFF DEVICE! *\n****************************\n\n");
-				sprintf(buf,
-					"sf probe && sf update 0x%lx 0xc0000 0x%lx",
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS,
-					(ulong)size
-				);
-			} else if (fw_type == FW_TYPE_NOR) {
-				printf("\n\n****************************\n*   SPI-NOR IMG UPGRADING  *\n* DO NOT POWER OFF DEVICE! *\n****************************\n\n");
-				sprintf(buf,
-					"sf probe && sf update 0x%lx 0x0 0x%lx",
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS,
-					(ulong)size
-				);
-			} else {
-				return (-1);
-			}
-			break;
-#endif
-#if defined(MACHINE_FLASH_TYPE_NAND)
-		case SMEM_BOOT_NAND_FLASH:
-			if (fw_type == FW_TYPE_NAND) {
-				printf("\n\n****************************\n*    NAND IMG UPGRADING    *\n* DO NOT POWER OFF DEVICE! *\n****************************\n\n");
-				sprintf(buf,
-					"nand erase 0x0 0x%lx && nand write 0x%lx 0x0 0x%lx",
-					(ulong)size,
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS,
-					(ulong)size);
-			} else if (fw_type == FW_TYPE_MIBIB_NAND) {
-				printf("\n\n****************************\n*      MIBIB UPGRADING     *\n* DO NOT POWER OFF DEVICE! *\n****************************\n\n");
-				sprintf(buf,
-					"nand erase 0x180000 0x%lx && nand write 0x%lx 0x180000 0x%lx",
-					(ulong)size,
-					(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS,
-					(ulong)size);
-			} else {
-				return (-1);
-			}
-			break;
-#endif
-		default:
-			printf("\n\n* Update IMG is NOT supported for this FLASH TYPE yet!! *\n\n");
-			return (-1);
-	}
-
-	printf("Executing: %s\n\n", buf);
-
-	return (run_command(buf, 0));
-}
-
-static int do_uimage_upgrade(const ulong size) {
-
-	printf("\n\n****************************\n*      UIMAGE BOOTING      *\n* DO NOT POWER OFF DEVICE! *\n****************************\n\n");
-
-	if (fw_type == FW_TYPE_FIT) {
-		sprintf(buf,
-			"bootm 0x%lx",
-			(ulong)WEBFAILSAFE_UPLOAD_RAM_ADDRESS
-		);
+	/* check method */
+	if (!strcmp(pdata->buf, "GET")) {
+		method = HTTP_GET;
+	} else if (!strcmp(pdata->buf, "POST")) {
+		method = HTTP_POST;
 	} else {
-		return (-1);
+		err_code = 405;
+		goto bad_request;
 	}
 
-	printf("Executing: %s\n\n", buf);
+	/* extract uri */
+	p = strchr(uri_ptr, ' ');
+	if (!p)
+		goto bad_request;
 
-	return (run_command(buf, 0));
+	*p = 0;
+
+	/* find ? and remove query string */
+	p = strchr(uri_ptr, '?');
+	if (p)
+		*p = 0;
+
+	printf("%s %s\n", pdata->buf, uri_ptr);
+
+	/* record URI */
+	pdata->uri = uri_ptr;
+
+	/* find required fields if this is a POST request */
+	if (method == HTTP_POST) {
+		/* Content-Length */
+		cl_ptr = strstr(fields_ptr, content_length_str);
+		if (cl_ptr) {
+			cl_ptr += sizeof(content_length_str) - 1;
+			while (*cl_ptr == ' ')
+				cl_ptr++;
+			pdata->payload_size = simple_strtoul(cl_ptr, NULL, 10);
+			printf("    Content-Length: %d Bytes\n", pdata->payload_size);
+		}
+
+		/* Content-Type */
+		ct_ptr = strstr(fields_ptr, content_type_str);
+		if (ct_ptr) {
+			p = strstr(ct_ptr, "\r\n");
+			if (p)
+				*p = 0;
+
+			b_ptr = strstr(ct_ptr, boundary_str);
+			/* only accept multipart/form-data */
+			if (!b_ptr)
+				goto bad_request;
+
+			b_ptr += sizeof(boundary_str) - 1;
+
+			if (*b_ptr == '\"') {
+				b_ptr++;
+				p = strchr(b_ptr, '\"');
+				if (p)
+					*p = 0;
+			} else {
+				p = strchr(b_ptr, '\r');
+				if (p)
+					*p = 0;
+			}
+
+			pdata->boundary = b_ptr;
+			debug("    Content-Type: boundary=\"%s\"\n", b_ptr);
+		}
+
+		if (hdr_size + pdata->payload_size < sizeof(pdata->buf)) {
+			/* upload payload can be put into the cache */
+			pdata->upload_ptr = pdata->buf + hdr_size;
+			pdata->upload_size = pdata->bufsize - hdr_size;
+		} else {
+			/* upload payload must be put into unused ram region */
+			if (is_uploading) {
+				printf("Only one upload can be performed\n");
+				tcp_close_conn(cbd->conn, 1);
+				return 1;
+			}
+
+#if defined(CONFIG_HTTPD_DEBUG)
+			if (httpd_debug)
+				printf("[DEBUG] httpd_recv_hdr(): before rand(), upload_id = %u\n", upload_id);
+#endif
+
+			/* generate new upload identifier */
+			upload_id = rand();
+
+#if defined(CONFIG_HTTPD_DEBUG)
+			if (httpd_debug)
+				printf("[DEBUG] httpd_recv_hdr(): after rand(), upload_id = %u\n", upload_id);
+#endif
+
+			/* calculate new cache address */
+			pdata->upload_ptr = httpd_get_upload_buffer_ptr(pdata->payload_size);
+#if defined(CONFIG_HTTPD_DEBUG)
+			if (httpd_debug)
+				printf("[DEBUG] httpd_recv_hdr(): pdata->upload_ptr = 0x%p\n", (void *)pdata->upload_ptr);
+#endif
+			pdata->upload_size = cbd->datalen - hdr_size;
+			/* copy received parts to new cache */
+			memcpy(pdata->upload_ptr, cbd->data + hdr_size, pdata->upload_size);
+		}
+
+		progress = pdata->upload_size * 100 / pdata->payload_size;
+		last_progress = progress;
+		printf("    Progress: %2lu%% ", progress);
+
+		if (pdata->upload_size == pdata->payload_size) {
+			/* upload completed */
+			transfer_duration = get_timer(transfer_start_time);
+			if (transfer_duration > 0) {
+				printf("\n    Speed: ");
+				print_size(pdata->upload_size / transfer_duration * 1000, "/s");
+			}
+			printf("\n");
+			pdata->upload_ptr[pdata->payload_size] = 0;
+			pdata->status = HTTPD_S_FULL_RCVD;
+		} else {
+			/* switch status for further receving */
+			pdata->status = HTTPD_S_PAYLOAD_RECVING;
+			/* uploading mark */
+			pdata->is_uploading = 1;
+			is_uploading = 1;
+			/*
+			 * payload of current packet has been fully received,
+			 * stop going to next status.
+			 */
+			ret = 1;
+		}
+	} else {
+		pdata->status = HTTPD_S_FULL_RCVD;
+	}
+
+	pdata->request.method = method;
+
+	return ret;
+
+bad_request:
+	httpd_std_err_response(cbd, err_code);
+	return 1;
 }
 
-int do_http_upgrade(const ulong size, const int upgrade_type) {
-	//printf checksum if defined
-	printChecksumMd5(WEBFAILSAFE_UPLOAD_RAM_ADDRESS, size);
+static int httpd_recv_payload(struct httpd_instance *inst,
+			        struct tcp_cb_data *cbd)
+{
+	struct httpd_tcp_pdata *pdata = cbd->pdata;
+	u32 size_recv;
+	ulong progress;
+	ulong transfer_duration;
 
-	fw_type = check_fw_type((void *)WEBFAILSAFE_UPLOAD_RAM_ADDRESS);
-	flash_type = check_flash_type();
+	size_recv = min(pdata->payload_size - pdata->upload_size, cbd->datalen);
+	memcpy(pdata->upload_ptr + pdata->upload_size, cbd->data, size_recv);
+	pdata->upload_size += size_recv;
 
-	switch (upgrade_type) {
-		case WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE:
-			return do_firmware_upgrade(size);
-		case WEBFAILSAFE_UPGRADE_TYPE_UBOOT:
-			return do_uboot_upgrade(size);
-		case WEBFAILSAFE_UPGRADE_TYPE_ART:
-			return do_art_upgrade(size);
-		case WEBFAILSAFE_UPGRADE_TYPE_CDT:
-			return do_cdt_upgrade(size);
-		case WEBFAILSAFE_UPGRADE_TYPE_IMG:
-			return do_img_upgrade(size);
-		case WEBFAILSAFE_UPGRADE_TYPE_UIMAGE:
-			return do_uimage_upgrade(size);
-		default:
-			return (-1);
+	progress = (unsigned long long)pdata->upload_size * 100 /
+		(unsigned long long)pdata->payload_size;
+	if (progress != last_progress) {
+		last_progress = progress;
+		printf("\b\b\b\b%2lu%% ", progress);
 	}
+
+	if (pdata->upload_size == pdata->payload_size) {
+		transfer_duration = get_timer(transfer_start_time);
+		if (transfer_duration > 0) {
+			printf("\n    Speed: ");
+			print_size(pdata->upload_size / transfer_duration * 1000, "/s");
+		}
+		printf("\n");
+		pdata->upload_ptr[pdata->payload_size] = 0;
+		pdata->status = HTTPD_S_FULL_RCVD;
+		/* remove uploading mark */
+		pdata->is_uploading = 0;
+		is_uploading = 0;
+		return 0;
+	}
+
+	return 1;
+}
+
+static void *memstr(void *src, size_t limit, const char *str)
+{
+	int l2;
+	char *s1 = src;
+
+	if (!str)
+		return NULL;
+
+	l2 = strlen(str);
+
+	while (limit >= l2) {
+		limit--;
+		if (!memcmp(s1, str, l2))
+			return s1;
+		s1++;
+	}
+	return NULL;
+}
+
+static char *name_extract(char *s)
+{
+	char *name, *p;
+
+	if (*s == '\"') {
+		s++;
+		name = s;
+		p = strchr(s, '\"');
+		if (p)
+			*p = 0;
+	} else {
+		name = s;
+		p = strchr(s, '\r');
+		if (p)
+			*p = 0;
+	}
+
+	return name;
+}
+
+static int httpd_handle_request(struct httpd_instance *inst,
+				 struct tcp_cb_data *cbd)
+{
+	struct httpd_tcp_pdata *pdata = cbd->pdata;
+	struct httpd_request *req = &pdata->request;
+	char *formdata[MAX_HTTP_FORM_VALUE_ITEMS];
+	char *formdata_end[MAX_HTTP_FORM_VALUE_ITEMS], *p, *payload_end;
+	char *boundary, *name_ptr, *filename_ptr;
+	u32 i, numformdata = 0, boundarylen;
+	struct httpd_form_value *val;
+
+	static const char name_str[] = "name=";
+	static const char filename_str[] = "filename=";
+
+	// TODO: 这个函数的作用是什么？
+	// schedule();
+
+	req->urih = httpd_find_uri_handler(inst, pdata->uri);
+	if (!req->urih) {
+		/* TODO: no handler / response 404 */
+		tcp_close_conn(cbd->conn, 1);
+		return 1;
+	}
+
+	if (req->method == HTTP_POST) {
+		boundarylen = strlen(pdata->boundary);
+		boundary = malloc(boundarylen + 3);
+		if (!boundary) {
+			/* out of memory */
+			tcp_close_conn(cbd->conn, 1);
+			return 1;
+		}
+
+		/* add prefix -- */
+		boundary[0] = boundary[1] = '-';
+		memcpy(boundary + 2, pdata->boundary, boundarylen + 1);
+		boundarylen += 2;
+
+		/* record and split each formdata */
+		p = pdata->upload_ptr;
+		payload_end = pdata->upload_ptr + pdata->payload_size;
+		do {
+			p += boundarylen;
+			if (strncmp(p, "\r\n", 2))
+				break;
+
+			p += 2;
+
+			formdata[numformdata] = p;
+
+			p = memstr(p, payload_end - p, boundary);
+			if (!p)
+				break;
+
+			if (!strncmp(p - 2, "\r\n", 2))
+				p[-2] = 0;
+			else
+				*p = 0;
+
+			formdata_end[numformdata] = p - 2;
+			numformdata++;
+		} while (numformdata < MAX_HTTP_FORM_VALUE_ITEMS);
+
+#if defined(CONFIG_HTTPD_DEBUG)
+		if (httpd_debug)
+			printf("[DEBUG] httpd_handle_request(): numformdata in total: %u\n", numformdata);
+#endif
+
+		/* process each formdata */
+		for (i = 0; i < numformdata; i++) {
+			val = &req->form.values[req->form.count];
+			p = strstr(formdata[i], "\r\n\r\n");
+			if (!p)
+				continue;
+
+			*p = 0;
+			p += 4;
+
+			/*
+			 * make the data aligned by 4.
+			 * the previous 3 CR/LFs can be used as buffer.
+			 */
+			val->data = (char *)(((uintptr_t)p) & (~(4 - 1)));
+
+			name_ptr = strstr(formdata[i], name_str);
+			filename_ptr = strstr(formdata[i], filename_str);
+
+			if (name_ptr) {
+				name_ptr += sizeof(name_str) - 1;
+				val->name = name_extract(name_ptr);
+			}
+
+			if (filename_ptr) {
+				filename_ptr += sizeof(filename_str) - 1;
+				val->filename = name_extract(filename_ptr);
+			}
+
+			// TODO: 在这个擦除文件后内存（需注意多个表单值的情况）
+			val->size = formdata_end[i] - p;
+			req->form.count++;
+
+			/* move data if not aligned */
+			if (p != val->data) {
+				memmove((char *)val->data, p, val->size);
+				((char *)val->data)[val->size] = 0;
+			}
+
+#if defined(CONFIG_HTTPD_DEBUG)
+			if (httpd_debug)
+				printf("[DEBUG] httpd_handle_request(): "
+					"numformdata = %u, val->name = %s, val->filename = %s, val->data = 0x%p, val->size = %lu\n",
+					numformdata, val->name, val->filename, val->data, (ulong)val->size
+				);
+#endif
+		}
+
+		free(boundary);
+	}
+
+	// led_control("ledblink", "blink_led", "0");
+
+	/* call uri handler */
+	assert((size_t)req->urih->cb > CONFIG_SYS_SDRAM_BASE);
+	req->urih->cb(HTTP_CB_NEW, req, &pdata->response);
+
+	if (pdata->response.status == HTTP_RESP_NONE) {
+		tcp_close_conn(cbd->conn, 0);
+		return 1;
+	}
+
+	if (pdata->response.status == HTTP_RESP_STD) {
+		/* generate HTTP response header */
+		u32 size;
+
+		pdata->response.info.content_length = pdata->response.size;
+
+		size = http_make_response_header(&pdata->response.info,
+						 pdata->buf,
+						 sizeof(pdata->buf));
+
+		/* send response header */
+		tcp_send_data(cbd->conn, pdata->buf, size);
+
+		pdata->resp_std_cnt = 0;
+	} else {
+		/* send first response data */
+		tcp_send_data(cbd->conn, pdata->response.data,
+			      pdata->response.size);
+	}
+
+	pdata->status = HTTPD_S_RESPONDING;
+
+	return 0;
+}
+
+static void httpd_rx(struct httpd_instance *inst, struct tcp_cb_data *cbd)
+{
+	struct httpd_tcp_pdata *pdata = cbd->pdata;
+	u8 sip[4];
+
+	if (pdata->status == HTTPD_S_NEW) {
+		// led_control("ledblink", "blink_led", "100");
+		memcpy(sip, &cbd->sip, 4);
+		debug("New connection from %d.%d.%d.%d:%d\n",
+			  sip[0], sip[1], sip[2], sip[3], ntohs(cbd->sp));
+		pdata->status = HTTPD_S_HEADER_RECVING;
+	}
+
+	if (pdata->status == HTTPD_S_HEADER_RECVING)
+		if (httpd_recv_hdr(inst, cbd))
+			return;
+
+	if (pdata->status == HTTPD_S_PAYLOAD_RECVING)
+		if (httpd_recv_payload(inst, cbd))
+			return;
+
+	if (pdata->status == HTTPD_S_FULL_RCVD)
+		httpd_handle_request(inst, cbd);
+}
+
+static void httpd_tx(struct httpd_instance *inst, struct tcp_cb_data *cbd)
+{
+	struct httpd_tcp_pdata *pdata = cbd->pdata;
+	struct httpd_request *req = &pdata->request;
+	struct httpd_response *resp = &pdata->response;
+
+	if (resp->status == HTTP_RESP_STD) {
+		if (pdata->resp_std_cnt == 0) {
+			/* send response payload */
+			tcp_send_data(cbd->conn, pdata->response.data,
+				      pdata->response.size);
+
+			pdata->resp_std_cnt = 1;
+		} else {
+			tcp_close_conn(cbd->conn, 0);
+			pdata->status = HTTPD_S_CLOSING;
+		}
+
+		return;
+	}
+
+	/* call uri handler */
+	assert((size_t)req->urih->cb > CONFIG_SYS_SDRAM_BASE);
+	req->urih->cb(HTTP_CB_RESPONDING, req, &pdata->response);
+
+	if (pdata->response.status == HTTP_RESP_NONE) {
+		tcp_close_conn(cbd->conn, 0);
+		pdata->status = HTTPD_S_CLOSING;
+	} else {
+		/* send next response data */
+		tcp_send_data(cbd->conn, pdata->response.data,
+			      pdata->response.size);
+	}
+}
+
+static void httpd_cleanup(struct httpd_instance *inst, struct tcp_cb_data *cbd)
+{
+	struct httpd_tcp_pdata *pdata = cbd->pdata;
+	struct httpd_request *req = &pdata->request;
+	struct httpd_response *resp = &pdata->response;
+
+	if (pdata->is_uploading)
+		is_uploading = 0;
+
+	/* call uri handler */
+	if (req->urih) {
+		assert((size_t)req->urih->cb > CONFIG_SYS_SDRAM_BASE);
+		req->urih->cb(HTTP_CB_CLOSED, req, resp);
+	}
+
+	free(pdata);
+}
+
+static void httpd_tcp_callback(struct tcp_cb_data *cbd)
+{
+	struct httpd_instance *inst;
+
+	inst = httpd_find_instance(ntohs(cbd->dp));
+	if (!inst) {
+		tcp_close_conn(cbd->conn, 1);
+		return;
+	}
+
+	if (cbd->status == TCP_CB_NEW_CONN) {
+		cbd->pdata = calloc(1, sizeof(struct httpd_tcp_pdata));
+		if (!cbd->pdata) {
+			tcp_close_conn(cbd->conn, 1);
+			return;
+		}
+
+		tcp_conn_set_pdata(cbd->conn, cbd->pdata);
+	}
+
+	switch (cbd->status) {
+	case TCP_CB_NEW_CONN:
+	case TCP_CB_DATA_RCVD:
+		if (cbd->datalen)
+			httpd_rx(inst, cbd);
+		break;
+	case TCP_CB_DATA_SENT:
+		httpd_tx(inst, cbd);
+		break;
+	case TCP_CB_REMOTE_CLOSED:
+	case TCP_CB_CLOSED:
+		httpd_cleanup(inst, cbd);
+		break;
+	default:
+		;
+	}
+}
+
+static void httpd_std_err_response(struct tcp_cb_data *cbd, u32 code)
+{
+	struct httpd_tcp_pdata *pdata = cbd->pdata;
+	const char *body = NULL;
+	u32 size, i;
+
+	for (i = 0; i < ARRAY_SIZE(http_resp_codes); i++) {
+		if (http_resp_codes[i].code == code) {
+			body = http_resp_codes[i].text;
+			break;
+		}
+	}
+
+	pdata->status = HTTPD_S_RESPONDING;
+
+	pdata->request.urih = &dummy_urih;
+	pdata->response.status = HTTP_RESP_STD;
+	pdata->response.data = body;
+	if (body)
+		pdata->response.size = strlen(body);
+
+	pdata->response.info.code = code;
+	pdata->response.info.connection_close = 1;
+	pdata->response.info.content_length = pdata->response.size;
+	pdata->response.info.content_type = "text/html";
+
+	size = http_make_response_header(&pdata->response.info,
+	       pdata->buf,
+	       sizeof(pdata->buf));
+
+	/* send response header */
+	tcp_send_data(cbd->conn, pdata->buf, size);
+
+	pdata->resp_std_cnt = body ? 0 : 1;
+}
+
+struct httpd_form_value *httpd_request_find_value(
+	struct httpd_request *request, const char *name)
+{
+	u32 i;
+
+	if (!request || !name)
+		return NULL;
+
+	for (i = 0; i < request->form.count; i++) {
+		if (!strcmp(request->form.values[i].name, name))
+			return &request->form.values[i];
+	}
+
+	return NULL;
 }

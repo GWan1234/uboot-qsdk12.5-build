@@ -107,14 +107,11 @@
 #if defined(CONFIG_CMD_SNTP)
 #include "sntp.h"
 #endif
-#if defined(CONFIG_CMD_HTTPD)
-#include "../httpd/uipopt.h"
-#include "../httpd/uip.h"
-#include "../httpd/uip_arp.h"
-#include "httpd.h"
-#endif
 #if defined(CONFIG_DHCPD)
 #include <net/dhcpd.h>
+#endif
+#if defined(CONFIG_TCP)
+#include "tcp.h"
 #endif
 #include <ipq_api.h>
 DECLARE_GLOBAL_DATA_PTR;
@@ -212,16 +209,6 @@ static int net_check_prereq(enum proto_t protocol);
 static int net_try_count;
 
 int __maybe_unused net_busy_flag;
-
-#if defined(CONFIG_CMD_HTTPD)
-unsigned char *webfailsafe_data_pointer = NULL;
-int webfailsafe_is_running = 0;
-int webfailsafe_ready_for_upgrade = 0;
-int webfailsafe_upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE;
-extern int webfailsafe_post_done;
-extern int file_too_big;
-void NetReceiveHttpd(volatile uchar * inpkt, int len);
-#endif
 
 /**********************************************************************/
 
@@ -425,8 +412,8 @@ int net_loop(enum proto_t protocol)
 		eth_halt();
 		eth_set_current();
 		ret = eth_init();
-#if defined(CONFIG_CMD_HTTPD)
-		while (protocol == HTTPD && ret < 0) {
+#if defined(CONFIG_TCP)
+		while (protocol == TCP && ret < 0) {
 			ret = eth_init();
 			mdelay(1000);
 		}
@@ -455,9 +442,9 @@ restart:
 #if defined(CONFIG_DHCPD)
 	/*
 	 * net_init() clears UDP handlers on first call.
-	 * For web failsafe (HTTPD), enable the minimal DHCP server after init.
+	 * For web failsafe (TCP), enable the minimal DHCP server after init.
 	 */
-	if (protocol == HTTPD)
+	if (protocol == TCP)
 		dhcpd_start();
 #endif
 
@@ -513,11 +500,6 @@ restart:
 			ping_start();
 			break;
 #endif
-#if defined(CONFIG_CMD_HTTPD)
-		case HTTPD:
-			HttpdStart();
-			break;
-#endif
 #if defined(CONFIG_CMD_NFS)
 		case NFS:
 			nfs_start();
@@ -546,6 +528,11 @@ restart:
 #if defined(CONFIG_CMD_LINK_LOCAL)
 		case LINKLOCAL:
 			link_local_start();
+			break;
+#endif
+#if defined(CONFIG_TCP)
+		case TCP:
+			tcp_start();
 			break;
 #endif
 		default:
@@ -590,12 +577,13 @@ restart:
 		 *	Most drivers return the most recent packet size, but not
 		 *	errors that may have happened.
 		 */
-#if defined(CONFIG_CMD_HTTPD)
-		if (eth_rx() > 0)
-			if (protocol == HTTPD)
-				HttpdHandler();
-#else
 		eth_rx();
+
+#if defined(CONFIG_TCP)
+		/*
+		 *	TCP periodic check
+		 */
+		tcp_periodic_check();
 #endif
 
 		/*
@@ -604,11 +592,6 @@ restart:
 		if (ctrlc()) {
 			/* cancel any ARP that may not have completed */
 			net_arp_wait_packet_ip.s_addr = 0;
-
-#if defined(CONFIG_CMD_HTTPD)
-			if (protocol == HTTPD)
-				HttpdStop();
-#endif
 
 			net_cleanup_loop();
 			eth_halt();
@@ -622,15 +605,6 @@ restart:
 			ret = -EINTR;
 			goto done;
 		}
-
-#if defined(CONFIG_CMD_HTTPD)
-		if (protocol == HTTPD) {
-			if(!webfailsafe_ready_for_upgrade)
-				net_state = NETLOOP_CONTINUE;
-			else
-				net_state = NETLOOP_SUCCESS;
-		}
-#endif
 
 		/*
 		 *	Check for a timeout, and run the timeout handler
@@ -676,18 +650,6 @@ restart:
 				setenv_hex("filesize", net_boot_file_size);
 				setenv_hex("filesize_128k", (net_boot_file_size / 131072 + (net_boot_file_size % 131072 != 0)) * 131072);
 				setenv_hex("fileaddr", load_addr);
-#if defined(CONFIG_CMD_HTTPD)
-				if (protocol == HTTPD) {
-					if (do_http_upgrade(net_boot_file_size, webfailsafe_upgrade_type) < 0) {
-						HttpdStop();
-						goto restart;
-					} else {
-						HttpdDone();
-						do_reset(NULL, 0, 0, NULL);
-						printf("reboot failed\n");
-					}
-				}
-#endif
 			}
 			if (protocol != NETCONS)
 				eth_halt();
@@ -1104,26 +1066,6 @@ static void receive_icmp(struct ip_udp_hdr *ip, int len,
 	}
 }
 
-#if defined(CONFIG_DHCPD)
-static int is_dhcp_packet(struct ethernet_hdr *et, int len)
-{
-    u16 eth_proto = ntohs(et->et_protlen);
-
-    if (eth_proto == PROT_IP && len >= ETHER_HDR_SIZE + IP_UDP_HDR_SIZE) {
-        struct ip_udp_hdr *ip = (struct ip_udp_hdr *)((uchar *)et + ETHER_HDR_SIZE);
-
-        if (ip->ip_p == IPPROTO_UDP) {
-            u16 dport = ntohs(ip->udp_dst);
-            u16 sport = ntohs(ip->udp_src);
-
-            // DHCP使用端口67(服务器)和68(客户端)
-            return (dport == 67 || sport == 68 || dport == 68 || sport == 67);
-        }
-    }
-    return 0;
-}
-#endif
-
 void net_process_received_packet(uchar *in_packet, int len)
 {
 	struct ethernet_hdr *et;
@@ -1145,18 +1087,6 @@ void net_process_received_packet(uchar *in_packet, int len)
 	/* too small packet? */
 	if (len < ETHER_HDR_SIZE)
 		return;
-
-#if defined(CONFIG_CMD_HTTPD)
-# if defined(CONFIG_DHCPD)
-	if (webfailsafe_is_running && !is_dhcp_packet(et, len))
-# else
-	if (webfailsafe_is_running)
-# endif /* CONFIG_DHCPD */
-	{
-		NetReceiveHttpd(in_packet, len);
-		return;
-	}
-#endif /* CONFIG_CMD_HTTPD */
 
 #ifdef CONFIG_API
 	if (push_packet) {
@@ -1318,6 +1248,11 @@ void net_process_received_packet(uchar *in_packet, int len)
 		if (ip->ip_p == IPPROTO_ICMP) {
 			receive_icmp(ip, len, src_ip, et);
 			return;
+#if defined(CONFIG_TCP)
+		} else if (ip->ip_p == IPPROTO_TCP) {   /* TCP packets */
+			receive_tcp((struct ip_hdr *) ip, len, et);
+			return;
+#endif
 		} else if (ip->ip_p != IPPROTO_UDP) {	/* Only UDP packets */
 			return;
 		}
@@ -1401,14 +1336,6 @@ static int net_check_prereq(enum proto_t protocol)
 		}
 		goto common;
 #endif
-#if defined(CONFIG_CMD_HTTPD)
-	case HTTPD:
-		if (net_httpd_ip.s_addr == 0) {
-			puts("*** ERROR: httpd address not given\n");
-			return 1;
-		}
-		goto common;
-#endif
 #if defined(CONFIG_CMD_SNTP)
 	case SNTP:
 		if (net_ntp_server.s_addr == 0) {
@@ -1443,6 +1370,9 @@ common:
 
 	case NETCONS:
 	case TFTPSRV:
+#if defined(CONFIG_TCP)
+	case TCP:
+#endif
 		if (net_ip.s_addr == 0) {
 			puts("*** ERROR: `ipaddr' not set\n");
 			return 1;
@@ -1564,6 +1494,33 @@ void net_set_ip_header(uchar *pkt, struct in_addr dest, struct in_addr source)
 	/* already in network byte order */
 	net_copy_ip((void *)&ip->ip_dst, &dest);
 }
+
+#if defined(CONFIG_TCP)
+void net_set_ip_header_tcp(uchar *pkt, struct in_addr dest, struct in_addr source,
+		       u16 pkt_len, u8 proto)
+{
+	struct ip_udp_hdr *ip = (struct ip_udp_hdr *)pkt;
+
+	/*
+	 *	Construct an IP header.
+	 */
+	/* IP_HDR_SIZE / 4 (not including UDP) */
+	ip->ip_hl_v  = 0x45;
+	ip->ip_tos   = 0;
+	ip->ip_len   = htons(pkt_len);
+	ip->ip_p     = proto;
+	ip->ip_id    = htons(net_ip_id++);
+	ip->ip_off   = htons(IP_FLAGS_DFRAG);	/* Don't fragment */
+	ip->ip_ttl   = 255;
+	ip->ip_sum   = 0;
+	/* already in network byte order */
+	net_copy_ip((void *)&ip->ip_src, &source);
+	/* already in network byte order */
+	net_copy_ip((void *)&ip->ip_dst, &dest);
+
+	ip->ip_sum   = compute_ip_checksum(ip, IP_HDR_SIZE);
+}
+#endif
 
 void net_set_udp_header(uchar *pkt, struct in_addr dest, int dport, int sport,
 			int len)

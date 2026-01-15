@@ -372,10 +372,13 @@ extern loff_t board_env_size;
 #define CONFIG_IPQ_TZT
 #define CONFIG_IPQ_FDT_FIXUP
 #define CONFIG_CMD_BOOTCONFIG
-#define CONFIG_CMD_HTTPD
 #define CONFIG_CMD_IMI
 #define CONFIG_CMD_UNTAR
 #define CONFIG_DHCPD
+#define CONFIG_HTTPD
+#define CONFIG_TCP
+#define CONFIG_LIB_RAND
+#define CONFIG_HTTPD_DEBUG
 
 #define CONFIG_LIST_OF_CONFIG_NAMES_SUPPORT
 

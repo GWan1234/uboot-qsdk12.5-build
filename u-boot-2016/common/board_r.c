@@ -65,7 +65,7 @@
 #include <asm/arch/mmu.h>
 #endif
 
-#if defined(CONFIG_CMD_HTTPD)
+#if defined(CONFIG_HTTPD)
 #include <asm/arch-qca-common/gpio.h>
 #endif
 
@@ -554,7 +554,7 @@ static int initr_ethaddr(void)
 {
 	bd_t *bd = gd->bd;
 
-#if defined(CONFIG_CMD_HTTPD)
+#if defined(CONFIG_HTTPD)
 	ipq_btn_init();
 	ipq_led_init();
 #endif
@@ -644,7 +644,7 @@ static int initr_bbmii(void)
 static int initr_net(void)
 {
 #if !defined(CONFIG_IPQ_ETH_INIT_DEFER)
-	puts("Net:   ");
+	puts("Net: ");
 	eth_initialize();
 #endif
 #if defined(CONFIG_RESET_PHY_R)

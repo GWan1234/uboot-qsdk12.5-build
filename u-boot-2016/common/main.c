@@ -12,7 +12,7 @@
 #include <cli.h>
 #include <console.h>
 #include <version.h>
-#if defined(CONFIG_CMD_HTTPD)
+#if defined(CONFIG_HTTPD)
 #include <asm/arch-qca-common/gpio.h>
 #include <ipq_api.h>
 #endif
@@ -89,7 +89,19 @@ void main_loop(void)
 	update_tftp(0UL, NULL, NULL);
 #endif /* CONFIG_UPDATE_TFTP */
 
-#if defined(CONFIG_CMD_HTTPD)
+#if defined(CONFIG_HTTPD)
+	if (getenv("failsafe") != NULL) {
+		setenv("failsafe", NULL);
+		saveenv();
+		led_off("power_led");
+#if defined(CONFIG_IPQ_ETH_INIT_DEFER)
+		puts("Net: ");
+		eth_initialize();
+#endif
+		led_on("blink_led");
+		printf("\n\"failsafe\" env variable detected, enter web failsae mode\n");
+		run_command("httpd", 0);
+	}
 	check_button_is_pressed();
 #endif
 
