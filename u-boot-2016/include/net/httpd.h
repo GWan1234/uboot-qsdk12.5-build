@@ -60,6 +60,8 @@ struct http_response_info {
 	int connection_close;
 	int chunked_encoding;
 	int http_1_0;
+	const char *content_encoding;  /* "gzip" 或 NULL */
+	const char *vary;              /* "Accept-Encoding" 用于缓存 */
 };
 
 struct httpd_response {
@@ -69,6 +71,7 @@ struct httpd_response {
 	u32 size;
 
 	void *session_data;
+	void *gunzip_buffer;
 };
 
 typedef void(*httpd_uri_handler_cb)(enum httpd_uri_handler_status status,
@@ -116,5 +119,8 @@ u32 http_make_response_header(struct http_response_info *info, char *buff,
 /* Find request value */
 struct httpd_form_value *httpd_request_find_value(
 	struct httpd_request *request, const char *name);
+
+/* 查找当前请求的头部值 */
+const char *httpd_find_header(const char *name);
 
 #endif /* __NET_HTTPD_H__ */

@@ -61,30 +61,132 @@ int __weak failsafe_write_image(const int upgrade_type,
 	return RET_FAILURE;
 }
 
+static int gunzip_and_send(struct httpd_response *response,
+				const struct fs_desc *file,
+				const char *filename)
+{
+	void *dst = NULL;
+	ulong len = file->uncompressed_size;
+
+#if defined(CONFIG_HTTPD_DEBUG)
+	printf("[DEBUG] gunzip_and_send(): gunzipping %s (%u -> %u bytes)\n",
+           filename, file->size, file->uncompressed_size);
+#endif
+
+#if defined(CONFIG_GZIP)
+	dst = malloc(file->uncompressed_size);
+	if (!dst) {
+		printf("Error: Failed to allocate %u bytes for gunzip of %s\n",
+			   file->uncompressed_size, filename);
+        return -1;
+	}
+
+	if (gunzip(dst, file->uncompressed_size, (unsigned char *)file->data, &len) != 0) {
+		printf("Error: Failed to gunzip %s\n", filename);
+		printf("  - gzip_data: %p\n", file->data);
+		printf("  - gzip_size: %u\n", file->size);
+        printf("  - uncompressed_size: %u\n", file->uncompressed_size);
+		free(dst);
+		return -1;
+	}
+#else
+	printf("Error: Failed to gunzip %s because the gunzip module is not enabled\n", filename);
+	return -1;
+#endif
+
+	if (len != file->uncompressed_size)
+        printf("Warning: %s uncompressed size mismatch (expect: %u bytes, in fact: %lu bytes)\n",
+               filename, file->uncompressed_size, len);
+
+	response->data = dst;
+	response->size = len;
+	response->info.content_encoding = NULL;
+	response->info.content_length = len;
+	response->gunzip_buffer = dst;  /* 使用gunzip_buffer指针存储需要释放的内存地址 */
+
+	return 0;
+}
+
 static int output_plain_file(struct httpd_response *response,
-	const char *filename)
+				const char *filename)
 {
 	const struct fs_desc *file;
-	int ret = 0;
+
+	response->status = HTTP_RESP_STD;
+	response->info.connection_close = 1;
+	response->gunzip_buffer = NULL;
 
 	file = fs_find_file(filename);
 
-	response->status = HTTP_RESP_STD;
-
-	if (file) {
-		response->data = file->data;
-		response->size = file->size;
-	} else {
+	/* 找不到文件 */
+	if (!file) {
 		response->data = "Error: file not found";
 		response->size = strlen(response->data);
-		ret = 1;
+		response->info.code = 404;
+		response->info.content_type = "text/html";
+		response->info.content_encoding = NULL;
+
+		return 1;
 	}
 
 	response->info.code = 200;
-	response->info.connection_close = 1;
-	response->info.content_type = "text/html";
+	response->info.content_type = file->content_type;
 
-	return ret;
+	/* 文件本身就是未压缩的，直接发送 */
+	if (!file->is_gzip) {
+		response->data = file->data;
+		response->size = file->size;
+		response->info.content_encoding = NULL;
+		response->info.content_length = file->size;
+
+		debug("Sending raw %s (%u bytes)\n", filename, file->size);
+
+		return 0;
+	}
+
+	/* 检查客户端是否支持gzip */
+	int client_accepts_gzip = 0;
+	const char *accept_encoding = httpd_find_header("Accept-Encoding");
+
+	if (accept_encoding && strstr(accept_encoding, "gzip")) {
+#if defined(CONFIG_HTTPD_DEBUG)
+		if (httpd_debug)
+			printf("[DEBUG] output_plain_file(): Accept-Encoding: %s\n", accept_encoding);
+#endif
+		client_accepts_gzip = 1;
+	}
+
+	/* 客户端支持gzip，直接发送压缩数据 */
+	if (client_accepts_gzip) {
+		response->data = file->data;
+		response->size = file->size;
+		response->info.content_encoding = "gzip";
+		response->info.content_length = file->size;
+		response->info.vary = "Accept-Encoding";
+
+		debug("Sending gzipped %s (%u bytes)\n", filename, file->size);
+
+		return 0;
+	}
+
+	/* 客户端不支持gzip，需要解压后发送 */
+	if (gunzip_and_send(response, file, filename) != 0) {
+		/* 解压失败，回退到发送压缩版本？或者返回错误 */
+		/* 这里选择返回错误页面 */
+		response->data = "Error: Failed to decompress file";
+		response->size = strlen(response->data);
+		response->info.content_encoding = NULL;
+		response->info.content_length = response->size;
+		response->info.code = 500;
+		response->info.content_type = "text/html";
+
+		return 1;
+	}
+
+	debug("Sending decompressed %s (%u bytes) - client doesn't support gzip\n",
+			filename, response->size);
+
+	return 0;
 }
 
 static void not_found_handler(enum httpd_uri_handler_status status,
@@ -409,20 +511,16 @@ static void style_handler(enum httpd_uri_handler_status status,
 				struct httpd_request *request,
 				struct httpd_response *response)
 {
-	if (status == HTTP_CB_NEW) {
+	if (status == HTTP_CB_NEW)
 		output_plain_file(response, "style.css");
-		response->info.content_type = "text/css";
-	}
 }
 
 static void js_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response)
 {
-	if (status == HTTP_CB_NEW) {
+	if (status == HTTP_CB_NEW)
 		output_plain_file(response, "main.js");
-		response->info.content_type = "text/javascript";
-	}
 }
 
 int start_web_failsafe(void)

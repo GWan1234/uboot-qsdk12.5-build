@@ -16,8 +16,20 @@
 #include <failsafe/failsafe.h>
 #include <ipq_api.h>
 
-static ulong transfer_start_time;
-static ulong last_progress;
+/* 头部存储结构 */
+#define MAX_HEADER_COUNT    32  /* 最大头部数量 */
+#define MAX_HEADER_NAME_LEN 64  /* 头部名最大长度 */
+#define MAX_HEADER_VALUE_LEN 256 /* 头部值最大长度 */
+
+struct http_header {
+    char name[MAX_HEADER_NAME_LEN];
+    char value[MAX_HEADER_VALUE_LEN];
+};
+
+static struct {
+    struct http_header headers[MAX_HEADER_COUNT];
+    int count;
+} current_request_headers;
 
 struct httpd_instance {
 	struct list_head node;
@@ -81,6 +93,9 @@ static struct http_response_code http_resp_codes[] = {
 };
 
 u32 upload_id = (u32) -1;
+
+static ulong transfer_start_time;
+static ulong last_progress;
 
 static int is_uploading;
 static LIST_HEAD(inst_head);
@@ -283,6 +298,15 @@ u32 http_make_response_header(struct http_response_info *info, char *buff,
 		p += snprintf(p, buff + size - p, "Content-Length: %d\r\n",
 			    info->content_length);
 
+	/* 添加Content-Encoding头（如果启用了gzip） */
+    if (info->content_encoding)
+        p += snprintf(p, buff + size - p, "Content-Encoding: %s\r\n",
+                info->content_encoding);
+
+	/* 添加Vary头（用于缓存协商） */
+    if (info->vary)
+        p += snprintf(p, buff + size - p, "Vary: %s\r\n", info->vary);
+
 	if (p >= buff + size)
 		return size;
 
@@ -327,6 +351,45 @@ u32 http_make_response_header(struct http_response_info *info, char *buff,
 	return p - buff;
 }
 
+/**
+ * httpd_find_header - 从当前请求的头部存储中查找指定头部
+ * @name: 要查找的头部字段名（不区分大小写）
+ *
+ * 返回值: 找到的头部字段值，如果未找到则返回NULL
+ */
+const char *httpd_find_header(const char *name)
+{
+    if (!name)
+        return NULL;
+
+    for (int i = 0; i < current_request_headers.count; i++) {
+        if (strcasecmp(current_request_headers.headers[i].name, name) == 0) {
+            return current_request_headers.headers[i].value;
+        }
+    }
+
+    return NULL;
+}
+
+static void reset_headers(void)
+{
+    current_request_headers.count = 0;
+    memset(current_request_headers.headers, 0, sizeof(current_request_headers.headers));
+}
+
+static void add_header(const char *name, const char *value)
+{
+    if (current_request_headers.count >= MAX_HEADER_COUNT)
+        return;
+
+    strncpy(current_request_headers.headers[current_request_headers.count].name,
+            name, MAX_HEADER_NAME_LEN - 1);
+    strncpy(current_request_headers.headers[current_request_headers.count].value,
+            value, MAX_HEADER_VALUE_LEN - 1);
+
+    current_request_headers.count++;
+}
+
 static int httpd_recv_hdr(struct httpd_instance *inst,
 			    struct tcp_cb_data *cbd)
 {
@@ -344,6 +407,8 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 	static const char boundary_str[] = "boundary=";
 
 	transfer_start_time = get_timer(0);
+
+	reset_headers();
 
 	/* copy TCP data into cache */
 	size_rcvd = min_t(size_t, cbd->datalen,
@@ -380,6 +445,38 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 	/* start of header fields */
 	*fields_ptr = 0;
 	fields_ptr += 2;
+
+	/* 解析并存储所有头部字段 */
+	char *line = fields_ptr;
+	char *next_line;
+
+	while (line && *line) {
+		next_line = strstr(line, "\r\n");
+		if (!next_line)
+			break;
+
+		*next_line = '\0';
+
+		char *colon = strchr(line, ':');
+		if (colon) {
+			char *name = line;
+			char *value = colon + 1;
+
+			*colon = '\0';
+
+			/* 跳过值前的空白字符 */
+			while (*value == ' ' || *value == '\t')
+				value++;
+
+			/* 存储头部 */
+			add_header(name, value);
+
+			*colon = ':';
+		}
+
+		*next_line = '\r';
+		line = next_line + 2;
+	}
 
 	/* parse method & uri */
 	p = strchr(pdata->buf, ' ');
@@ -828,6 +925,15 @@ static void httpd_cleanup(struct httpd_instance *inst, struct tcp_cb_data *cbd)
 	struct httpd_tcp_pdata *pdata = cbd->pdata;
 	struct httpd_request *req = &pdata->request;
 	struct httpd_response *resp = &pdata->response;
+
+    /* 释放动态分配的解压缓冲区 */
+    if (resp->gunzip_buffer) {
+#if defined(CONFIG_HTTPD_DEBUG)
+        printf("[DEBUG] httpd_cleanup(): Freeing gunzip buffer at 0x%p\n", resp->gunzip_buffer);
+#endif
+        free(resp->gunzip_buffer);
+        resp->gunzip_buffer = NULL;
+    }
 
 	if (pdata->is_uploading)
 		is_uploading = 0;
