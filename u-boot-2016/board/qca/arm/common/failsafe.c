@@ -29,7 +29,7 @@ static uint32_t flash_type;
 static qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
 
 /* Implemented in: u-boot-2016/board/qca/arm/common/cmd_bootqca.c */
-int config_select(unsigned int addr, char *rcmd, int rcmd_size);
+extern int config_select(unsigned int addr, char *rcmd, int rcmd_size);
 
 void *httpd_get_upload_buffer_ptr(size_t size)
 {
@@ -217,11 +217,10 @@ part_not_found:
 	return RET_PART_NOT_FOUND;
 }
 
-static void print_file_type_error_msg(char *expected_file_type_str, int fw_type)
+static inline void print_file_type_error_msg(char *expected_file_type_str, int fw_type)
 {
-	printf("ERROR: wrong file type! (expect: %s, in fact: ", expected_file_type_str);
-	print_fw_type(fw_type);
-	printf(")\n");
+	printf("ERROR: wrong file type! (expect: %s, in fact: %s)\n",
+		expected_file_type_str, fw_type_to_string(fw_type));
 }
 
 int failsafe_validate_image(const int upgrade_type,
@@ -232,9 +231,8 @@ int failsafe_validate_image(const int upgrade_type,
 #if defined(CONFIG_HTTPD_DEBUG)
 	if (httpd_debug)
 		printf("[DEBUG] failsafe_validate_image(): "
-			"fw_type = %d, data_addr = 0x%p, data_size_in_bytes = %lu\n",
-			fw_type, data_addr, data_size_in_bytes
-		);
+			"fw_type = %d (%s), data_addr = 0x%p, data_size_in_bytes = %lu\n",
+			fw_type, fw_type_to_string(fw_type), data_addr, data_size_in_bytes);
 #endif
 
 	switch (upgrade_type) {

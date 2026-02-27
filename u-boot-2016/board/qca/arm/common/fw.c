@@ -56,49 +56,36 @@ int check_fw_type(const void *address) {
 	}
 }
 
-void print_fw_type(const int fw_type) {
+char *fw_type_to_string(const int fw_type) {
 	switch (fw_type) {
 	case FW_TYPE_CDT:
-		printf("CDT");
-		break;
+		return "CDT";
 	case FW_TYPE_ELF:
-		printf("ELF");
-		break;
+		return "ELF";
 	case FW_TYPE_EMMC:
-		printf("EMMC IMAGE");
-		break;
+		return "EMMC IMAGE";
 	case FW_TYPE_FACTORY_KERNEL6M:
-		printf("FACTORY FIRMWARE (KERNEL SIZE: 6MB)");
-		break;
+		return "FACTORY FIRMWARE (KERNEL SIZE: 6MB)";
 	case FW_TYPE_FACTORY_KERNEL12M:
-		printf("FACTORY FIRMWARE (KERNEL SIZE: 12MB)");
-		break;
+		return "FACTORY FIRMWARE (KERNEL SIZE: 12MB)";
 	case FW_TYPE_FIT:
-		printf("FIT IMAGE");
-		break;
+		return "FIT IMAGE";
 	case FW_TYPE_QSDK:
-		printf("JDCLOUD OFFICIAL FIRMWARE");
-		break;
+		return "JDCLOUD OFFICIAL FIRMWARE";
 	case FW_TYPE_MIBIB_NAND:
-		printf("MIBIB for NAND device");
-		break;
+		return "MIBIB for NAND device";
 	case FW_TYPE_MIBIB_NOR:
-		printf("MIBIB for SPI-NOR device");
-		break;
+		return "MIBIB for SPI-NOR device";
 	case FW_TYPE_NAND:
-		printf("NAND IMAGE");
-		break;
+		return "NAND IMAGE";
 	case FW_TYPE_NOR:
-		printf("SPI-NOR IMGAGE");
-		break;
+		return "SPI-NOR IMGAGE";
 	case FW_TYPE_SYSUPGRADE:
-		printf("SYSUPGRADE FIRMWARE");
-		break;
+		return "SYSUPGRADE FIRMWARE";
 	case FW_TYPE_UBI:
-		printf("UBI FIRMWARE");
-		break;
+		return "UBI FIRMWARE";
 	case FW_TYPE_UNKNOWN:
 	default:
-		printf("UNKNOWN");
+		return "UNKNOWN";
 	}
 }

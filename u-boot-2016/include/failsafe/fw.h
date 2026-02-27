@@ -46,6 +46,6 @@ enum {
 #define HEADER_MAGIC_UBI         0x23494255
 
 int check_fw_type(const void *address);
-void print_fw_type(const int fw_type);
+char *fw_type_to_string(const int fw_type);
 
 #endif /* __FW_H__ */
