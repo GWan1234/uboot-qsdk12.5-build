@@ -84,3 +84,7 @@ GTAGS
 *.orig
 *~
 \#*#
+
+# dtb files
+/combined_dtb.lds
+/dtb_combined*

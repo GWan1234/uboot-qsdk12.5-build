@@ -24,4 +24,6 @@
 /gdb/gdbsend
 
 /lib/
-/common/
+/common
+
+/__pycache__/

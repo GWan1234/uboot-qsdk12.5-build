@@ -1,1 +1,3 @@
 *.dtb
+/dtbtable.S
+/compressed_dtb/dtbcombined.S
