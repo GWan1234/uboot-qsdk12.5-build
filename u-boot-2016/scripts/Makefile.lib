@@ -336,7 +336,8 @@ cmd_dtc = mkdir -p $(dir ${dtc-tmp}) ; \
 	$(CPP) $(dtc_cpp_flags) -x assembler-with-cpp -o $(dtc-tmp) $< ; \
 	$(DTC) -O dtb -o $@ -b 0 \
 		-i $(dir $<) $(DTC_FLAGS) \
-		-d $(depfile).dtc.tmp $(dtc-tmp) ; \
+		-d $(depfile).dtc.tmp $(dtc-tmp) \
+		-W no-unit_address_vs_reg -W no-unit_address_format -W no-gpios_property -W no-i2c_bus_reg -W no-spi_bus_bridge -W no-avoid_unnecessary_addr_size -W no-alias_paths; \
 	cat $(depfile).pre.tmp $(depfile).dtc.tmp > $(depfile)
 
 $(obj)/%.dtb: $(src)/%.dts FORCE
