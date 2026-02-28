@@ -31,7 +31,6 @@ extern struct sdhci_host mmc_host;
 #define BOOT_PART_PRIMARY      0x0
 #define BOOT_PART_SECONDARY    0x1
 #define WRITE_SIZE_IN_BYTES	   1
-#define LOAD_RAM_ADDR          0x44000000
 #define BOOTCONFIG_PART_NUM	   2
 #define BOOTCONFIG_OFFSET_NUM  3
 
@@ -102,21 +101,21 @@ static int do_bootconfig(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv
 				sprintf(buf,
 					"sf probe && "
 					"sf read 0x%lx 0x%lx 0x%lx",
-					(ulong)LOAD_RAM_ADDR,
+					(ulong)CONFIG_SYS_LOAD_ADDR,
 					(ulong)offset_in_bytes,
 					(ulong)size_in_bytes);
 				break;
 			case SMEM_BOOT_NAND_FLASH:
 				sprintf(buf,
 					"nand read 0x%lx 0x%lx 0x%lx",
-					(ulong)LOAD_RAM_ADDR,
+					(ulong)CONFIG_SYS_LOAD_ADDR,
 					(ulong)offset_in_bytes,
 					(ulong)size_in_bytes);
 				break;
 			case SMEM_BOOT_MMC_FLASH:
 				sprintf(buf,
 					"mmc read 0x%lx 0x%lx 0x%lx",
-					(ulong)LOAD_RAM_ADDR,
+					(ulong)CONFIG_SYS_LOAD_ADDR,
 					(ulong)offset_in_blocks,
 					(ulong)size_in_blocks);
 				break;
@@ -129,7 +128,7 @@ static int do_bootconfig(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv
 			continue;
 
 		changed = 0;
-		start = map_sysmem(LOAD_RAM_ADDR, WRITE_SIZE_IN_BYTES);
+		start = map_sysmem(CONFIG_SYS_LOAD_ADDR, WRITE_SIZE_IN_BYTES);
 		for (int offset_index = 0; offset_index < BOOTCONFIG_OFFSET_NUM; offset_index++) {
 			bootconfig_flag = (u8 *)(start + bootconfig_offset[offset_index]);
 			if (*bootconfig_flag != (u8)boot_part) {
@@ -141,7 +140,7 @@ static int do_bootconfig(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv
 			sprintf(buf,
 				"flash %s 0x%lx 0x%lx",
 				bootconfig_part_name[part_index],
-				(ulong)LOAD_RAM_ADDR,
+				(ulong)CONFIG_SYS_LOAD_ADDR,
 				(ulong)size_in_bytes);
 			ret = run_command(buf, 0);
 		}
