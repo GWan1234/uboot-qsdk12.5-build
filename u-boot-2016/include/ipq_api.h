@@ -24,7 +24,8 @@
 #define MACHINE_FLASH_TYPE_NAND 1
 #endif
 
-#define CONFIG_LOADADDR 0x44000000
+/* loadaddr 环境变量的默认值 (u-boot-2016/include/env_default.h) */
+#define CONFIG_LOADADDR CONFIG_SYS_LOAD_ADDR
 
 void check_button_is_pressed(void);
 void led_on(const char *gpio_name);
