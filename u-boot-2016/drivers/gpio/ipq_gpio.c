@@ -143,14 +143,15 @@ int qca_gpio_deinit(int offset)
 }
 
 #if defined(CONFIG_HTTPD)
-void ipq_gpio_init(const char *gpio_name)
+void ipq_gpio_init(const char *gpio_name, const int debug_state)
 {
 	int node;
 	struct qca_gpio_config gpio_config;
 
 	node = fdt_path_offset(gd->fdt_blob, gpio_name);
 	if (node < 0) {
-		printf("Could not find %s node\n", gpio_name);
+		if (debug_state)
+			printf("Could not find %s node\n", gpio_name);
 		return;
 	}
 
@@ -179,20 +180,16 @@ void ipq_gpio_init(const char *gpio_name)
 
 void ipq_btn_init(void)
 {
-	ipq_gpio_init("reset_key");
-#if defined(HAS_WPS_KEY)
-	ipq_gpio_init("wps_key");
-#endif
-#if defined(HAS_SCREEN_KEY)
-	ipq_gpio_init("screen_key");
-#endif
+	ipq_gpio_init("reset_key", 1);
+	ipq_gpio_init("wps_key", 0);
+	ipq_gpio_init("screen_key", 0);
 }
 
 void ipq_led_init(void)
 {
-	ipq_gpio_init("power_led");
-	ipq_gpio_init("blink_led");
-	ipq_gpio_init("system_led");
+	ipq_gpio_init("power_led", 1);
+	ipq_gpio_init("blink_led", 1);
+	ipq_gpio_init("system_led", 1);
 
 	led_on("power_led");
 	mdelay(500);

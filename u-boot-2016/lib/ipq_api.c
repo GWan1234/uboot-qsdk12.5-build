@@ -20,19 +20,21 @@ extern struct sdhci_host mmc_host;
 
 DECLARE_GLOBAL_DATA_PTR;
 
-unsigned int fdt_get_gpio_by_name(const char *gpio_name) {
+unsigned int fdt_get_gpio_by_name(const char *gpio_name, const int debug_state) {
 	int node;
 	unsigned int gpio;
 
 	node = fdt_path_offset(gd->fdt_blob, gpio_name);
 	if (node < 0) {
-		printf("Could not find %s node in fdt\n", gpio_name);
+		if (debug_state)
+			printf("Could not find %s node in fdt\n", gpio_name);
 		return 0;
 	}
 
 	gpio = fdtdec_get_uint(gd->fdt_blob, node, "gpio", 0);
 	if (!gpio) {
-		printf("Could not find %s node's gpio in fdt\n", gpio_name);
+		if (debug_state)
+			printf("Could not find %s node's gpio in fdt\n", gpio_name);
 		return 0;
 	}
 
@@ -43,7 +45,7 @@ void led_toggle(const char *gpio_name) {
 	int value;
 	unsigned int gpio;
 
-	gpio = fdt_get_gpio_by_name(gpio_name);
+	gpio = fdt_get_gpio_by_name(gpio_name, 1);
 	if (!gpio)
 		return;
 
@@ -57,7 +59,7 @@ void led_toggle(const char *gpio_name) {
 void led_on(const char *gpio_name) {
 	unsigned int gpio;
 
-	gpio = fdt_get_gpio_by_name(gpio_name);
+	gpio = fdt_get_gpio_by_name(gpio_name, 1);
 	if (!gpio)
 		return;
 
@@ -69,7 +71,7 @@ void led_on(const char *gpio_name) {
 void led_off(const char *gpio_name) {
 	unsigned int gpio;
 
-	gpio = fdt_get_gpio_by_name(gpio_name);
+	gpio = fdt_get_gpio_by_name(gpio_name, 1);
 	if (!gpio)
 		return;
 
@@ -87,7 +89,11 @@ void led_off(const char *gpio_name) {
 bool button_is_pressed(const char *gpio_name, int value) {
 	unsigned int gpio;
 
-	gpio = fdt_get_gpio_by_name(gpio_name);
+	if (strcmp(gpio_name, "RESET") == 0)
+		gpio = fdt_get_gpio_by_name(gpio_name, 1);
+	else
+		gpio = fdt_get_gpio_by_name(gpio_name, 0);
+
 	if (!gpio)
 		return false;
 
@@ -112,38 +118,24 @@ void check_button_is_pressed(void) {
 	char *button_name = NULL;
 
 	// 检测哪个按键被按下
-    if (button_is_pressed("reset_key", RESET_BUTTON_IS_PRESSED)) {
+    if (button_is_pressed("reset_key", RESET_BUTTON_IS_PRESSED))
         button_name = "RESET";
-    }
-#if defined(HAS_WPS_KEY)
-	else if (button_is_pressed("wps_key", WPS_BUTTON_IS_PRESSED)) {
+    else if (button_is_pressed("wps_key", WPS_BUTTON_IS_PRESSED))
         button_name = "WPS";
-    }
-#endif
-#if defined(HAS_SCREEN_KEY)
-	else if (button_is_pressed("screen_key", SCREEN_BUTTON_IS_PRESSED)) {
+    else if (button_is_pressed("screen_key", SCREEN_BUTTON_IS_PRESSED))
         button_name = "SCREEN";
-    }
-#endif
 
 	// 如果任一按键被按下
 	while (button_name != NULL) {
 		// 重新检测按键状态
         int still_pressed = 0;
 
-        if (strcmp(button_name, "RESET") == 0) {
+        if (strcmp(button_name, "RESET") == 0)
             still_pressed = button_is_pressed("reset_key", RESET_BUTTON_IS_PRESSED);
-        }
-#if defined(HAS_WPS_KEY)
-		else if (strcmp(button_name, "WPS") == 0) {
+        else if (strcmp(button_name, "WPS") == 0)
             still_pressed = button_is_pressed("wps_key", WPS_BUTTON_IS_PRESSED);
-        }
-#endif
-#if defined(HAS_SCREEN_KEY)
-		else if (strcmp(button_name, "SCREEN") == 0) {
+        else if (strcmp(button_name, "SCREEN") == 0)
             still_pressed = button_is_pressed("screen_key", SCREEN_BUTTON_IS_PRESSED);
-        }
-#endif
 
         if (!still_pressed)
             break;  // 按键已释放

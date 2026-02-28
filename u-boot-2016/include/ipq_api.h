@@ -2,21 +2,6 @@
 #define WPS_BUTTON_IS_PRESSED          0
 #define SCREEN_BUTTON_IS_PRESSED       0
 
-/* 有 WPS 键的机型*/
-#if defined(CONFIG_TARGET_IPQ6018_CMIOT_AX18) || \
-    defined(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_02) || \
-    defined(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_SS_01) || \
-    defined(CONFIG_TARGET_IPQ6018_LINK_NN6000) || \
-    defined(CONFIG_TARGET_IPQ6018_QIHOO_360V6) || \
-    defined(CONFIG_TARGET_IPQ6018_ZN_M2)
-#define HAS_WPS_KEY 1
-#endif
-
-/* 有 SCREEN 键的机型*/
-#if defined(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_02)
-#define HAS_SCREEN_KEY 1
-#endif
-
 /* eMMC 机型*/
 #if defined(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_02) || \
     defined(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_07) || \
@@ -45,4 +30,4 @@ void check_button_is_pressed(void);
 void led_on(const char *gpio_name);
 void led_off(const char *gpio_name);
 void led_toggle(const char *gpio_name);
-unsigned int fdt_get_gpio_by_name(const char *gpio_name);
+unsigned int fdt_get_gpio_by_name(const char *gpio_name, const int debug_state);
