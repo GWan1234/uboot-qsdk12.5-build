@@ -26,7 +26,7 @@
 #include "fs.h"
 
 #if defined(CONFIG_HTTPD_DEBUG)
-int httpd_debug;
+int httpd_debug_state;
 #endif
 
 /*
@@ -68,10 +68,8 @@ static int gunzip_and_send(struct httpd_response *response,
 	void *dst = NULL;
 	ulong len = file->uncompressed_size;
 
-#if defined(CONFIG_HTTPD_DEBUG)
-	printf("[DEBUG] gunzip_and_send(): gunzipping %s (%u -> %u bytes)\n",
+	httpd_debug("[DEBUG] gunzip_and_send(): gunzipping %s (%u -> %u bytes)\n",
            filename, file->size, file->uncompressed_size);
-#endif
 
 #if defined(CONFIG_GZIP)
 	dst = malloc(file->uncompressed_size);
@@ -139,7 +137,7 @@ static int output_plain_file(struct httpd_response *response,
 		response->info.content_encoding = NULL;
 		response->info.content_length = file->size;
 
-		debug("Sending raw %s (%u bytes)\n", filename, file->size);
+		httpd_debug("[DEBUG] Sending raw %s (%u bytes)\n", filename, file->size);
 
 		return 0;
 	}
@@ -148,13 +146,8 @@ static int output_plain_file(struct httpd_response *response,
 	int client_accepts_gzip = 0;
 	const char *accept_encoding = httpd_find_header("Accept-Encoding");
 
-	if (accept_encoding && strstr(accept_encoding, "gzip")) {
-#if defined(CONFIG_HTTPD_DEBUG)
-		if (httpd_debug)
-			printf("[DEBUG] output_plain_file(): Accept-Encoding: %s\n", accept_encoding);
-#endif
+	if (accept_encoding && strstr(accept_encoding, "gzip"))
 		client_accepts_gzip = 1;
-	}
 
 	/* 客户端支持gzip，直接发送压缩数据 */
 	if (client_accepts_gzip) {
@@ -163,8 +156,6 @@ static int output_plain_file(struct httpd_response *response,
 		response->info.content_encoding = "gzip";
 		response->info.content_length = file->size;
 		response->info.vary = "Accept-Encoding";
-
-		debug("Sending gzipped %s (%u bytes)\n", filename, file->size);
 
 		return 0;
 	}
@@ -183,7 +174,7 @@ static int output_plain_file(struct httpd_response *response,
 		return 1;
 	}
 
-	debug("Sending decompressed %s (%u bytes) - client doesn't support gzip\n",
+	httpd_debug("[DEBUG] Sending decompressed %s (%u bytes) - client doesn't support gzip\n",
 			filename, response->size);
 
 	return 0;
@@ -282,16 +273,8 @@ static void upload_handler(enum httpd_uri_handler_status status,
 	if (status != HTTP_CB_NEW)
 		return;
 
-#if defined(CONFIG_HTTPD_DEBUG)
-	if (httpd_debug)
-		printf("[DEBUG] upload_handler(): before rand(), fs_upload_id = %u\n", fs_upload_id);
-#endif
 	/* new upload session identifier */
 	fs_upload_id = rand();
-#if defined(CONFIG_HTTPD_DEBUG)
-	if (httpd_debug)
-		printf("[DEBUG] upload_handler(): after rand(), fs_upload_id = %u\n", fs_upload_id);
-#endif
 
 	response->status = HTTP_RESP_STD;
 	response->info.code = 200;
@@ -346,17 +329,14 @@ static void upload_handler(enum httpd_uri_handler_status status,
 		goto done;
 	}
 
-#if defined(CONFIG_HTTPD_DEBUG)
-	if (httpd_debug)
-		printf("[DEBUG] upload_handler(): NOT supported upgrade type!\n");
-#endif
+	httpd_debug("[DEBUG] upload_handler(): NOT supported upgrade type!\n");
+
 	/* 没有匹配的 upgrade_type，返回 fail*/
 	response->data = "fail";
 	response->size = strlen(response->data);
-#if defined(CONFIG_HTTPD_DEBUG)
-	if (httpd_debug)
-		printf("[DEBUG] upload_handler(): response message: %s\n", response->data);
-#endif
+
+	httpd_debug("[DEBUG] upload_handler(): response message: %s\n", response->data);
+
 	return;
 
 done:
@@ -364,23 +344,15 @@ done:
 	upload_data = fw->data;
 	upload_size = fw->size;
 
-#if defined(CONFIG_HTTPD_DEBUG)
-	if (httpd_debug)
-		printf("[DEBUG] upload_handler(): "
-			"upload_data_id = %u, upload_data = 0x%p, upload_size = %lu\n",
-			upload_data_id, upload_data, (ulong)upload_size
-		);
-#endif
+	httpd_debug("[DEBUG] upload_handler(): upload_data = 0x%p, upload_size = %lu\n",
+				upload_data, (ulong)upload_size);
 
 	ret = failsafe_validate_image(upgrade_type, upload_data, (ulong)upload_size);
 	if (ret != RET_SUCCESS) {
 		/* 文件类型不对或文件大小不对 */
 		response->data = "fail";
 		response->size = strlen(response->data);
-#if defined(CONFIG_HTTPD_DEBUG)
-		if (httpd_debug)
-			printf("[DEBUG] upload_handler(): response message: %s\n", response->data);
-#endif
+		httpd_debug("[DEBUG] upload_handler(): response message: %s\n", response->data);
 		return;
 	}
 
@@ -395,18 +367,12 @@ done:
 
 	sprintf(resp, "%u %s", fw->size, md5_str);
 
-#if defined(CONFIG_HTTPD_DEBUG)
-	if (httpd_debug)
-		printf("[DEBUG] upload_handler(): md5 for upload file: %s\n", md5_str);
-#endif
+	httpd_debug("[DEBUG] upload_handler(): md5 for upload file: %s\n", md5_str);
 
 	response->data = resp;
 	response->size = strlen(response->data);
 
-#if defined(CONFIG_HTTPD_DEBUG)
-	if (httpd_debug)
-		printf("[DEBUG] upload_handler(): response message: %s\n", response->data);
-#endif
+	httpd_debug("[DEBUG] upload_handler(): response message: %s\n", response->data);
 }
 
 struct flashing_status {
@@ -465,18 +431,10 @@ static void result_handler(enum httpd_uri_handler_status status,
 				st->ret = failsafe_write_image(upgrade_type, (ulong)upload_data, (ulong)upload_size);
 		}
 
-#if defined(CONFIG_HTTPD_DEBUG)
-		if (httpd_debug) {
-			printf("[DEBUG] result_handler(): st->ret = %d\n", st->ret);
-			printf("[DEBUG] result_handler(): before rand(), upload_data_id = %u\n", upload_data_id);
-		}
-#endif
+		httpd_debug("[DEBUG] result_handler(): st->ret = %d\n", st->ret);
+
 		/* invalidate upload identifier */
 		upload_data_id = rand();
-#if defined(CONFIG_HTTPD_DEBUG)
-		if (httpd_debug)
-			printf("[DEBUG] result_handler(): after rand(), upload_data_id = %u\n", upload_data_id);
-#endif
 
 		led_off("system_led");
 		led_on("blink_led");
@@ -576,30 +534,16 @@ int start_web_failsafe(void)
 	return 0;
 }
 
-#if defined(CONFIG_HTTPD_DEBUG)
-static void set_httpd_debug_state(void) {
-	char *httpd_debug_str;
-
-	httpd_debug_str = getenv("httpd_debug");
-
-	if (httpd_debug_str == NULL)
-		httpd_debug = 0;
-	else if (strcmp(httpd_debug_str, "on") == 0)
-		httpd_debug = 1;
-	else
-		httpd_debug = 0;
-
-	return;
-}
-#endif
-
 static int do_httpd(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
 	u32 local_ip;
 	int ret;
 
 #if defined(CONFIG_HTTPD_DEBUG)
-	set_httpd_debug_state();
+	if (getenv("httpd_debug") != NULL)
+		httpd_debug_state = 1;
+	else
+		httpd_debug_state = 0;
 #endif
 
 #if defined(CONFIG_NET_FORCE_IPADDR)

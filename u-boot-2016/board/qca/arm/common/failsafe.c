@@ -228,12 +228,9 @@ int failsafe_validate_image(const int upgrade_type,
 {
 	int fw_type = check_fw_type(data_addr);
 
-#if defined(CONFIG_HTTPD_DEBUG)
-	if (httpd_debug)
-		printf("[DEBUG] failsafe_validate_image(): "
-			"fw_type = %d (%s), data_addr = 0x%p, data_size_in_bytes = %lu\n",
-			fw_type, fw_type_to_string(fw_type), data_addr, data_size_in_bytes);
-#endif
+	httpd_debug("[DEBUG] failsafe_validate_image(): "
+		"fw_type = %d (%s), data_addr = 0x%p, data_size_in_bytes = %lu\n",
+		fw_type, fw_type_to_string(fw_type), data_addr, data_size_in_bytes);
 
 	switch (upgrade_type) {
 	case WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE:

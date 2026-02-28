@@ -566,29 +566,18 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 				return 1;
 			}
 
-#if defined(CONFIG_HTTPD_DEBUG)
-			if (httpd_debug)
-				printf("[DEBUG] httpd_recv_hdr(): before rand(), upload_id = %u\n", upload_id);
-#endif
-
 			/* generate new upload identifier */
 			upload_id = rand();
 
-#if defined(CONFIG_HTTPD_DEBUG)
-			if (httpd_debug)
-				printf("[DEBUG] httpd_recv_hdr(): after rand(), upload_id = %u\n", upload_id);
-#endif
-
 			/* calculate new cache address */
 			pdata->upload_ptr = httpd_get_upload_buffer_ptr(pdata->payload_size);
-#if defined(CONFIG_HTTPD_DEBUG)
-			if (httpd_debug)
-				printf("[DEBUG] httpd_recv_hdr(): pdata->upload_ptr = 0x%p\n", (void *)pdata->upload_ptr);
-#endif
+
 			pdata->upload_size = cbd->datalen - hdr_size;
 			/* copy received parts to new cache */
 			memcpy(pdata->upload_ptr, cbd->data + hdr_size, pdata->upload_size);
 		}
+
+		httpd_debug("[DEBUG] httpd_recv_hdr(): pdata->upload_ptr = 0x%p\n", (void *)pdata->upload_ptr);
 
 		progress = pdata->upload_size * 100 / pdata->payload_size;
 		last_progress = progress;
@@ -768,10 +757,7 @@ static int httpd_handle_request(struct httpd_instance *inst,
 			numformdata++;
 		} while (numformdata < MAX_HTTP_FORM_VALUE_ITEMS);
 
-#if defined(CONFIG_HTTPD_DEBUG)
-		if (httpd_debug)
-			printf("[DEBUG] httpd_handle_request(): numformdata in total: %u\n", numformdata);
-#endif
+		httpd_debug("[DEBUG] httpd_handle_request(): numformdata in total: %u\n", numformdata);
 
 		/* process each formdata */
 		for (i = 0; i < numformdata; i++) {
@@ -812,13 +798,9 @@ static int httpd_handle_request(struct httpd_instance *inst,
 				((char *)val->data)[val->size] = 0;
 			}
 
-#if defined(CONFIG_HTTPD_DEBUG)
-			if (httpd_debug)
-				printf("[DEBUG] httpd_handle_request(): "
-					"numformdata = %u, val->name = %s, val->filename = %s, val->data = 0x%p, val->size = %lu\n",
-					numformdata, val->name, val->filename, val->data, (ulong)val->size
-				);
-#endif
+			httpd_debug("[DEBUG] httpd_handle_request(): "
+				"numformdata = %u, val->name = %s, val->filename = %s, val->data = 0x%p, val->size = %lu\n",
+				numformdata, val->name, val->filename, val->data, (ulong)val->size);
 		}
 
 		free(boundary);
@@ -928,9 +910,7 @@ static void httpd_cleanup(struct httpd_instance *inst, struct tcp_cb_data *cbd)
 
     /* 释放动态分配的解压缓冲区 */
     if (resp->gunzip_buffer) {
-#if defined(CONFIG_HTTPD_DEBUG)
-        printf("[DEBUG] httpd_cleanup(): Freeing gunzip buffer at 0x%p\n", resp->gunzip_buffer);
-#endif
+        httpd_debug("[DEBUG] httpd_cleanup(): Freeing gunzip buffer at 0x%p\n", resp->gunzip_buffer);
         free(resp->gunzip_buffer);
         resp->gunzip_buffer = NULL;
     }

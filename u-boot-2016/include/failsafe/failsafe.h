@@ -2,7 +2,14 @@
 #define __FAILSAFE_H__
 
 #if defined(CONFIG_HTTPD_DEBUG)
-extern int httpd_debug; /* 决定是否打印调试信息的标志 */
+extern int httpd_debug_state;
+#define httpd_debug(fmt, args...)   \
+    do {    \
+        if (httpd_debug_state)  \
+            printf(fmt, ##args);    \
+    } while (0)
+#else
+#define httpd_debug(fmt, args...)   do { } while (0)
 #endif
 
 enum {
