@@ -124,7 +124,7 @@ dtb-$(CONFIG_ARCH_IPQ5332) += ipq5332-mi04.1.dtb \
 endif
 endif
 
-$(info === 板级选择调试 ===)
+$(info === Board Selection ===)
 $(info CONFIG_TARGET_IPQ6018_CMIOT_AX18        = $(CONFIG_TARGET_IPQ6018_CMIOT_AX18))
 $(info CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_02  = $(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_02))
 $(info CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_07  = $(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_07))
@@ -136,54 +136,39 @@ $(info CONFIG_TARGET_IPQ6018_REDMI_AX5_JDCLOUD = $(CONFIG_TARGET_IPQ6018_REDMI_A
 $(info CONFIG_TARGET_IPQ6018_SY_Y6010          = $(CONFIG_TARGET_IPQ6018_SY_Y6010))
 $(info CONFIG_TARGET_IPQ6018_ZN_M2             = $(CONFIG_TARGET_IPQ6018_ZN_M2))
 
-ifdef CONFIG_TARGET_IPQ6018_CMIOT_AX18
-$(info 选择: CMIOT AX18)
-dtb-$(CONFIG_ARCH_IPQ6018) += ipq6018-ax18.dtb
-endif
+dtb-$(CONFIG_TARGET_IPQ6018_CMIOT_AX18)        += ipq6018-ax18.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_02)  += ipq6018-re-cs-02.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_07)  += ipq6018-re-cs-07.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_SS_01)  += ipq6018-re-ss-01.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_LINK_NN6000)       += ipq6018-nn6000.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_PHILIPS_LY1800)    += ipq6018-ly1800.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_QIHOO_360V6)       += ipq6018-360v6.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_REDMI_AX5_JDCLOUD) += ipq6018-ax5-jdcloud.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_SY_Y6010)          += ipq6018-y6010.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_ZN_M2)             += ipq6018-m2.dtb
 
-ifdef CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_02
-$(info 选择: JDCloud AX6600 Athena (RE-CS-02))
-dtb-$(CONFIG_ARCH_IPQ6018) += ipq6018-re-cs-02.dtb
-endif
-
-ifdef CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_07
-$(info 选择: JDCloud ER1 (RE-CS-07))
-dtb-$(CONFIG_ARCH_IPQ6018) += ipq6018-re-cs-07.dtb
-endif
-
-ifdef CONFIG_TARGET_IPQ6018_JDCLOUD_RE_SS_01
-$(info 选择: JDCloud AX1800 Pro Arthur (RE-SS-01))
-dtb-$(CONFIG_ARCH_IPQ6018) += ipq6018-re-ss-01.dtb
-endif
-
-ifdef CONFIG_TARGET_IPQ6018_LINK_NN6000
-$(info 选择: Link NN6000 (V1 & V2))
-dtb-$(CONFIG_ARCH_IPQ6018) += ipq6018-nn6000.dtb
-endif
-
-ifdef CONFIG_TARGET_IPQ6018_PHILIPS_LY1800
-$(info 选择: Philips LY1800)
-dtb-$(CONFIG_ARCH_IPQ6018) += ipq6018-ly1800.dtb
-endif
-
-ifdef CONFIG_TARGET_IPQ6018_QIHOO_360V6
-$(info 选择: Qihoo 360V6)
-dtb-$(CONFIG_ARCH_IPQ6018) += ipq6018-360v6.dtb
-endif
-
-ifdef CONFIG_TARGET_IPQ6018_REDMI_AX5_JDCLOUD
-$(info 选择: Redmi AX5 JDCloud)
-dtb-$(CONFIG_ARCH_IPQ6018) += ipq6018-ax5-jdcloud.dtb
-endif
-
-ifdef CONFIG_TARGET_IPQ6018_SY_Y6010
-$(info 选择: SY Y6010)
-dtb-$(CONFIG_ARCH_IPQ6018) += ipq6018-y6010.dtb
-endif
-
-ifdef CONFIG_TARGET_IPQ6018_ZN_M2
-$(info 选择: ZN M2)
-dtb-$(CONFIG_ARCH_IPQ6018) += ipq6018-m2.dtb
+ifdef CONFIG_ADD_EXTRA_DTB
+dtb-$(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_02)  += ipq6018-re-cs-07.dtb \
+												  ipq6018-re-ss-01.dtb \
+												  ipq6018-ax5-jdcloud.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_07)  += ipq6018-re-cs-02.dtb \
+												  ipq6018-re-ss-01.dtb \
+												  ipq6018-ax5-jdcloud.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_SS_01)  += ipq6018-re-cs-02.dtb \
+												  ipq6018-re-cs-07.dtb \
+												  ipq6018-ax5-jdcloud.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_LINK_NN6000)       += ipq6018-re-cs-02.dtb \
+												  ipq6018-re-cs-07.dtb \
+												  ipq6018-re-ss-01.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_PHILIPS_LY1800)    += ipq6018-re-cs-02.dtb \
+												  ipq6018-re-cs-07.dtb \
+												  ipq6018-re-ss-01.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_REDMI_AX5_JDCLOUD) += ipq6018-re-cs-02.dtb \
+												  ipq6018-re-cs-07.dtb \
+												  ipq6018-re-ss-01.dtb
+dtb-$(CONFIG_TARGET_IPQ6018_SY_Y6010)          += ipq6018-re-cs-02.dtb \
+												  ipq6018-re-cs-07.dtb \
+												  ipq6018-re-ss-01.dtb
 endif
 
 dtb-$(CONFIG_ARCH_IPQ9574) += ipq9574-al01-c1.dtb \
