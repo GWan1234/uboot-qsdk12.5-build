@@ -12,6 +12,7 @@
 #include <cli.h>
 #include <console.h>
 #include <version.h>
+#include <net.h>
 #if defined(CONFIG_HTTPD)
 #include <asm/arch-qca-common/gpio.h>
 #include <ipq_api.h>
@@ -88,6 +89,55 @@ void main_loop(void)
 #if defined(CONFIG_UPDATE_TFTP)
 	update_tftp(0UL, NULL, NULL);
 #endif /* CONFIG_UPDATE_TFTP */
+
+#if defined(CONFIG_FORCE_NETWORK_ENV)
+	if (getenv("custom_network") == NULL) {
+# if defined(CONFIG_IPADDR)
+		char *default_ipaddr = __stringify(CONFIG_IPADDR);
+# else
+		char *default_ipaddr = "192.168.1.1";
+# endif /* CONFIG_IPADDR */
+# if defined(CONFIG_NETMASK)
+		char *default_netmask = __stringify(CONFIG_NETMASK);
+# else
+		char *default_netmask = "255.255.255.0";
+# endif /* CONFIG_NETMASK */
+# if defined(CONFIG_SERVERIP)
+		char *default_serverip = __stringify(CONFIG_SERVERIP);
+# else
+		char *default_serverip = "192.168.1.2";
+# endif /* CONFIG_SERVERIP */
+
+		int changed = 0;
+
+		if (strcmp(getenv("ipaddr"), default_ipaddr)) {
+			setenv("ipaddr", default_ipaddr);
+			net_ip = string_to_ip(default_ipaddr);
+			changed = 1;
+		}
+
+		if (strcmp(getenv("netmask"), default_netmask)) {
+			setenv("netmask", default_netmask);
+			net_netmask = string_to_ip(default_netmask);
+			changed = 1;
+		}
+
+		if (strcmp(getenv("serverip"), default_serverip)) {
+			setenv("serverip", default_serverip);
+			net_server_ip = string_to_ip(default_serverip);
+			changed = 1;
+		}
+
+		if (changed) {
+			printf("\"custom_network\" env variable not defined, "
+				"reset network settings to default values:\n");
+			printf("    ipaddr: %s\n", default_ipaddr);
+			printf("    netmask: %s\n", default_netmask);
+			printf("    serverip: %s\n", default_serverip);
+			saveenv();
+		}
+	}
+#endif /* CONFIG_FORCE_NETWORK_ENV */
 
 #if defined(CONFIG_HTTPD)
 	if (getenv("failsafe") != NULL) {

@@ -27,6 +27,12 @@
 /* loadaddr 环境变量的默认值 (u-boot-2016/include/env_default.h) */
 #define CONFIG_LOADADDR CONFIG_SYS_LOAD_ADDR
 
+/*
+ * 每次启动都会检查环境变量：ipaddr、netmask 和 serverip，并将其重置为默认值。
+ * 若想要自定义这三个环境变量，需添加 custom_network 环境变量（任意合法非空值即可）。
+ */
+#define CONFIG_FORCE_NETWORK_ENV
+
 void check_button_is_pressed(void);
 void led_on(const char *gpio_name);
 void led_off(const char *gpio_name);
