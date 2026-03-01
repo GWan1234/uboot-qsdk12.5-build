@@ -294,9 +294,11 @@ static int do_untar(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]) {
 		printf("rootfs_addr: 0x%lx, rootfs_size: 0x%lx\n", (ulong)rootfs_addr, (ulong)rootfs_size);
 	} else {
 		// 删除相应的环境变量
-		char *buf = "setenv kernel_addr && setenv kernel_size && setenv rootfs_addr && setenv rootfs_size";
-		run_command(buf, 0);
-		printf("No valid sysupgrade tar image found.\n");
+		setenv("kernel_addr", NULL);
+		setenv("kernel_size", NULL);
+		setenv("rootfs_addr", NULL);
+		setenv("rootfs_size", NULL);
+		printf("Error: NOT supported TAR IMAGE!\n");
 	}
 
 	return ret;
