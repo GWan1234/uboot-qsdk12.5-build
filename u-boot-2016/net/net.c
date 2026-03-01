@@ -583,7 +583,8 @@ restart:
 		/*
 		 *	TCP periodic check
 		 */
-		tcp_periodic_check();
+		if (protocol == TCP)
+			tcp_periodic_check();
 #endif
 
 		/*
