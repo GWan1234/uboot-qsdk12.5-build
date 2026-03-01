@@ -7,7 +7,8 @@
  * Minimal DHCPv4 server for MediaTek web failsafe.
  */
 
-/* Source Code based on:
+/*
+ * Source Code based on:
  * https://github.com/Yuzhii0718/bl-mt798x-dhcpd/blob/master/uboot-mtk-20250711/include/net/mtk_dhcpd.h
  */
 

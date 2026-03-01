@@ -12,13 +12,13 @@
  * - Small and self-contained
  */
 
-/* Source Code based on:
+/*
+ * Source Code based on:
  * https://github.com/Yuzhii0718/bl-mt798x-dhcpd/blob/master/uboot-mtk-20250711/net/mtk_dhcpd.c
  */
 
 #include <common.h>
 #include <net.h>
-
 #include <net/dhcpd.h>
 
 #define DHCPD_SERVER_PORT	67
@@ -74,11 +74,13 @@ struct dhcpd_pkt {
 
 #define DHCP_FLAG_BROADCAST	0x8000
 
-#define DHCPD_POOL_START_STR	"192.168.1.100"
-#define DHCPD_POOL_END_STR	"192.168.1.200"
+#define DHCPD_DEFAULT_IP_STR            "192.168.1.1"
+#define DHCPD_DEFAULT_NETMASK_STR	    "255.255.255.0"
+#define DHCPD_DEFAULT_POOL_START_STR	"192.168.1.100"
+#define DHCPD_DEFAULT_POOL_END_STR	    "192.168.1.200"
 
-#define DHCPD_DEFAULT_IP_STR	"192.168.1.1"
-#define DHCPD_DEFAULT_NETMASK_STR "255.255.255.0"
+#define DHCPD_POOL_OFFSET	99
+#define DHCPD_POOL_SIZE		101
 
 #define DHCPD_MAX_CLIENTS	8
 
@@ -92,9 +94,77 @@ struct dhcpd_lease {
 
 static struct dhcpd_lease leases[DHCPD_MAX_CLIENTS];
 static u32 next_ip_host;
+static u32 pool_start_host;
+static u32 pool_end_host;
 
 static rxhand_f *prev_udp_handler;
 static bool dhcpd_running;
+
+/* 动态计算地址池 */
+static void dhcpd_calculate_pool(void)
+{
+	struct in_addr server_ip, netmask;
+	u32 network, broadcast;
+	u32 net_start, net_end;
+	u32 pool_size = DHCPD_POOL_SIZE;
+
+	/* 尝试使用 net_ip 和 net_netmask */
+	if (net_ip.s_addr && net_netmask.s_addr) {
+		server_ip = net_ip;
+		netmask = net_netmask;
+
+		/* 计算网络地址和广播地址 */
+		network = ntohl(server_ip.s_addr) & ntohl(netmask.s_addr);
+		broadcast = network | ~ntohl(netmask.s_addr);
+
+		/* 网络地址+1 到 广播地址-1 是可用的主机地址范围 */
+		net_start = network + 1;
+		net_end = broadcast - 1;
+
+		/* 确保地址池在有效范围内 */
+		if (net_end > net_start) {
+			/* 计算可用的最大池大小 */
+			u32 max_pool = net_end - net_start + 1;
+			if (pool_size > max_pool)
+				pool_size = max_pool;
+
+			/* 设置地址池起始地址（从网络地址+offset开始，但不超过网络范围） */
+			pool_start_host = net_start + DHCPD_POOL_OFFSET;
+			if (pool_start_host > net_end)
+				pool_start_host = net_start;
+
+			/* 计算地址池结束地址 */
+			pool_end_host = pool_start_host + pool_size - 1;
+			if (pool_end_host > net_end)
+				pool_end_host = net_end;
+
+			debug_cond(DEBUG_DEV_PKT,
+				  "dhcpd: dynamic pool %u.%u.%u.%u - %u.%u.%u.%u (net %u.%u.%u.%u/%u)\n",
+				  (pool_start_host >> 24) & 0xFF, (pool_start_host >> 16) & 0xFF,
+				  (pool_start_host >> 8) & 0xFF, pool_start_host & 0xFF,
+				  (pool_end_host >> 24) & 0xFF, (pool_end_host >> 16) & 0xFF,
+				  (pool_end_host >> 8) & 0xFF, pool_end_host & 0xFF,
+				  (network >> 24) & 0xFF, (network >> 16) & 0xFF,
+				  (network >> 8) & 0xFF, network & 0xFF,
+				  32 - __builtin_clz(netmask.s_addr));
+			return;
+		}
+	}
+
+	/* 回退到默认配置 */
+	struct in_addr default_start = string_to_ip(DHCPD_DEFAULT_POOL_START_STR);
+	struct in_addr default_end = string_to_ip(DHCPD_DEFAULT_POOL_END_STR);
+
+	pool_start_host = ntohl(default_start.s_addr);
+	pool_end_host = ntohl(default_end.s_addr);
+
+	debug_cond(DEBUG_DEV_PKT,
+		  "dhcpd: using default pool %u.%u.%u.%u - %u.%u.%u.%u\n",
+		  (pool_start_host >> 24) & 0xFF, (pool_start_host >> 16) & 0xFF,
+		  (pool_start_host >> 8) & 0xFF, pool_start_host & 0xFF,
+		  (pool_end_host >> 24) & 0xFF, (pool_end_host >> 16) & 0xFF,
+		  (pool_end_host >> 8) & 0xFF, pool_end_host & 0xFF);
+}
 
 static struct in_addr dhcpd_get_server_ip(void)
 {
@@ -147,10 +217,7 @@ static struct dhcpd_lease *dhcpd_find_lease(const u8 *mac)
 
 static bool dhcpd_ip_in_pool(u32 ip_host)
 {
-	u32 start = ntohl(string_to_ip(DHCPD_POOL_START_STR).s_addr);
-	u32 end = ntohl(string_to_ip(DHCPD_POOL_END_STR).s_addr);
-
-	return ip_host >= start && ip_host <= end;
+	return ip_host >= pool_start_host && ip_host <= pool_end_host;
 }
 
 /* 检查IP地址是否已经被分配（给任何客户端） */
@@ -202,7 +269,7 @@ static u32 dhcpd_mac_hash(const u8 *mac)
 static struct in_addr dhcpd_alloc_ip(const u8 *mac)
 {
     struct dhcpd_lease *l;
-    u32 start, end, pool_size;
+    u32 pool_size;
     u32 hash_value, base_ip, try_ip;
     int max_attempts;
 
@@ -211,23 +278,21 @@ static struct in_addr dhcpd_alloc_ip(const u8 *mac)
     if (l)
         return l->ip;
 
-    // 2. 获取IP池范围
-    start = ntohl(string_to_ip(DHCPD_POOL_START_STR).s_addr);
-    end = ntohl(string_to_ip(DHCPD_POOL_END_STR).s_addr);
-    pool_size = end - start + 1;
+    // 2. 获取地址池大小
+    pool_size = pool_end_host - pool_start_host + 1;
 
     if (pool_size == 0) {
         debug_cond(DEBUG_DEV_PKT, "dhcpd: IP pool size is zero\n");
         struct in_addr ip;
-        ip.s_addr = htonl(start);
+        ip.s_addr = htonl(pool_start_host);
         return ip;
     }
 
     // 3. 计算MAC哈希值
     hash_value = dhcpd_mac_hash(mac);
 
-    // 4. 计算基础IP（哈希值映射到IP池）
-    base_ip = start + (hash_value % pool_size);
+    // 4. 计算起始尝试IP（哈希值映射到IP池）
+    base_ip = pool_start_host + (hash_value % pool_size);
     try_ip = base_ip;
 
     max_attempts = pool_size;  // 最多尝试整个池子
@@ -253,8 +318,8 @@ static struct in_addr dhcpd_alloc_ip(const u8 *mac)
 
                     // 更新next_ip_host为下一个IP（保持向后兼容）
                     next_ip_host = try_ip + 1;
-                    if (next_ip_host > end)
-                        next_ip_host = start;
+                    if (next_ip_host > pool_end_host)
+                        next_ip_host = pool_start_host;
 
                     return leases[j].ip;
                 }
@@ -281,8 +346,8 @@ static struct in_addr dhcpd_alloc_ip(const u8 *mac)
 
         // 线性探测：尝试下一个IP
         try_ip++;
-        if (try_ip > end)
-            try_ip = start;
+        if (try_ip > pool_end_host)
+            try_ip = pool_start_host;
 
         // 如果回到起点，说明已遍历整个池子
         if (try_ip == base_ip)
@@ -297,11 +362,11 @@ static struct in_addr dhcpd_alloc_ip(const u8 *mac)
         if (!leases[j].used) {
             leases[j].used = true;
             memcpy(leases[j].mac, mac, 6);
-            leases[j].ip.s_addr = htonl(start);
+            leases[j].ip.s_addr = htonl(pool_start_host);
 
-            next_ip_host = start + 1;
-            if (next_ip_host > end)
-                next_ip_host = start;
+            next_ip_host = pool_start_host + 1;
+            if (next_ip_host > pool_end_host)
+                next_ip_host = pool_start_host;
 
             return leases[j].ip;
         }
@@ -312,62 +377,9 @@ static struct in_addr dhcpd_alloc_ip(const u8 *mac)
               "dhcpd: all lease slots and IPs exhausted for %pM\n", mac);
 
     struct in_addr ip;
-    ip.s_addr = htonl(start);  // 返回池中第一个IP
+    ip.s_addr = htonl(pool_start_host);  // 返回池中第一个IP
     return ip;
 }
-
-/* 为其他可能调用顺序分配的地方添加兼容性，保持原有的顺序分配逻辑，作为回退方案 */
-/* static struct in_addr dhcpd_alloc_ip_sequential(const u8 *mac)
-{
-    u32 start, end;
-    int i;
-
-    start = ntohl(string_to_ip(DHCPD_POOL_START_STR).s_addr);
-    end = ntohl(string_to_ip(DHCPD_POOL_END_STR).s_addr);
-
-    if (!next_ip_host)
-        next_ip_host = start;
-
-    // 尝试分配IP，确保不重复
-    for (i = 0; i <= (end - start); i++) {
-        u32 try_ip = next_ip_host;
-
-        // 跳过已经分配的IP
-        if (dhcpd_ip_is_allocated(try_ip)) {
-            next_ip_host++;
-            if (next_ip_host > end)
-                next_ip_host = start;
-            continue;
-        }
-
-        // 找到未分配的IP，创建租约
-        for (int j = 0; j < DHCPD_MAX_CLIENTS; j++) {
-            if (!leases[j].used) {
-                leases[j].used = true;
-                memcpy(leases[j].mac, mac, 6);
-                leases[j].ip.s_addr = htonl(try_ip);
-
-                next_ip_host = try_ip + 1;
-                if (next_ip_host > end)
-                    next_ip_host = start;
-
-                debug_cond(DEBUG_DEV_PKT, "dhcpd: sequential allocated %pI4 to %pM\n",
-                          &leases[j].ip, mac);
-                return leases[j].ip;
-            }
-        }
-
-        next_ip_host++;
-        if (next_ip_host > end)
-            next_ip_host = start;
-    }
-
-    // 所有IP都被分配了，返回池中第一个IP
-    debug_cond(DEBUG_DEV_PKT, "dhcpd: pool exhausted, using first IP for %pM\n", mac);
-    struct in_addr ip;
-    ip.s_addr = htonl(start);
-    return ip;
-} */
 
 static u8 dhcpd_parse_msg_type(const struct dhcpd_pkt *bp, unsigned int len)
 {
@@ -859,8 +871,6 @@ static void dhcpd_udp_handler(uchar *pkt, unsigned int dport,
 
 int dhcpd_start(void)
 {
-	struct in_addr pool_start;
-
 	/*
 	 * Be robust against net_init()/net_clear_handlers() resetting handlers.
 	 * If we're already running but the UDP handler is no longer ours, re-hook.
@@ -885,10 +895,11 @@ int dhcpd_start(void)
 	if (!net_dns_server.s_addr)
 		net_dns_server = net_ip;
 
+	dhcpd_calculate_pool();
+
 	memset(leases, 0, sizeof(leases));
 
-	pool_start = string_to_ip(DHCPD_POOL_START_STR);
-	next_ip_host = ntohl(pool_start.s_addr);
+	next_ip_host = pool_start_host;
 
 	prev_udp_handler = net_get_udp_handler();
 	net_set_udp_handler(dhcpd_udp_handler);
