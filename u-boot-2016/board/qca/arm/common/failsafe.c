@@ -256,6 +256,7 @@ int failsafe_validate_image(const int upgrade_type,
 			return (check_file_size_is_valid("kernel", "0:HLOS", (ulong)kernel_size) ||
 					check_file_size_is_valid("rootfs", "rootfs", (ulong)rootfs_size));
 		}
+		case FW_TYPE_ASUSWRT_EMMC:
 		case FW_TYPE_QSDK:
 			break;
 #endif
@@ -371,7 +372,8 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 				data_addr,
 				data_addr
 			);
-		} else if (fw_type == FW_TYPE_SYSUPGRADE) {
+		} else if (fw_type == FW_TYPE_SYSUPGRADE ||
+			       fw_type == FW_TYPE_ASUSWRT_EMMC) {
 			sprintf(runcmd,
 				"untar 0x%lx 0x%lx && "
 				"flash 0:HLOS $kernel_addr $kernel_size && "

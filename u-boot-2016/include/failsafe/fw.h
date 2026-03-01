@@ -3,12 +3,14 @@
 
 enum {
     FW_TYPE_UNKNOWN = -1,
+    FW_TYPE_ASUSWRT_EMMC,       /* 华硕固件（eMMC 机型） */
     FW_TYPE_CDT,                /* CDT 文件 */
     FW_TYPE_ELF,                /* ELF 文件*/
     FW_TYPE_EMMC,               /* eMMC 的 GPT 分区表或镜像，只要开头有 GPT 信息即可 */
     FW_TYPE_FACTORY_KERNEL6M,   /* Factory 格式的固件 (Kernel 大小: 6MB) */
     FW_TYPE_FACTORY_KERNEL12M,  /* Factory 格式的固件 (Kernel 大小: 12MB) */
     FW_TYPE_FIT,                /* FIT Image，包括 Factory Image 和 FIT Initramfs uImage */
+    FW_TYPE_LEGACY_IMAGE,       /* Legacy Image */
     FW_TYPE_MIBIB_NAND,         /* NAND 的 MIBIB 分区表 */
     FW_TYPE_MIBIB_NOR,          /* SPI-NOR 的 MIBIB 分区表 */
     FW_TYPE_NAND,               /* NAND 的镜像，只需以 SBL1 开头即可 */
@@ -35,15 +37,17 @@ enum {
 #define HEADER_MAGIC_SBL_NAND1   0x844BDCD1
 #define HEADER_MAGIC_SBL_NAND2   0x73D71034
 
-#define HEADER_MAGIC_CDT         0x00544443
-#define HEADER_MAGIC_ELF         0x464C457F
-#define HEADER_MAGIC_EMMC        0xAA55
-#define HEADER_MAGIC_FIT         0xEDFE0DD0
-#define HEADER_MAGIC_QSDK        0x73616C46
-#define HEADER_MAGIC_SQUASHFS    0x73717368
-#define HEADER_MAGIC_SYSUPGRADE1 0x75737973
-#define HEADER_MAGIC_SYSUPGRADE2 0x61726770
-#define HEADER_MAGIC_UBI         0x23494255
+#define HEADER_MAGIC_ASUSWRT_EMMC  0x67616D69
+#define HEADER_MAGIC_CDT           0x00544443
+#define HEADER_MAGIC_ELF           0x464C457F
+#define HEADER_MAGIC_EMMC          0xAA55
+#define HEADER_MAGIC_FIT           0xEDFE0DD0
+#define HEADER_MAGIC_LEGACY_IMAGE  0x56190527
+#define HEADER_MAGIC_QSDK          0x73616C46
+#define HEADER_MAGIC_SQUASHFS      0x73717368
+#define HEADER_MAGIC_SYSUPGRADE1   0x75737973
+#define HEADER_MAGIC_SYSUPGRADE2   0x61726770
+#define HEADER_MAGIC_UBI           0x23494255
 
 int check_fw_type(const void *address);
 char *fw_type_to_string(const int fw_type);

@@ -30,6 +30,11 @@ int check_fw_type(const void *address) {
 			return FW_TYPE_FACTORY_KERNEL12M;
 		else
 			return FW_TYPE_FIT;
+	case HEADER_MAGIC_LEGACY_IMAGE:
+		if (*((u32 *)(address + 0x40)) == HEADER_MAGIC_ASUSWRT_EMMC)
+			return FW_TYPE_ASUSWRT_EMMC;
+		else
+			return FW_TYPE_LEGACY_IMAGE;
 	case HEADER_MAGIC_MBN1:
 		if (*header_magic2 == HEADER_MAGIC_MBN2) {
 			if (*((u64 *)(address + 0x100)) == HEADER_MAGIC_PTABLE)
@@ -58,6 +63,8 @@ int check_fw_type(const void *address) {
 
 char *fw_type_to_string(const int fw_type) {
 	switch (fw_type) {
+	case FW_TYPE_ASUSWRT_EMMC:
+		return "ASUSWRT";
 	case FW_TYPE_CDT:
 		return "CDT";
 	case FW_TYPE_ELF:
@@ -68,6 +75,8 @@ char *fw_type_to_string(const int fw_type) {
 		return "FACTORY FIRMWARE (KERNEL SIZE: 6MB)";
 	case FW_TYPE_FACTORY_KERNEL12M:
 		return "FACTORY FIRMWARE (KERNEL SIZE: 12MB)";
+	case FW_TYPE_LEGACY_IMAGE:
+		return "LEGACY IMAGE";
 	case FW_TYPE_FIT:
 		return "FIT IMAGE";
 	case FW_TYPE_QSDK:

@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <cmd_untar.h>
+#include <failsafe/fw.h>
 
 struct tar_hdr {
 	char name[100];			/*   0 */
@@ -47,6 +48,8 @@ struct tar_hdr {
 #define DIRTYPE  '5'			/* directory */
 #define FIFOTYPE '6'			/* FIFO special */
 #define CONTTYPE '7'			/* reserved */
+
+#define LEGACY_IMAGE_HDR_SIZE_IN_BYTES 64
 
 static bool tar_header_is_blank(const void *buff)
 {
@@ -180,9 +183,22 @@ int parse_tar_image(const void *data, size_t size,
 	struct tar_file_record file;
 	struct tar_parse_ctx ctx;
 	const char *p;
-	int ret;
+	char *folder_str, *kernel_str, *rootfs_str;
+	int ret, folder_str_len;
 
-	static const char sysupgrade_str[] = "sysupgrade";
+	if (*((u32 *)data) == HEADER_MAGIC_SYSUPGRADE1) {
+		folder_str = "sysupgrade";
+		kernel_str = "kernel";
+		rootfs_str = "root";
+		folder_str_len = 10;
+	} else if (*((u32 *)data) == HEADER_MAGIC_ASUSWRT_EMMC) {
+		folder_str = "image";
+		kernel_str = "kernel.bin";
+		rootfs_str = "rootfs.bin";
+		folder_str_len = 5;
+	} else {
+		return CMD_RET_FAILURE;
+	}
 
 	tar_ctx_init(&ctx, data, size);
 
@@ -192,21 +208,20 @@ int parse_tar_image(const void *data, size_t size,
 		if (file.type != TAR_FT_REGULAR)
 			goto next_file;
 
-		if (strncmp(file.name, sysupgrade_str,
-			    sizeof(sysupgrade_str) - 1))
+		if (strncmp(file.name, folder_str, folder_str_len))
 			goto next_file;
 
 		p = strchr(file.name, '/');
 		if (!p)
 			goto next_file;
 
-		if (!strcmp(p + 1, "kernel")) {
+		if (!strcmp(p + 1, kernel_str)) {
 			*kernel_data = file.data;
 			*kernel_size = file.size;
 			has_kernel = true;
 		}
 
-		if (!strcmp(p + 1, "root")) {
+		if (!strcmp(p + 1, rootfs_str)) {
 			*rootfs_data = file.data;
 			*rootfs_size = file.size;
 			has_root = true;
@@ -224,27 +239,29 @@ int parse_tar_image(const void *data, size_t size,
 
 static int do_untar(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]) {
 	int ret = CMD_RET_SUCCESS;
-	char *loadaddr, *filesize;
-	const void *load_addr, *kernel_addr, *rootfs_addr;
-	size_t file_size, kernel_size, rootfs_size;
+	char *fileaddr, *filesize;
+	const void *file_addr, *adj_file_addr;
+	const void *kernel_addr, *rootfs_addr;
+	size_t file_size, adj_file_size;
+	size_t kernel_size, rootfs_size;
+	int fw_type;
 
 	switch (argc) {
 		case 1:
-			loadaddr = getenv("fileaddr");
-			if (loadaddr != NULL)
-				load_addr = (void *)simple_strtoul(loadaddr, NULL, 16);
-			else
+			fileaddr = getenv("fileaddr");
+			if (fileaddr == NULL)
 				return CMD_RET_USAGE;
 
 			filesize = getenv("filesize");
-			if (filesize != NULL)
-				file_size = (size_t)simple_strtoul(filesize, NULL, 16);
-			else
+			if (filesize == NULL)
 				return CMD_RET_USAGE;
+
+			file_addr = (const void *)simple_strtoul(fileaddr, NULL, 16);
+			file_size = (size_t)simple_strtoul(filesize, NULL, 16);
 
 			break;
 		case 3:
-			load_addr = (void *)simple_strtoul(argv[1], NULL, 16);
+			file_addr = (const void *)simple_strtoul(argv[1], NULL, 16);
 			file_size = (size_t)simple_strtoul(argv[2], NULL, 16);
 			break;
 		default:
@@ -252,7 +269,17 @@ static int do_untar(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]) {
 			break;
 	}
 
-	ret = parse_tar_image(load_addr, file_size,
+	fw_type = check_fw_type(file_addr);
+	if (fw_type == FW_TYPE_SYSUPGRADE) {
+		adj_file_addr = file_addr;
+		adj_file_size = file_size;
+	} else {
+		/* 华硕固件 */
+		adj_file_addr = (const void *)((ulong)file_addr + LEGACY_IMAGE_HDR_SIZE_IN_BYTES);
+		adj_file_size = file_size - LEGACY_IMAGE_HDR_SIZE_IN_BYTES;
+	}
+
+	ret = parse_tar_image(adj_file_addr, adj_file_size,
 						  &kernel_addr, &kernel_size,
 			      		  &rootfs_addr, &rootfs_size);
 
@@ -262,7 +289,7 @@ static int do_untar(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]) {
 		setenv_hex("rootfs_addr", (ulong)rootfs_addr);
 		setenv_hex("rootfs_size", (ulong)rootfs_size);
 
-		printf("  load_addr: 0x%lx,   file_size: 0x%lx\n", (ulong)load_addr, (ulong)file_size);
+		printf("  file_addr: 0x%lx,   file_size: 0x%lx\n", (ulong)file_addr, (ulong)file_size);
 		printf("kernel_addr: 0x%lx, kernel_size: 0x%lx\n", (ulong)kernel_addr, (ulong)kernel_size);
 		printf("rootfs_addr: 0x%lx, rootfs_size: 0x%lx\n", (ulong)rootfs_addr, (ulong)rootfs_size);
 	} else {
@@ -277,6 +304,6 @@ static int do_untar(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]) {
 
 U_BOOT_CMD(
 	untar, 3, 0, do_untar,
-	"unstar [load_addr] [file_size]",
+	"unstar [file_addr] [file_size]",
 	"get offset and size of kernel and rootfs in sysupgrade tar image\n"
 );
