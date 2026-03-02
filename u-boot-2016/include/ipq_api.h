@@ -33,6 +33,12 @@
  */
 #define CONFIG_FORCE_NETWORK_ENV
 
+#define CONFIG_TFTP_TSIZE
+#if defined(CONFIG_TFTP_TSIZE)
+/* tftpboot 和 tftpput 显示数字百分比进度（依赖于 CONFIG_TFTP_TSIZE） */
+#define CONFIG_TFTP_DIGITAL_PROGRESS
+#endif
+
 void check_button_is_pressed(void);
 void led_on(const char *gpio_name);
 void led_off(const char *gpio_name);

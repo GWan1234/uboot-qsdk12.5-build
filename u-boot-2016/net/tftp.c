@@ -91,6 +91,10 @@ static int	tftp_tsize;
 /* The number of hashes we printed */
 static short	tftp_tsize_num_hash;
 #endif
+#ifdef CONFIG_TFTP_DIGITAL_PROGRESS
+static ulong sent_bytes;
+static ulong last_progress;
+#endif
 #ifdef CONFIG_CMD_TFTPPUT
 /* 1 if writing, else 0 */
 static int	tftp_put_active;
@@ -250,6 +254,9 @@ static int load_block(unsigned block, uchar *dst, unsigned len)
 	ulong offset = ((int)block - 1) * len + tftp_block_wrap_offset;
 	ulong tosend = len;
 
+#ifdef CONFIG_TFTP_DIGITAL_PROGRESS
+	sent_bytes = offset;
+#endif
 	tosend = min(net_boot_file_size - offset, tosend);
 	(void)memcpy(dst, (void *)(save_addr + offset), tosend);
 	debug("%s: block=%d, offset=%ld, len=%d, tosend=%ld\n", __func__,
@@ -262,7 +269,7 @@ static void tftp_send(void);
 static void tftp_timeout_handler(void);
 
 /**********************************************************************/
-
+#ifndef CONFIG_TFTP_DIGITAL_PROGRESS
 static void show_block_marker(void)
 {
 #ifdef CONFIG_TFTP_TSIZE
@@ -289,6 +296,7 @@ static void show_block_marker(void)
 #endif
 	}
 }
+#endif /* CONFIG_TFTP_DIGITAL_PROGRESS */
 
 /**
  * restart the current transfer due to an error
@@ -321,15 +329,37 @@ static void update_block_number(void)
 		tftp_block_wrap++;
 		tftp_block_wrap_offset += tftp_block_size * TFTP_SEQUENCE_SIZE;
 		timeout_count = 0; /* we've done well, reset the timeout */
-	} else {
+	}
+#ifndef CONFIG_TFTP_DIGITAL_PROGRESS
+	else {
 		show_block_marker();
 	}
+#else
+	if (tftp_tsize) {
+# ifdef CONFIG_CMD_TFTPPUT
+		ulong tmp_size = tftp_put_active ? sent_bytes : net_boot_file_size;
+# else
+		ulong tmp_size = net_boot_file_size;
+# endif /* CONFIG_CMD_TFTPPUT */
+		ulong progress = (unsigned long long)tmp_size * 100 /
+			(unsigned long long)tftp_tsize;
+		if (progress != last_progress) {
+			last_progress = progress;
+			printf("\b\b\b\b%2lu%% ", progress);
+		}
+	}
+#endif /* CONFIG_TFTP_DIGITAL_PROGRESS */
 }
 
 /* The TFTP get or put is complete */
 static void tftp_complete(void)
 {
 #ifdef CONFIG_TFTP_TSIZE
+# ifdef CONFIG_TFTP_DIGITAL_PROGRESS
+	if (tftp_tsize && last_progress < 100)
+		printf("\b\b\b\b100%%");
+	printf("\n");
+# else
 	/* Print hash marks for the last packet received */
 	while (tftp_tsize && tftp_tsize_num_hash < 49) {
 		putc('#');
@@ -337,10 +367,15 @@ static void tftp_complete(void)
 	}
 	puts("  ");
 	print_size(tftp_tsize, "");
-#endif
+# endif /* CONFIG_TFTP_DIGITAL_PROGRESS */
+#endif /* CONFIG_TFTP_TSIZE */
 	time_start = get_timer(time_start);
 	if (time_start > 0) {
+#ifdef CONFIG_TFTP_DIGITAL_PROGRESS
+		printf("Speed: ");
+#else
 		puts("\n\t ");	/* Line up with "Loading: " */
+#endif /* CONFIG_TFTP_DIGITAL_PROGRESS */
 		print_size(net_boot_file_size /
 			time_start * 1000, "/s");
 	}
@@ -579,8 +614,24 @@ static void tftp_handler(uchar *pkt, unsigned dest, struct in_addr sip,
 							   NULL, 10);
 				debug("size = %s, %d\n",
 				      (char *)pkt + i + 6, tftp_tsize);
+# ifdef CONFIG_TFTP_DIGITAL_PROGRESS
+				printf("Filesize: ");
+				print_size(tftp_tsize, "");
+				printf("\n");
+				if (tftp_tsize) {
+#  ifdef CONFIG_CMD_TFTPPUT
+					ulong tmp_size = tftp_put_active ? sent_bytes : net_boot_file_size;
+#  else
+					ulong tmp_size = net_boot_file_size;
+#  endif /* CONFIG_CMD_TFTPPUT */
+					ulong progress = (unsigned long long)tmp_size * 100 /
+						(unsigned long long)tftp_tsize;
+					last_progress = progress;
+					printf("Progress: %2lu%% ", progress);
+				}
+# endif /* CONFIG_TFTP_DIGITAL_PROGRESS */
 			}
-#endif
+#endif /* CONFIG_TFTP_TSIZE */
 		}
 #ifdef CONFIG_MCAST_TFTP
 		parse_multicast_oack((char *)pkt, len - 1);
@@ -725,7 +776,10 @@ static void tftp_timeout_handler(void)
 	if (++timeout_count > timeout_count_max) {
 		restart("Retry count exceeded");
 	} else {
+#ifndef CONFIG_TFTP_DIGITAL_PROGRESS
+		/* 只在 CONFIG_TFTP_DIGITAL_PROGRESS 未启用时编译，防止干扰数字百分比进度显示 */
 		puts("T ");
+#endif
 		net_set_timeout_handler(timeout_ms, tftp_timeout_handler);
 		if (tftp_state != STATE_RECV_WRQ)
 			tftp_send();
@@ -894,6 +948,9 @@ void tftp_start(enum proto_t protocol)
 #ifdef CONFIG_TFTP_TSIZE
 	tftp_tsize = 0;
 	tftp_tsize_num_hash = 0;
+#endif
+#ifdef CONFIG_TFTP_DIGITAL_PROGRESS
+	sent_bytes = 0;
 #endif
 
 	tftp_send();
