@@ -16,7 +16,6 @@
 #include <version.h>
 #include <net/tcp.h>
 #include <net/httpd.h>
-#include <u-boot/md5.h>
 #include <linux/stringify.h>
 #include <failsafe/failsafe.h>
 #include <ipq_api.h>
@@ -49,14 +48,14 @@ int __weak boot_from_mem(const ulong data_addr)
 	return RET_FAILURE;
 }
 
-int __weak failsafe_validate_image(const int upgrade_type,
-				const void *data_addr, const ulong data_size_in_bytes)
+int __weak failsafe_validate_image(const int upgrade_type, const void *data_addr,
+			const ulong data_size_in_bytes, struct httpd_response *response)
 {
 	return RET_SUCCESS;
 }
 
-int __weak failsafe_write_image(const int upgrade_type,
-				const ulong data_addr, const ulong data_size)
+int __weak failsafe_write_image(const int upgrade_type, const ulong data_addr,
+				const ulong data_size, struct httpd_response *response)
 {
 	return RET_FAILURE;
 }
@@ -263,12 +262,7 @@ static void upload_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response)
 {
-	static char hexchars[] = "0123456789abcdef";
-	struct httpd_form_value *fw;
-	static char md5_str[33] = "";
-	static char resp[128];
-	u8 md5_sum[16];
-	int ret;
+	struct httpd_form_value *form_value;
 
 	if (status != HTTP_CB_NEW)
 		return;
@@ -279,52 +273,52 @@ static void upload_handler(enum httpd_uri_handler_status status,
 	response->status = HTTP_RESP_STD;
 	response->info.code = 200;
 	response->info.connection_close = 1;
-	response->info.content_type = "text/plain";
+	response->info.content_type = "application/json";
 
-	fw = httpd_request_find_value(request, "firmware");
-	if (fw) {
+	form_value = httpd_request_find_value(request, "firmware");
+	if (form_value) {
 		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE;
 		goto done;
 	}
 
-	fw = httpd_request_find_value(request, "uboot");
-	if (fw) {
+	form_value = httpd_request_find_value(request, "uboot");
+	if (form_value) {
 		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_UBOOT;
 		goto done;
 	}
 
-	fw = httpd_request_find_value(request, "art");
-	if (fw) {
+	form_value = httpd_request_find_value(request, "art");
+	if (form_value) {
 		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_ART;
 		goto done;
 	}
 
-	fw = httpd_request_find_value(request, "cdt");
-	if (fw) {
+	form_value = httpd_request_find_value(request, "cdt");
+	if (form_value) {
 		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_CDT;
 		goto done;
 	}
 
-	fw = httpd_request_find_value(request, "gpt");
-	if (fw) {
+	form_value = httpd_request_find_value(request, "gpt");
+	if (form_value) {
 		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_GPT;
 		goto done;
 	}
 
-	fw = httpd_request_find_value(request, "mibib");
-	if (fw) {
+	form_value = httpd_request_find_value(request, "mibib");
+	if (form_value) {
 		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_MIBIB;
 		goto done;
 	}
 
-	fw = httpd_request_find_value(request, "simg");
-	if (fw) {
+	form_value = httpd_request_find_value(request, "simg");
+	if (form_value) {
 		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_SIMG;
 		goto done;
 	}
 
-	fw = httpd_request_find_value(request, "initramfs");
-	if (fw) {
+	form_value = httpd_request_find_value(request, "initramfs");
+	if (form_value) {
 		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS;
 		goto done;
 	}
@@ -332,7 +326,8 @@ static void upload_handler(enum httpd_uri_handler_status status,
 	httpd_debug("[DEBUG] upload_handler(): NOT supported upgrade type!\n");
 
 	/* 没有匹配的 upgrade_type，返回 fail*/
-	response->data = "fail";
+	response->data = "{\"status\":\"fail\","
+					"\"info\":{\"type\":\"wrong_upgrade_type\"}}";
 	response->size = strlen(response->data);
 
 	httpd_debug("[DEBUG] upload_handler(): response message: %s\n", response->data);
@@ -341,36 +336,13 @@ static void upload_handler(enum httpd_uri_handler_status status,
 
 done:
 	upload_data_id = fs_upload_id;
-	upload_data = fw->data;
-	upload_size = fw->size;
+	upload_data = form_value->data;
+	upload_size = form_value->size;
 
-	httpd_debug("[DEBUG] upload_handler(): upload_data = 0x%p, upload_size = %lu\n",
-				upload_data, (ulong)upload_size);
+	httpd_debug("[DEBUG] upload_handler(): upload_data = 0x%p, upload_size = %lu (0x%lx)\n",
+				upload_data, (ulong)upload_size, (ulong)upload_size);
 
-	ret = failsafe_validate_image(upgrade_type, upload_data, (ulong)upload_size);
-	if (ret != RET_SUCCESS) {
-		/* 文件类型不对或文件大小不对 */
-		response->data = "fail";
-		response->size = strlen(response->data);
-		httpd_debug("[DEBUG] upload_handler(): response message: %s\n", response->data);
-		return;
-	}
-
-	md5((u8 *)fw->data, fw->size, md5_sum);
-
-	for (int i = 0; i < 16; i++) {
-		u8 hex = (md5_sum[i] >> 4) & 0xf;
-		md5_str[i * 2] = hexchars[hex];
-		hex = md5_sum[i] & 0xf;
-		md5_str[i * 2 + 1] = hexchars[hex];
-	}
-
-	sprintf(resp, "%u %s", fw->size, md5_str);
-
-	httpd_debug("[DEBUG] upload_handler(): md5 for upload file: %s\n", md5_str);
-
-	response->data = resp;
-	response->size = strlen(response->data);
+	failsafe_validate_image(upgrade_type, upload_data, (ulong)upload_size, response);
 
 	httpd_debug("[DEBUG] upload_handler(): response message: %s\n", response->data);
 }
@@ -385,6 +357,7 @@ static void result_handler(enum httpd_uri_handler_status status,
 				struct httpd_request *request,
 				struct httpd_response *response)
 {
+	static char resp[256];
 	struct flashing_status *st;
 	u32 size;
 
@@ -404,7 +377,7 @@ static void result_handler(enum httpd_uri_handler_status status,
 		response->info.http_1_0 = 1;
 		response->info.content_length = -1;
 		response->info.connection_close = 1;
-		response->info.content_type = "text/html";
+		response->info.content_type = "application/json";
 		response->info.code = 200;
 
 		size = http_make_response_header(&response->info,
@@ -428,10 +401,17 @@ static void result_handler(enum httpd_uri_handler_status status,
 			if (upgrade_type == WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS)
 				st->ret = RET_SUCCESS;
 			else
-				st->ret = failsafe_write_image(upgrade_type, (ulong)upload_data, (ulong)upload_size);
+				st->ret = failsafe_write_image(upgrade_type, (ulong)upload_data,
+								(ulong)upload_size, response);
+		} else {
+			snprintf(resp, sizeof(resp),
+				"{\"status\":\"fail\","
+				"\"info\":{\"type\":\"upload_id_mismatch\","
+				"\"upload_data_id\":\"%u\",\"fs_upload_id\":\"%u\"}}",
+				upload_data_id, fs_upload_id);
+			response->data = resp;
+			st->ret = RET_UPLOAD_ID_MISMATCH;
 		}
-
-		httpd_debug("[DEBUG] result_handler(): st->ret = %d\n", st->ret);
 
 		/* invalidate upload identifier */
 		upload_data_id = rand();
@@ -440,13 +420,13 @@ static void result_handler(enum httpd_uri_handler_status status,
 		led_on("blink_led");
 
 		if (st->ret == RET_SUCCESS)
-			response->data = "success";
-		else
-			// TODO: 更详细的错误类型
-			response->data = "failed";
+			response->data = "{\"status\":\"success\"}";
 
 		response->size = strlen(response->data);
 		st->body_sent = 1;
+
+		httpd_debug("[DEBUG] result_handler(): response message: %s\n", response->data);
+
 		return;
 	}
 
@@ -500,7 +480,6 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/cgi-bin/luci/", &index_handler, NULL);
 
 	httpd_register_uri_handler(inst, "/booting.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/fail.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/flashing.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/art.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/cdt.html", &html_handler, NULL);

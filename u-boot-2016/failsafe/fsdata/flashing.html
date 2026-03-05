@@ -7,28 +7,9 @@
 	<title></title>
 	<link rel="stylesheet" href="/style.css">
 	<script src="/main.js"></script>
-	<script>
-		function init() {
-			appInit('flashing');
-
-			ajax({
-				url: '/result',
-				done: function (response) {
-					if (response == 'failed') {
-						location = '/fail.html'
-						return
-					}
-
-					document.getElementById('title').innerHTML = t('flashing.title.done')
-					document.getElementById('info').innerHTML = t('flashing.info.done')
-				},
-				timeout: 1800000
-			})
-		}
-	</script>
 </head>
 
-<body onload="init()">
+<body onload="initResultPage('flashing', 1800000)">
 	<div class="app">
 		<aside id="sidebar" class="sidebar"></aside>
         <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -39,10 +20,13 @@
 					<h1 id="title" data-i18n="flashing.title.in_progress"></h1>
 				</div>
 				<div class="card-hint-section">
-					<p id="info" data-i18n-html="flashing.info.in_progress"></p>
+					<p id="hint" data-i18n-html="flashing.hint.in_progress"></p>
 				</div>
 				<div class="card-main-section">
-					<div id="l"></div>
+					<div class="card-main-inner">
+						<div id="l"></div>
+						<div id="error-info" class="error-message" style="display: none;"></div>
+					</div>
 				</div>
 			</div>
 			<div id="version"></div>

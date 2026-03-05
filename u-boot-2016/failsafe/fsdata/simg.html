@@ -17,7 +17,7 @@
 		<div class="main">
 			<div id="m">
 				<div class="card-title-section">
-					<h1 data-i18n="simg.title"></h1>
+					<h1 id="title" data-i18n="simg.title"></h1>
 				</div>
 
 				<div class="card-hint-section">
@@ -31,8 +31,12 @@
 							<input type="button" value="Upload" data-i18n-attr="value:common.upload" onclick="upload('simg')">
 						</form>
 						<div class="bar-circle" id="bar-circle" style="display: none; --percent: 0;"></div>
-						<div id="size" style="display: none;"></div>
-						<div id="md5" style="display: none;"></div>
+						<div id="success-info" style="display: none;">
+                            <div id="file-type" class="info-item"></div>
+                            <div id="size" class="info-item"></div>
+                            <div id="md5" class="info-item"></div>
+                        </div>
+                        <div id="error-info" class="error-message" style="display: none;"></div>
 						<div id="upgrade" style="display: none;">
 							<p data-i18n="common.upgrade_hint"></p>
 							<button class="button" data-i18n="common.update" onclick="location = '/flashing.html'"></button>

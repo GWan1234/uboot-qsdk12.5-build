@@ -116,7 +116,7 @@ foreach $file (@files) {
         $uncompressed_size = length($uncompressed_data);
         $final_size = $uncompressed_size;
 
-        # 对文本文件进行gzip压缩（包括已经terser压缩的JS）
+        # 对文本文件进行gzip压缩
         if ($file =~ /\.(html|css|js|txt|xml|json)$/) {
             my $gzipped_data;
             gzip \$uncompressed_data => \$gzipped_data;

@@ -51,7 +51,6 @@ class SidebarManager {
             '/reboot.html': 'reboot',
             '/flashing.html': 'flashing',
             '/booting.html': 'booting',
-            '/fail.html': 'fail'
         };
 
         return pathMap[path] || null;
@@ -1114,6 +1113,7 @@ function getVersion() {
 
 /**
  * 处理文件上传
+ * 支持 JSON 响应和详细的错误提示
  */
 function upload(formDataKey) {
     const fileInput = document.getElementById("file");
@@ -1124,13 +1124,23 @@ function upload(formDataKey) {
         return;
     }
 
-    // 隐藏表单和提示，显示圆环进度条
-    const formElement = document.getElementById("form");
+    // 获取页面相关元素
+    const titleElement = document.getElementById("title");
     const hintElement = document.getElementById("hint");
+    const formElement = document.getElementById("form");
     const progressCircle = document.getElementById("bar-circle");
+    const successInfo = document.getElementById("success-info");
+    const fileTypeElement = document.getElementById("file-type");
+    const sizeElement = document.getElementById("size");
+    const md5Element = document.getElementById("md5");
+    const errorInfo = document.getElementById("error-info");
+    const upgradeElement = document.getElementById("upgrade");
 
+    // 显示圆环进度条，隐藏无关元素
     if (formElement) formElement.style.display = "none";
-    if (hintElement) hintElement.style.display = "none";
+    if (successInfo) successInfo.style.display = "none";
+    if (errorInfo) errorInfo.style.display = "none";
+    if (upgradeElement) upgradeElement.style.display = "none";
     if (progressCircle) progressCircle.style.display = "block";
 
     // 准备表单数据
@@ -1142,39 +1152,48 @@ function upload(formDataKey) {
         url: "/upload",
         data: formData,
         done: function(responseText) {
-            if (responseText === "fail") {
-                window.location.href = "/fail.html";
+            let response;
+
+            // 尝试解析JSON响应
+            try {
+                response = JSON.parse(responseText);
+            } catch (e) {
+                // 无效的JSON，显示错误
+                handleInvalidUploadResponse(responseText || t("error.invalid_response"), {
+                    titleElement,
+                    hintElement,
+                    errorInfo,
+                    progressCircle
+                });
                 return;
             }
 
-            const parts = responseText.split(" ");
-            if (parts.length < 2) {
-                console.error("Invalid upload response:", responseText);
-                return;
-            }
-
-            // 隐藏圆环进度条，显示文件信息及升级按钮
-            const progressCircle = document.getElementById("bar-circle");
-            const sizeElement = document.getElementById("size");
-            const md5Element = document.getElementById("md5");
-            const upgradeElement = document.getElementById("upgrade");
-
-            if (progressCircle) {
-                progressCircle.style.display = "none";
-            }
-
-            if (sizeElement) {
-                sizeElement.style.display = "block";
-                sizeElement.innerHTML = t("label.size") + parts[0];
-            }
-
-            if (md5Element) {
-                md5Element.style.display = "block";
-                md5Element.innerHTML = t("label.md5") + parts[1];
-            }
-
-            if (upgradeElement) {
-                upgradeElement.style.display = "block";
+            switch (response.status) {
+                case "success":
+                    handleUploadSuccess(response.info, {
+                        successInfo,
+                        fileTypeElement,
+                        sizeElement,
+                        md5Element,
+                        upgradeElement,
+                        progressCircle
+                    });
+                    break;
+                case "fail":
+                    handleUploadError(response.info, {
+                        titleElement,
+                        hintElement,
+                        errorInfo,
+                        progressCircle
+                    });
+                    break;
+                default:
+                    handleInvalidUploadResponse(responseText || t("error.unknown_status"), {
+                        titleElement,
+                        hintElement,
+                        errorInfo,
+                        progressCircle
+                    });
             }
         },
         progress: function(event) {
@@ -1189,6 +1208,230 @@ function upload(formDataKey) {
             }
         }
     });
+}
+
+/**
+ * 处理上传成功
+ */
+function handleUploadSuccess(info, elements) {
+    const {
+        successInfo,
+        fileTypeElement,
+        sizeElement,
+        md5Element,
+        upgradeElement,
+        progressCircle
+    } = elements;
+
+    // 隐藏进度条
+    if (progressCircle) progressCircle.style.display = "none";
+
+    // 显示文件类型信息（如果有）
+    if (info.type && fileTypeElement) {
+        fileTypeElement.style.display = "block";
+        fileTypeElement.innerHTML = `<strong>${t("label.type")}</strong> ${info.type}`;
+    }
+
+    // 显示文件大小
+    if (info.size && sizeElement) {
+        sizeElement.style.display = "block";
+        sizeElement.innerHTML = `<strong>${t("label.size")}</strong> ${bytesToHuman(info.size)} (${info.size} Bytes)`;
+    }
+
+    // 显示 MD5
+    if (info.md5 && md5Element) {
+        md5Element.style.display = "block";
+        md5Element.innerHTML = `<strong>${t("label.md5")}</strong> ${info.md5}`;
+    }
+
+    // 显示成功信息区域和升级按钮
+    if (successInfo) successInfo.style.display = "block";
+    if (upgradeElement) upgradeElement.style.display = "block";
+}
+
+/**
+ * 处理上传失败
+ */
+function handleUploadError(info, elements) {
+    const {
+        titleElement,
+        hintElement,
+        errorInfo,
+        progressCircle
+    } = elements;
+
+    if (titleElement) titleElement.innerHTML = t('fail.title');
+    if (hintElement) hintElement.innerHTML = t('fail.hint');
+    if (progressCircle) progressCircle.style.display = "none";
+
+    // 根据错误类型生成错误信息
+    let errorMessage = "";
+
+    switch (info.type) {
+        case "file_too_big":
+            errorMessage = generateFileTooBigMessage(info);
+            break;
+        case "part_not_found":
+            errorMessage = generatePartNotFoundMessage(info);
+            break;
+        case "wrong_file_type":
+            errorMessage = generateWrongFileTypeMessage(info);
+            break;
+        default:
+            errorMessage = JSON.stringify(info) || t("error.unknown_type");
+    }
+
+    // 显示错误信息
+    if (errorInfo) {
+        errorInfo.style.display = "block";
+        errorInfo.innerHTML = errorMessage;
+    }
+}
+
+/**
+ * 处理无效的上传响应信息
+ */
+function handleInvalidUploadResponse(message, elements) {
+    const {
+        titleElement,
+        hintElement,
+        errorInfo,
+        progressCircle
+    } = elements;
+
+    if (titleElement) titleElement.innerHTML = t('fail.title');
+    if (hintElement) hintElement.innerHTML = t('fail.hint');
+    if (progressCircle) progressCircle.style.display = "none";
+
+    if (errorInfo) {
+        errorInfo.style.display = "block";
+        errorInfo.innerHTML = `<div class="error-detail">${escapeHtml(message)}</div>`;
+    }
+}
+
+/**
+ * 生成文件过大错误信息
+ */
+function generateFileTooBigMessage(info) {
+    const lang = APP_STATE.lang;
+
+    if (lang === "zh-cn") {
+        return `
+            <div class="error-title">❌ 文件过大</div>
+            <div class="error-detail">
+                <p>文件类型: ${info.filename || t("unknown")}</p>
+                <p>文件大小: ${bytesToHuman(info.filesize)} (${info.filesize} 字节)</p>
+                <p>分区名称: ${info.partname || t("unknown")}</p>
+                <p>分区大小: ${bytesToHuman(info.partsize)} (${info.partsize} 字节)</p>
+                <p>请选择小于分区大小的文件或扩容分区。</p>
+            </div>
+        `;
+    } else {
+        return `
+            <div class="error-title">❌ File too large</div>
+            <div class="error-detail">
+                <p>File type: ${info.filename || t("unknown")}</p>
+                <p>File size: ${bytesToHuman(info.filesize)} (${info.filesize} Bytes)</p>
+                <p>Partition name: ${info.partname || t("unknown")}</p>
+                <p>Partition size: ${bytesToHuman(info.partsize)} (${info.partsize} Bytes)</p>
+                <p>Please choose a file smaller than the partition size or expand the partition.</p>
+            </div>
+        `;
+    }
+}
+
+/**
+ * 生成分区未找到错误信息
+ */
+function generatePartNotFoundMessage(info) {
+    const lang = APP_STATE.lang;
+
+    if (lang === "zh-cn") {
+        return `
+            <div class="error-title">❌ 找不到分区 </div>
+            <div class="error-detail">
+                <p>分区名：${info.partname || t("unknown")}</p>
+                <p>目标分区不存在或不可用。</p>
+                <p>请检查设备分区表或联系技术支持。</p>
+            </div>
+        `;
+    } else {
+        return `
+            <div class="error-title">❌ Partition not found</div>
+            <div class="error-detail">
+                <p>Partition name: ${info.partname || t("unknown")}</p>
+                <p>The target partition does not exist or is not available.</p>
+                <p>Please check your device partition table or contact support.</p>
+            </div>
+        `;
+    }
+}
+
+/**
+ * 生成文件类型错误信息
+ */
+function generateWrongFileTypeMessage(info) {
+    const lang = APP_STATE.lang;
+
+    if (lang === "zh-cn") {
+        return `
+            <div class="error-title">❌ 文件类型错误</div>
+            <div class="error-detail">
+                <p>期望类型: ${info.expected || t("unknown")}</p>
+                <p>实际类型: ${info.actual || t("unknown")}</p>
+                <p>请选择正确的文件类型。</p>
+            </div>
+        `;
+    } else {
+        return `
+            <div class="error-title">❌ Wrong file type</div>
+            <div class="error-detail">
+                <p>Expected: ${info.expected || t("unknown")}</p>
+                <p>Actual: ${info.actual || t("unknown")}</p>
+                <p>Please choose the correct file type.</p>
+            </div>
+        `;
+    }
+}
+
+/**
+ * 生成闪存类型错误信息
+ */
+function generateWrongFlashTypeMessage(info) {
+    const lang = APP_STATE.lang;
+
+    if (lang === "zh-cn") {
+        return `
+            <div class="error-title">❌ 不支持的闪存类型</div>
+            <div class="error-detail">
+                <p>文件类型: ${info.filetype || t("unknown")}</p>
+                <p>闪存类型: ${info.flashtype || t("unknown")}</p>
+                <p>当前设备不支持在此闪存类型上更新该类型的文件。</p>
+            </div>
+        `;
+    } else {
+        return `
+            <div class="error-title">❌ Unsupported flash type</div>
+            <div class="error-detail">
+                <p>File type: ${info.filetype || t("unknown")}</p>
+                <p>Flash type: ${info.flashtype || t("unknown")}</p>
+                <p>Updating this file on the current flash type is not supported.</p>
+            </div>
+        `;
+    }
+}
+
+/**
+ * HTML转义（防止XSS）
+ */
+function escapeHtml(unsafe) {
+    if (!unsafe) return "";
+    return String(unsafe)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
 // ==============================
@@ -1227,6 +1470,141 @@ function appInit(pageName) {
 
     // 获取版本信息
     getVersion();
+}
+
+// ==============================
+// 结果处理相关
+// ==============================
+
+/**
+ * 初始化 result 页面
+ * 包括 flashing.html 和 booting.html
+ */
+function initResultPage(pageName, timeOut) {
+    appInit(pageName);
+
+    // 获取页面元素
+    const titleElement = document.getElementById("title");
+    const hintElement = document.getElementById("hint");
+    const loadingElement = document.getElementById('l');
+    const errorInfo = document.getElementById('error-info');
+
+    ajax({
+        url: '/result',
+        done: function (responseText) {
+            let response;
+
+            // 尝试解析JSON响应
+            try {
+                response = JSON.parse(responseText);
+            } catch (e) {
+                // 无效的JSON，显示错误
+                handleInvalidResultResponse(responseText || t("error.invalid_response"), {
+                    titleElement,
+                    hintElement,
+                    loadingElement,
+                    errorInfo
+                });
+                return;
+            }
+
+            switch (response.status) {
+                case "success":
+                    handleResultSuccess(pageName, {
+                        titleElement,
+                        hintElement,
+                        errorInfo
+                    });
+                    break;
+                case "fail":
+                    handleResultError(response.info, {
+                        titleElement,
+                        hintElement,
+                        loadingElement,
+                        errorInfo
+                    });
+                    break;
+                default:
+                    handleInvalidResultResponse(responseText || t("error.unknown_status"), {
+                        titleElement,
+                        hintElement,
+                        loadingElement,
+                        errorInfo
+                    });
+            }
+        },
+        timeout: timeOut
+    });
+}
+
+/**
+ * 处理结果成功
+ */
+function handleResultSuccess(pageName, elements) {
+    const {
+        titleElement,
+        hintElement,
+        errorInfo
+    } = elements;
+
+    if (errorInfo) errorInfo.style.display = 'none';
+    if (titleElement) titleElement.innerHTML = t(pageName + '.title.done');
+    if (hintElement) hintElement.innerHTML = t(pageName + '.hint.done');
+}
+
+/**
+ * 处理结果失败
+ */
+function handleResultError(info, elements) {
+    const {
+        titleElement,
+        hintElement,
+        loadingElement,
+        errorInfo
+    } = elements;
+
+    if (titleElement) titleElement.innerHTML = t('fail.title');
+    if (hintElement) hintElement.innerHTML = t('fail.hint');
+    if (loadingElement) loadingElement.style.display = 'none';
+
+    let errorMessage = "";
+
+    switch (info.type) {
+        case "wrong_file_type":
+            errorMessage = generateWrongFileTypeMessage(info);
+            break;
+        case "wrong_flash_type":
+            errorMessage = generateWrongFlashTypeMessage(info);
+            break;
+        default:
+            errorMessage = JSON.stringify(info) || t("error.unknown_type");
+    }
+
+    if (errorInfo) {
+        errorInfo.style.display = 'block';
+        errorInfo.innerHTML = errorMessage;
+    }
+}
+
+/**
+ * 处理无效的结果响应信息
+ */
+function handleInvalidResultResponse(message, elements) {
+    const {
+        titleElement,
+        hintElement,
+        loadingElement,
+        errorInfo
+    } = elements;
+
+    if (loadingElement) loadingElement.style.display = 'none';
+    if (titleElement) titleElement.innerHTML = t('fail.title');
+    if (hintElement) hintElement.innerHTML = t('fail.hint');
+
+    if (errorInfo) {
+        errorInfo.style.display = 'block';
+        errorInfo.innerHTML = `<div class="error-detail">${escapeHtml(message)}</div>`;
+    }
 }
 
 // ==============================
@@ -1279,6 +1657,7 @@ const I18N = (() => {
             "common.warn.1": "Do not power off the device during update.",
             "common.warn.2": "If everything goes well, the device will restart.",
             "file.select": "Please select a file first!",
+            "label.type": "Type: ",
             "label.size": "Size: ",
             "label.md5": "MD5: ",
             "index.title": "FIRMWARE UPDATE",
@@ -1309,24 +1688,28 @@ const I18N = (() => {
             "simg.warn.2": t.en.warnDanger("Single Image"),
             "reboot.confirm": "Reboot device now?",
             "reboot.title.in_progress": "REBOOTING DEVICE",
-            "reboot.info.in_progress": "Reboot request has been sent. Please wait...<br>This page may be in not responding status for a short time.",
+            "reboot.hint.in_progress": "Reboot request has been sent. Please wait...<br>This page may be in not responding status for a short time.",
             "initramfs.title": "LOAD INITRAMFS",
             "initramfs.hint": "You are going to load <strong>Initramfs<\/strong> on the device.<br>Please choose a file from your local hard drive and click <strong>Upload<\/strong> button.",
             "initramfs.boot_hint": 'If all information above is correct, click "Boot".',
             "initramfs.warn.1": "If everything goes well, the device will boot into the Initramfs.",
             "initramfs.warn.2": t.en.warnChoose("Initramfs image"),
             "flashing.title.in_progress": "UPDATE IN PROGRESS",
-            "flashing.info.in_progress": "Your file was successfully uploaded! Update is in progress and you should wait for automatic reset of the device.<br>Update time depends on image size and may take up to a few minutes.",
+            "flashing.hint.in_progress": "Your file was successfully uploaded! Update is in progress and you should wait for automatic reset of the device.<br>Update time depends on image size and may take up to a few minutes.",
             "flashing.title.done": "UPDATE COMPLETED",
-            "flashing.info.done": "Your device was successfully updated! Now rebooting...",
+            "flashing.hint.done": "Your device was successfully updated! Now rebooting...",
             "booting.title.in_progress": "BOOTING INITRAMFS",
-            "booting.info.in_progress": "Your file was successfully uploaded! Booting is in progress, please wait...<br>This page may be in not responding status for a short time.",
+            "booting.hint.in_progress": "Your file was successfully uploaded! Booting is in progress, please wait...<br>This page may be in not responding status for a short time.",
             "booting.title.done": "BOOT SUCCESS",
-            "booting.info.done": "Your device was successfully booted into initramfs!",
-            "fail.title": "UPDATE FAILED",
-            "fail.hint": "Something went wrong during update.<p>Probably you have chosen wrong file. Please, try again or contact with the author of this modification. You can also get more information during update in U-Boot console.",
+            "booting.hint.done": "Your device was successfully booted into initramfs!",
             "404.title": "PAGE NOT FOUND",
-            "404.hint": "The page you were looking for doesn't exist!"
+            "404.hint": "The page you were looking for doesn't exist!",
+            "fail.title": "UPDATE FAILED",
+            "fail.hint": "Something went wrong during update. Probably you have chosen wrong file.<p>Please, try again or contact with the author of this modification. You can also get more information during update in U-Boot console.",
+            "error.invalid_response": "Invalid server response",
+            "error.unknown_status": "Unknown response status",
+            "error.unknown_type": "Unknown error type",
+            "unknown": "Unknown"
         },
         "zh-cn": {
             "app.name": "uBootKit",
@@ -1358,6 +1741,7 @@ const I18N = (() => {
             "common.warn.1": "刷写过程中请勿断电！",
             "common.warn.2": "如果更新成功，设备将自动重启！",
             "file.select": "请选择文件！",
+            "label.type": "类型: ",
             "label.size": "大小: ",
             "label.md5": "MD5: ",
             "index.title": "固件更新",
@@ -1388,24 +1772,30 @@ const I18N = (() => {
             "simg.warn.2": t["zh-cn"].warnDanger("闪存镜像"),
             "reboot.confirm": "确认立即重启设备？",
             "reboot.title.in_progress": "正在重启设备",
-            "reboot.info.in_progress": "已发送重启请求，请稍候…<br>该页面短时间可能显示无响应，这是正常现象。",
+            "reboot.hint.in_progress": "已发送重启请求，请稍候…<br>该页面短时间可能显示无响应，这是正常现象。",
             "initramfs.title": "启动内存固件",
             "initramfs.hint": "你将要在此设备上启动 <strong>内存固件<\/strong>。<br>请选择本地文件并点击 <strong>上传<\/strong> 按钮。",
             "initramfs.boot_hint": "如果以上信息确认无误，请点击 “启动”。",
             "initramfs.warn.1": "如果一切顺利，设备将启动至内存固件！",
             "initramfs.warn.2": t["zh-cn"].warnChoose("内存固件"),
             "flashing.title.in_progress": "正在刷写",
-            "flashing.info.in_progress": "文件上传成功！正在执行刷写，请等待设备自动重启。<br>刷写时间取决于镜像大小，可能需要几分钟。",
+            "flashing.hint.in_progress": "文件上传成功！正在执行刷写，请等待设备自动重启。<br>刷写时间取决于镜像大小，可能需要几分钟。",
             "flashing.title.done": "刷写完成",
-            "flashing.info.done": "设备已成功更新！即将重启…",
+            "flashing.hint.done": "设备已成功更新！即将重启…",
             "booting.title.in_progress": "正在启动内存固件",
-            "booting.info.in_progress": "文件上传成功！正在启动，请稍候…<br>该页面短时间可能显示无响应，这是正常现象。",
+            "booting.hint.in_progress": "文件上传成功！正在启动，请稍候…<br>该页面短时间可能显示无响应，这是正常现象。",
             "booting.title.done": "启动成功",
-            "booting.info.done": "设备已成功进入内存固件！",
-            "fail.title": "更新失败",
-            "fail.hint": "更新过程中出现错误。<p>可能选择了错误的文件。请重试或联系此修改的作者。你也可以在 U-Boot 控制台查看更多刷写过程信息。",
+            "booting.hint.done": "设备已成功进入内存固件！",
             "404.title": "页面不存在",
-            "404.hint": "你访问的页面不存在！"
+            "404.hint": "你访问的页面不存在！",
+            "upload.title.in_progress": "正在上传",
+            "upload.title.done": "上传完成",
+            "fail.title": "更新失败",
+            "fail.hint": "更新过程中出现错误。可能选择了错误的文件。<p>请重试或联系此修改的作者。你也可以在 U-Boot 控制台查看更多刷写过程信息。",
+            "error.invalid_response": "无效的服务器响应",
+            "error.unknown_status": "未知的响应状态",
+            "error.unknown_type": "未知的错误类型",
+            "unknown": "未知"
         }
     };
 })();

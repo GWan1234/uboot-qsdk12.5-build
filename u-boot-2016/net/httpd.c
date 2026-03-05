@@ -799,8 +799,10 @@ static int httpd_handle_request(struct httpd_instance *inst,
 			}
 
 			httpd_debug("[DEBUG] httpd_handle_request(): "
-				"numformdata = %u, val->name = %s, val->filename = %s, val->data = 0x%p, val->size = %lu\n",
-				numformdata, val->name, val->filename, val->data, (ulong)val->size);
+				"numformdata = %u, val->name = %s, val->filename = %s, "
+				"val->data = 0x%p, val->size = %lu (0x%lx)\n",
+				numformdata, val->name, val->filename,
+				val->data, (ulong)val->size, (ulong)val->size);
 		}
 
 		free(boundary);
