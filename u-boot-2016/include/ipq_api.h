@@ -39,6 +39,7 @@
 #define CONFIG_TFTP_DIGITAL_PROGRESS
 #endif
 
+void check_failsafe_env_exists(void);
 void check_button_is_pressed(void);
 void led_on(const char *gpio_name);
 void led_off(const char *gpio_name);

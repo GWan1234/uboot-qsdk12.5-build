@@ -114,7 +114,7 @@ bool button_is_pressed(const char *gpio_name, int value) {
  * 检测是否有按键被按下，若某个按键被按下一定时间，则启动 httpd。
  */
 void check_button_is_pressed(void) {
-	int counter = 5;
+	int counter = 3;
 	char *button_name = NULL;
 
 	// 检测哪个按键被按下
@@ -140,7 +140,7 @@ void check_button_is_pressed(void) {
         if (!still_pressed)
             break;  // 按键已释放
 
-		if (counter == 5) {
+		if (counter == 3) {
 #if defined(CONFIG_IPQ_ETH_INIT_DEFER)
 			puts("Net: ");
 			eth_initialize();
@@ -150,9 +150,9 @@ void check_button_is_pressed(void) {
 
 		// LED 闪烁
 		led_off("power_led");
-		mdelay(350);
+		mdelay(500);
 		led_on("power_led");
-		mdelay(350);
+		mdelay(500);
 
 		counter--;
 
@@ -170,6 +170,41 @@ void check_button_is_pressed(void) {
 
 	if (counter > 0)
 		printf("\n");
+
+	return;
+}
+
+/**
+ * check_failsafe_env_exists - 检测 failsafe 环境变量是否存在
+ *
+ * 若 failsafe 环境变量存在，则删除该环境变量，然后启动 httpd。
+ */
+void check_failsafe_env_exists(void)
+{
+	if (getenv("failsafe") == NULL)
+		return;
+
+	setenv("failsafe", NULL);
+	saveenv();
+
+#if defined(CONFIG_IPQ_ETH_INIT_DEFER)
+	puts("Net: ");
+	eth_initialize();
+	/* Wait 3s for link to settle down */
+	for (int i = 3; i > 0; i--) {
+		led_off("power_led");
+		mdelay(500);
+		led_on("power_led");
+		mdelay(500);
+	}
+#endif
+
+	led_off("power_led");
+	led_on("blink_led");
+
+	printf("\n\"failsafe\" env variable detected, enter web failsae mode\n");
+	run_command("httpd", 0);
+	cli_loop();
 
 	return;
 }

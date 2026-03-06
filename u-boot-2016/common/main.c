@@ -140,18 +140,7 @@ void main_loop(void)
 #endif /* CONFIG_FORCE_NETWORK_ENV */
 
 #if defined(CONFIG_HTTPD)
-	if (getenv("failsafe") != NULL) {
-		setenv("failsafe", NULL);
-		saveenv();
-		led_off("power_led");
-#if defined(CONFIG_IPQ_ETH_INIT_DEFER)
-		puts("Net: ");
-		eth_initialize();
-#endif
-		led_on("blink_led");
-		printf("\n\"failsafe\" env variable detected, enter web failsae mode\n");
-		run_command("httpd", 0);
-	}
+	check_failsafe_env_exists();
 	check_button_is_pressed();
 #endif
 
