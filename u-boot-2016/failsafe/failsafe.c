@@ -342,7 +342,12 @@ done:
 	httpd_debug("[DEBUG] upload_handler(): upload_data = 0x%p, upload_size = %lu (0x%lx)\n",
 				upload_data, (ulong)upload_size, (ulong)upload_size);
 
-	failsafe_validate_image(upgrade_type, upload_data, (ulong)upload_size, response);
+	int ret = failsafe_validate_image(upgrade_type, upload_data, (ulong)upload_size, response);
+
+	if (ret == RET_SUCCESS)
+		handle_success_led_state();
+	else
+		handle_fail_led_state();
 
 	httpd_debug("[DEBUG] upload_handler(): response message: %s\n", response->data);
 }
@@ -367,6 +372,8 @@ static void result_handler(enum httpd_uri_handler_status status,
 			response->info.code = 500;
 			return;
 		}
+
+		handle_start_led_state();
 
 		st->ret = RET_FAILURE;
 
@@ -416,9 +423,6 @@ static void result_handler(enum httpd_uri_handler_status status,
 		/* invalidate upload identifier */
 		upload_data_id = rand();
 
-		led_off("system_led");
-		led_on("blink_led");
-
 		if (st->ret == RET_SUCCESS)
 			response->data = "{\"status\":\"success\"}";
 
@@ -442,6 +446,8 @@ static void result_handler(enum httpd_uri_handler_status status,
 
 		if (upgrade_success)
 			tcp_close_all_conn();
+		else
+			handle_fail_led_state();
 	}
 }
 
@@ -475,6 +481,8 @@ int start_web_failsafe(void)
 		return -1;
 	}
 
+	handle_start_led_state();
+
 	httpd_register_uri_handler(inst, "/", &index_handler, NULL);
 	httpd_register_uri_handler(inst, "/cgi-bin/luci", &index_handler, NULL);
 	httpd_register_uri_handler(inst, "/cgi-bin/luci/", &index_handler, NULL);
@@ -491,10 +499,10 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/uboot.html", &html_handler, NULL);
 
 	httpd_register_uri_handler(inst, "/main.js", &js_handler, NULL);
+	httpd_register_uri_handler(inst, "/style.css", &style_handler, NULL);
 
 	httpd_register_uri_handler(inst, "/reboot", &reboot_handler, NULL);
 	httpd_register_uri_handler(inst, "/result", &result_handler, NULL);
-	httpd_register_uri_handler(inst, "/style.css", &style_handler, NULL);
 	httpd_register_uri_handler(inst, "/upload", &upload_handler, NULL);
 	httpd_register_uri_handler(inst, "/version", &version_handler, NULL);
 
@@ -540,10 +548,14 @@ static int do_httpd(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	ret = start_web_failsafe();
 
 	if (upgrade_success) {
+		handle_success_led_state();
+		mdelay(1000);
 		if (upgrade_type == WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS)
 			boot_from_mem((ulong)upload_data);
 		else
 			do_reset(NULL, 0, 0, NULL);
+	} else {
+		handle_fail_led_state();
 	}
 
 	return ret;

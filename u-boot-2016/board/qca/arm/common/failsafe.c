@@ -899,9 +899,6 @@ int failsafe_write_image(const int upgrade_type, const ulong data_addr,
 	memset(resp, 0, sizeof(resp));
     memset(runcmd, 0, sizeof(runcmd));
 
-    // TODO: LED 控制
-    // led_control("ledblink", "blink_led", "100");
-
 	switch (upgrade_type) {
     case WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE:
         ret = failsafe_write_firmware(data_addr, data_size);
@@ -927,8 +924,6 @@ int failsafe_write_image(const int upgrade_type, const ulong data_addr,
     default:
         ret = RET_WRONG_UPGRADE_TYPE;
 	}
-
-    // led_control("ledblink", "blink_led", "0");
 
 	if (ret) {
 		snprintf(resp, sizeof(resp),

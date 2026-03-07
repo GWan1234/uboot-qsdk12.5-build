@@ -92,6 +92,9 @@ static struct http_response_code http_resp_codes[] = {
 	{ 503, "Service Unavailable" }
 };
 
+#define LED_BLINK_FREQ_MS 250
+static ulong last_led_toggle;
+
 u32 upload_id = (u32) -1;
 
 static ulong transfer_start_time;
@@ -410,6 +413,8 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 
 	reset_headers();
 
+	handle_start_led_state();
+
 	/* copy TCP data into cache */
 	size_rcvd = min_t(size_t, cbd->datalen,
 			  sizeof(pdata->buf) - pdata->bufsize - 1);
@@ -624,7 +629,7 @@ static int httpd_recv_payload(struct httpd_instance *inst,
 	struct httpd_tcp_pdata *pdata = cbd->pdata;
 	u32 size_recv;
 	ulong progress;
-	ulong transfer_duration;
+	ulong now;
 
 	size_recv = min(pdata->payload_size - pdata->upload_size, cbd->datalen);
 	memcpy(pdata->upload_ptr + pdata->upload_size, cbd->data, size_recv);
@@ -637,13 +642,20 @@ static int httpd_recv_payload(struct httpd_instance *inst,
 		printf("\b\b\b\b%2lu%% ", progress);
 	}
 
+	now = get_timer(0);
+	if (now - last_led_toggle >= LED_BLINK_FREQ_MS) {
+		led_toggle("blink_led");
+		last_led_toggle = now;
+	}
+
 	if (pdata->upload_size == pdata->payload_size) {
-		transfer_duration = get_timer(transfer_start_time);
+		ulong transfer_duration = get_timer(transfer_start_time);
 		if (transfer_duration > 0) {
 			printf("\n    Speed: ");
 			print_size(pdata->upload_size / transfer_duration * 1000, "/s");
 		}
 		printf("\n");
+		led_on("blink_led");
 		pdata->upload_ptr[pdata->payload_size] = 0;
 		pdata->status = HTTPD_S_FULL_RCVD;
 		/* remove uploading mark */
@@ -808,8 +820,6 @@ static int httpd_handle_request(struct httpd_instance *inst,
 		free(boundary);
 	}
 
-	// led_control("ledblink", "blink_led", "0");
-
 	/* call uri handler */
 	assert((size_t)req->urih->cb > CONFIG_SYS_SDRAM_BASE);
 	req->urih->cb(HTTP_CB_NEW, req, &pdata->response);
@@ -850,7 +860,6 @@ static void httpd_rx(struct httpd_instance *inst, struct tcp_cb_data *cbd)
 	u8 sip[4];
 
 	if (pdata->status == HTTPD_S_NEW) {
-		// led_control("ledblink", "blink_led", "100");
 		memcpy(sip, &cbd->sip, 4);
 		debug("New connection from %d.%d.%d.%d:%d\n",
 			  sip[0], sip[1], sip[2], sip[3], ntohs(cbd->sp));

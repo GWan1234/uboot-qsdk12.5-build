@@ -45,3 +45,24 @@ void led_on(const char *gpio_name);
 void led_off(const char *gpio_name);
 void led_toggle(const char *gpio_name);
 unsigned int fdt_get_gpio_by_name(const char *gpio_name, const int debug_state);
+
+static inline void handle_start_led_state(void)
+{
+	led_off("power_led");
+	led_off("system_led");
+	led_on("blink_led");
+}
+
+static inline void handle_fail_led_state(void)
+{
+    led_off("blink_led");
+	led_off("system_led");
+	led_on("power_led");
+}
+
+static inline void handle_success_led_state(void)
+{
+	led_off("blink_led");
+    led_off("power_led");
+	led_on("system_led");
+}
