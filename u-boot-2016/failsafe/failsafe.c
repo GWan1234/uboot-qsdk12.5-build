@@ -258,98 +258,145 @@ static void reboot_handler(enum httpd_uri_handler_status status,
 	}
 }
 
+struct upload_session {
+	char header_buf[4096];
+	int ret;
+    int body_sent;
+};
+
 static void upload_handler(enum httpd_uri_handler_status status,
-	struct httpd_request *request,
-	struct httpd_response *response)
+				struct httpd_request *request,
+				struct httpd_response *response)
 {
 	struct httpd_form_value *form_value;
+	struct upload_session *sess;
 
-	if (status != HTTP_CB_NEW)
+	if (status == HTTP_CB_NEW) {
+		sess = calloc(1, sizeof(*sess));
+		if (!sess) {
+			response->info.code = 500;
+			return;
+		}
+
+		handle_start_led_state();
+
+		response->session_data = sess;
+
+		response->status = HTTP_RESP_CUSTOM;
+
+		response->info.http_1_0 = 1;
+		response->info.content_length = -1;
+		response->info.connection_close = 1;
+		response->info.content_type = "application/json";
+		response->info.code = 200;
+
+		response->size = http_make_response_header(&response->info,
+							sess->header_buf, sizeof(sess->header_buf));
+
+		response->data = sess->header_buf;
+
+		return;
+	}
+
+	if (status == HTTP_CB_RESPONDING) {
+		sess = response->session_data;
+
+		if (sess->body_sent) {
+			response->status = HTTP_RESP_NONE;
+			return;
+		}
+
+		/* new upload session identifier */
+		fs_upload_id = rand();
+
+		form_value = httpd_request_find_value(request, "firmware");
+		if (form_value) {
+			upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE;
+			goto done;
+		}
+
+		form_value = httpd_request_find_value(request, "uboot");
+		if (form_value) {
+			upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_UBOOT;
+			goto done;
+		}
+
+		form_value = httpd_request_find_value(request, "art");
+		if (form_value) {
+			upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_ART;
+			goto done;
+		}
+
+		form_value = httpd_request_find_value(request, "cdt");
+		if (form_value) {
+			upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_CDT;
+			goto done;
+		}
+
+		form_value = httpd_request_find_value(request, "gpt");
+		if (form_value) {
+			upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_GPT;
+			goto done;
+		}
+
+		form_value = httpd_request_find_value(request, "mibib");
+		if (form_value) {
+			upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_MIBIB;
+			goto done;
+		}
+
+		form_value = httpd_request_find_value(request, "simg");
+		if (form_value) {
+			upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_SIMG;
+			goto done;
+		}
+
+		form_value = httpd_request_find_value(request, "initramfs");
+		if (form_value) {
+			upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS;
+			goto done;
+		}
+
+		httpd_debug("[DEBUG] upload_handler(): NOT supported upgrade type!\n");
+
+		/* 没有匹配的 upgrade_type，返回 fail*/
+		response->data = "{\"status\":\"fail\","
+						"\"info\":{\"type\":\"wrong_upgrade_type\"}}";
+		response->size = strlen(response->data);
+		sess->body_sent = 1;
+
+		httpd_debug("[DEBUG] upload_handler(): response message: %s\n", response->data);
+
 		return;
 
-	/* new upload session identifier */
-	fs_upload_id = rand();
+	done:
+		upload_data_id = fs_upload_id;
+		upload_data = form_value->data;
+		upload_size = form_value->size;
 
-	response->status = HTTP_RESP_STD;
-	response->info.code = 200;
-	response->info.connection_close = 1;
-	response->info.content_type = "application/json";
+		httpd_debug("[DEBUG] upload_handler(): upload_data = 0x%p, upload_size = %lu (0x%lx)\n",
+					upload_data, (ulong)upload_size, (ulong)upload_size);
 
-	form_value = httpd_request_find_value(request, "firmware");
-	if (form_value) {
-		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE;
-		goto done;
+		sess->ret = failsafe_validate_image(upgrade_type,
+						upload_data, (ulong)upload_size, response);
+
+		sess->body_sent = 1;
+
+		httpd_debug("[DEBUG] upload_handler(): response message: %s\n", response->data);
+
+		return;
 	}
 
-	form_value = httpd_request_find_value(request, "uboot");
-	if (form_value) {
-		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_UBOOT;
-		goto done;
+	if (status == HTTP_CB_CLOSED) {
+		sess = response->session_data;
+
+		if (sess->ret == RET_SUCCESS)
+			handle_success_led_state();
+		else
+			handle_fail_led_state();
+
+		free(response->session_data);
 	}
-
-	form_value = httpd_request_find_value(request, "art");
-	if (form_value) {
-		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_ART;
-		goto done;
-	}
-
-	form_value = httpd_request_find_value(request, "cdt");
-	if (form_value) {
-		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_CDT;
-		goto done;
-	}
-
-	form_value = httpd_request_find_value(request, "gpt");
-	if (form_value) {
-		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_GPT;
-		goto done;
-	}
-
-	form_value = httpd_request_find_value(request, "mibib");
-	if (form_value) {
-		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_MIBIB;
-		goto done;
-	}
-
-	form_value = httpd_request_find_value(request, "simg");
-	if (form_value) {
-		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_SIMG;
-		goto done;
-	}
-
-	form_value = httpd_request_find_value(request, "initramfs");
-	if (form_value) {
-		upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS;
-		goto done;
-	}
-
-	httpd_debug("[DEBUG] upload_handler(): NOT supported upgrade type!\n");
-
-	/* 没有匹配的 upgrade_type，返回 fail*/
-	response->data = "{\"status\":\"fail\","
-					"\"info\":{\"type\":\"wrong_upgrade_type\"}}";
-	response->size = strlen(response->data);
-
-	httpd_debug("[DEBUG] upload_handler(): response message: %s\n", response->data);
-
-	return;
-
-done:
-	upload_data_id = fs_upload_id;
-	upload_data = form_value->data;
-	upload_size = form_value->size;
-
-	httpd_debug("[DEBUG] upload_handler(): upload_data = 0x%p, upload_size = %lu (0x%lx)\n",
-				upload_data, (ulong)upload_size, (ulong)upload_size);
-
-	int ret = failsafe_validate_image(upgrade_type, upload_data, (ulong)upload_size, response);
-
-	if (ret == RET_SUCCESS)
-		handle_success_led_state();
-	else
-		handle_fail_led_state();
-
-	httpd_debug("[DEBUG] upload_handler(): response message: %s\n", response->data);
 }
 
 struct flashing_status {

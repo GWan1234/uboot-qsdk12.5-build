@@ -49,6 +49,7 @@ enum httpd_session_status {
 	HTTPD_S_HEADER_RECVING,
 	HTTPD_S_PAYLOAD_RECVING,
 	HTTPD_S_FULL_RCVD,
+	HTTPD_S_HEADER_SENT,
 	HTTPD_S_RESPONDING,
 	HTTPD_S_CLOSING
 };
@@ -711,14 +712,6 @@ static int httpd_handle_request(struct httpd_instance *inst,
 {
 	struct httpd_tcp_pdata *pdata = cbd->pdata;
 	struct httpd_request *req = &pdata->request;
-	char *formdata[MAX_HTTP_FORM_VALUE_ITEMS];
-	char *formdata_end[MAX_HTTP_FORM_VALUE_ITEMS], *p, *payload_end;
-	char *boundary, *name_ptr, *filename_ptr;
-	u32 i, numformdata = 0, boundarylen;
-	struct httpd_form_value *val;
-
-	static const char name_str[] = "name=";
-	static const char filename_str[] = "filename=";
 
 	// TODO: 这个函数的作用是什么？
 	// schedule();
@@ -728,96 +721,6 @@ static int httpd_handle_request(struct httpd_instance *inst,
 		/* TODO: no handler / response 404 */
 		tcp_close_conn(cbd->conn, 1);
 		return 1;
-	}
-
-	if (req->method == HTTP_POST) {
-		boundarylen = strlen(pdata->boundary);
-		boundary = malloc(boundarylen + 3);
-		if (!boundary) {
-			/* out of memory */
-			tcp_close_conn(cbd->conn, 1);
-			return 1;
-		}
-
-		/* add prefix -- */
-		boundary[0] = boundary[1] = '-';
-		memcpy(boundary + 2, pdata->boundary, boundarylen + 1);
-		boundarylen += 2;
-
-		/* record and split each formdata */
-		p = pdata->upload_ptr;
-		payload_end = pdata->upload_ptr + pdata->payload_size;
-		do {
-			p += boundarylen;
-			if (strncmp(p, "\r\n", 2))
-				break;
-
-			p += 2;
-
-			formdata[numformdata] = p;
-
-			p = memstr(p, payload_end - p, boundary);
-			if (!p)
-				break;
-
-			if (!strncmp(p - 2, "\r\n", 2))
-				p[-2] = 0;
-			else
-				*p = 0;
-
-			formdata_end[numformdata] = p - 2;
-			numformdata++;
-		} while (numformdata < MAX_HTTP_FORM_VALUE_ITEMS);
-
-		httpd_debug("[DEBUG] httpd_handle_request(): numformdata in total: %u\n", numformdata);
-
-		/* process each formdata */
-		for (i = 0; i < numformdata; i++) {
-			val = &req->form.values[req->form.count];
-			p = strstr(formdata[i], "\r\n\r\n");
-			if (!p)
-				continue;
-
-			*p = 0;
-			p += 4;
-
-			/*
-			 * make the data aligned by 4.
-			 * the previous 3 CR/LFs can be used as buffer.
-			 */
-			val->data = (char *)(((uintptr_t)p) & (~(4 - 1)));
-
-			name_ptr = strstr(formdata[i], name_str);
-			filename_ptr = strstr(formdata[i], filename_str);
-
-			if (name_ptr) {
-				name_ptr += sizeof(name_str) - 1;
-				val->name = name_extract(name_ptr);
-			}
-
-			if (filename_ptr) {
-				filename_ptr += sizeof(filename_str) - 1;
-				val->filename = name_extract(filename_ptr);
-			}
-
-			// TODO: 在这个擦除文件后内存（需注意多个表单值的情况）
-			val->size = formdata_end[i] - p;
-			req->form.count++;
-
-			/* move data if not aligned */
-			if (p != val->data) {
-				memmove((char *)val->data, p, val->size);
-				((char *)val->data)[val->size] = 0;
-			}
-
-			httpd_debug("[DEBUG] httpd_handle_request(): "
-				"numformdata = %u, val->name = %s, val->filename = %s, "
-				"val->data = 0x%p, val->size = %lu (0x%lx)\n",
-				numformdata, val->name, val->filename,
-				val->data, (ulong)val->size, (ulong)val->size);
-		}
-
-		free(boundary);
 	}
 
 	/* call uri handler */
@@ -836,12 +739,10 @@ static int httpd_handle_request(struct httpd_instance *inst,
 		pdata->response.info.content_length = pdata->response.size;
 
 		size = http_make_response_header(&pdata->response.info,
-						 pdata->buf,
-						 sizeof(pdata->buf));
+						pdata->buf, sizeof(pdata->buf));
 
 		/* send response header */
 		tcp_send_data(cbd->conn, pdata->buf, size);
-
 		pdata->resp_std_cnt = 0;
 	} else {
 		/* send first response data */
@@ -849,7 +750,123 @@ static int httpd_handle_request(struct httpd_instance *inst,
 			      pdata->response.size);
 	}
 
-	pdata->status = HTTPD_S_RESPONDING;
+	/* 根据是否有 POST 数据决定下一步状态 */
+	if (req->method == HTTP_POST && pdata->payload_size > 0) {
+		/* 有 POST 数据，需要后续解析，先设置为 HEADER_SENT 状态 */
+		pdata->status = HTTPD_S_HEADER_SENT;
+	} else {
+		/* 没有 POST 数据，直接进入 RESPONDING 状态 */
+		pdata->status = HTTPD_S_RESPONDING;
+	}
+
+	return 0;
+}
+
+/**
+ * httpd_parse_post_data - 解析 POST 请求的 multipart 数据
+ * @cbd: TCP 回调数据
+ *
+ * 返回值: 0 成功, 1 需要继续等待, 其他值错误
+ */
+static int httpd_parse_post_data(struct tcp_cb_data *cbd)
+{
+	struct httpd_tcp_pdata *pdata = cbd->pdata;
+	struct httpd_request *req = &pdata->request;
+	char *formdata[MAX_HTTP_FORM_VALUE_ITEMS];
+	char *formdata_end[MAX_HTTP_FORM_VALUE_ITEMS], *p, *payload_end;
+	char *boundary, *name_ptr, *filename_ptr;
+	u32 i, numformdata = 0, boundarylen;
+	struct httpd_form_value *val;
+
+	static const char name_str[] = "name=";
+	static const char filename_str[] = "filename=";
+
+	boundarylen = strlen(pdata->boundary);
+	boundary = malloc(boundarylen + 3);
+	if (!boundary) {
+		/* out of memory */
+		tcp_close_conn(cbd->conn, 1);
+		return -ENOMEM;
+	}
+
+	/* add prefix -- */
+	boundary[0] = boundary[1] = '-';
+	memcpy(boundary + 2, pdata->boundary, boundarylen + 1);
+	boundarylen += 2;
+
+	/* record and split each formdata */
+	p = pdata->upload_ptr;
+	payload_end = pdata->upload_ptr + pdata->payload_size;
+	do {
+		p += boundarylen;
+		if (strncmp(p, "\r\n", 2))
+			break;
+
+		p += 2;
+
+		formdata[numformdata] = p;
+
+		p = memstr(p, payload_end - p, boundary);
+		if (!p)
+			break;
+
+		if (!strncmp(p - 2, "\r\n", 2))
+			p[-2] = 0;
+		else
+			*p = 0;
+
+		formdata_end[numformdata] = p - 2;
+		numformdata++;
+	} while (numformdata < MAX_HTTP_FORM_VALUE_ITEMS);
+
+	httpd_debug("[DEBUG] httpd_parse_post_data(): numformdata in total: %u\n", numformdata);
+
+	/* process each formdata */
+	for (i = 0; i < numformdata; i++) {
+		val = &req->form.values[req->form.count];
+		p = strstr(formdata[i], "\r\n\r\n");
+		if (!p)
+			continue;
+
+		*p = 0;
+		p += 4;
+
+		/*
+		 * make the data aligned by 4.
+		 * the previous 3 CR/LFs can be used as buffer.
+		 */
+		val->data = (char *)(((uintptr_t)p) & (~(4 - 1)));
+
+		name_ptr = strstr(formdata[i], name_str);
+		filename_ptr = strstr(formdata[i], filename_str);
+
+		if (name_ptr) {
+			name_ptr += sizeof(name_str) - 1;
+			val->name = name_extract(name_ptr);
+		}
+
+		if (filename_ptr) {
+			filename_ptr += sizeof(filename_str) - 1;
+			val->filename = name_extract(filename_ptr);
+		}
+
+		val->size = formdata_end[i] - p;
+		req->form.count++;
+
+		/* move data if not aligned */
+		if (p != val->data) {
+			memmove((char *)val->data, p, val->size);
+			((char *)val->data)[val->size] = 0;
+		}
+
+		httpd_debug("[DEBUG] httpd_parse_post_data(): "
+			"numformdata = %u, val->name = %s, val->filename = %s, "
+			"val->data = 0x%p, val->size = %lu (0x%lx)\n",
+			numformdata, val->name, val->filename,
+			val->data, (ulong)val->size, (ulong)val->size);
+	}
+
+	free(boundary);
 
 	return 0;
 }
@@ -897,6 +914,18 @@ static void httpd_tx(struct httpd_instance *inst, struct tcp_cb_data *cbd)
 		}
 
 		return;
+	}
+
+	if (pdata->status == HTTPD_S_HEADER_SENT) {
+		int ret = httpd_parse_post_data(cbd);
+
+		if (ret) {
+			tcp_close_conn(cbd->conn, 1);
+			pdata->status = HTTPD_S_CLOSING;
+			return;
+		}
+
+		pdata->status = HTTPD_S_RESPONDING;
 	}
 
 	/* call uri handler */
