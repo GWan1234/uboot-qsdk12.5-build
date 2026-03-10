@@ -67,8 +67,8 @@ static int gunzip_and_send(struct httpd_response *response,
 	void *dst = NULL;
 	ulong len = file->uncompressed_size;
 
-	httpd_debug("[DEBUG] gunzip_and_send(): gunzipping %s (%u -> %u bytes)\n",
-           filename, file->size, file->uncompressed_size);
+	httpd_debug("[DEBUG] %s(): gunzipping %s (%u -> %u bytes)\n",
+           __func__, filename, file->size, file->uncompressed_size);
 
 #if defined(CONFIG_GZIP)
 	dst = malloc(file->uncompressed_size);
@@ -135,9 +135,6 @@ static int output_plain_file(struct httpd_response *response,
 		response->size = file->size;
 		response->info.content_encoding = NULL;
 		response->info.content_length = file->size;
-
-		httpd_debug("[DEBUG] Sending raw %s (%u bytes)\n", filename, file->size);
-
 		return 0;
 	}
 
@@ -172,9 +169,6 @@ static int output_plain_file(struct httpd_response *response,
 
 		return 1;
 	}
-
-	httpd_debug("[DEBUG] Sending decompressed %s (%u bytes) - client doesn't support gzip\n",
-			filename, response->size);
 
 	return 0;
 }
@@ -357,7 +351,7 @@ static void upload_handler(enum httpd_uri_handler_status status,
 			goto done;
 		}
 
-		httpd_debug("[DEBUG] upload_handler(): NOT supported upgrade type!\n");
+		httpd_debug("[DEBUG] %s(): NOT supported upgrade type!\n", __func__);
 
 		/* 没有匹配的 upgrade_type，返回 fail*/
 		response->data = "{\"status\":\"fail\","
@@ -365,7 +359,7 @@ static void upload_handler(enum httpd_uri_handler_status status,
 		response->size = strlen(response->data);
 		sess->body_sent = 1;
 
-		httpd_debug("[DEBUG] upload_handler(): response message: %s\n", response->data);
+		httpd_debug("[DEBUG] %s(): response message: %s\n", __func__, response->data);
 
 		return;
 
@@ -374,15 +368,15 @@ static void upload_handler(enum httpd_uri_handler_status status,
 		upload_data = form_value->data;
 		upload_size = form_value->size;
 
-		httpd_debug("[DEBUG] upload_handler(): upload_data = 0x%p, upload_size = %lu (0x%lx)\n",
-					upload_data, (ulong)upload_size, (ulong)upload_size);
+		httpd_debug("[DEBUG] %s(): upload_data = 0x%p, upload_size = %lu (0x%lx)\n",
+					__func__, upload_data, (ulong)upload_size, (ulong)upload_size);
 
 		sess->ret = failsafe_validate_image(upgrade_type,
 						upload_data, (ulong)upload_size, response);
 
 		sess->body_sent = 1;
 
-		httpd_debug("[DEBUG] upload_handler(): response message: %s\n", response->data);
+		httpd_debug("[DEBUG] %s(): response message: %s\n", __func__, response->data);
 
 		return;
 	}
@@ -476,7 +470,7 @@ static void result_handler(enum httpd_uri_handler_status status,
 		response->size = strlen(response->data);
 		st->body_sent = 1;
 
-		httpd_debug("[DEBUG] result_handler(): response message: %s\n", response->data);
+		httpd_debug("[DEBUG] %s(): response message: %s\n", __func__, response->data);
 
 		return;
 	}

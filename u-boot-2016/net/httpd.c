@@ -583,7 +583,8 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 			memcpy(pdata->upload_ptr, cbd->data + hdr_size, pdata->upload_size);
 		}
 
-		httpd_debug("[DEBUG] httpd_recv_hdr(): pdata->upload_ptr = 0x%p\n", (void *)pdata->upload_ptr);
+		httpd_debug("[DEBUG] %s(): pdata->upload_ptr = 0x%p\n",
+			__func__, (void *)pdata->upload_ptr);
 
 		progress = pdata->upload_size * 100 / pdata->payload_size;
 		last_progress = progress;
@@ -819,7 +820,7 @@ static int httpd_parse_post_data(struct tcp_cb_data *cbd)
 		numformdata++;
 	} while (numformdata < MAX_HTTP_FORM_VALUE_ITEMS);
 
-	httpd_debug("[DEBUG] httpd_parse_post_data(): numformdata in total: %u\n", numformdata);
+	httpd_debug("[DEBUG] %s(): numformdata in total: %u\n", __func__, numformdata);
 
 	/* process each formdata */
 	for (i = 0; i < numformdata; i++) {
@@ -859,11 +860,10 @@ static int httpd_parse_post_data(struct tcp_cb_data *cbd)
 			((char *)val->data)[val->size] = 0;
 		}
 
-		httpd_debug("[DEBUG] httpd_parse_post_data(): "
-			"numformdata = %u, val->name = %s, val->filename = %s, "
-			"val->data = 0x%p, val->size = %lu (0x%lx)\n",
-			numformdata, val->name, val->filename,
-			val->data, (ulong)val->size, (ulong)val->size);
+		httpd_debug("[DEBUG] %s(): numformdata = %u, val->name = %s, "
+			"val->filename = %s, val->data = 0x%p, val->size = %lu (0x%lx)\n",
+			__func__, numformdata, val->name,
+			val->filename, val->data, (ulong)val->size, (ulong)val->size);
 	}
 
 	free(boundary);
@@ -950,7 +950,8 @@ static void httpd_cleanup(struct httpd_instance *inst, struct tcp_cb_data *cbd)
 
     /* 释放动态分配的解压缓冲区 */
     if (resp->gunzip_buffer) {
-        httpd_debug("[DEBUG] httpd_cleanup(): Freeing gunzip buffer at 0x%p\n", resp->gunzip_buffer);
+        httpd_debug("[DEBUG] %s(): Freeing gunzip buffer at 0x%p\n",
+			__func__, resp->gunzip_buffer);
         free(resp->gunzip_buffer);
         resp->gunzip_buffer = NULL;
     }
