@@ -1173,4 +1173,9 @@ ulong android_image_get_kload(const struct andr_img_hdr *hdr);
 
 #endif /* CONFIG_ANDROID_BOOT_IMAGE */
 
+#if defined(CONFIG_HTTPD)
+int fit_image_get_node_by_prefix(const void *fit, const char *parent_path,
+                const char *prefix, char *buf, int buf_len);
+#endif /* CONFIG_HTTPD */
+
 #endif	/* __IMAGE_H__ */

@@ -45,6 +45,12 @@ extern struct sdhci_host mmc_host;
 
 DECLARE_GLOBAL_DATA_PTR;
 
+static struct {
+	char hlos_name[256];
+	char rootfs_name[256];
+	char wififw_name[256];
+} jdc_fw;
+
 static char info[666];
 static char resp[888];
 static char runcmd[666];
@@ -297,6 +303,42 @@ static inline void handle_command_failure(char *runcmd)
 		"\"runcmd\":\"%s\"}", runcmd);
 }
 
+static inline void handle_invalid_jdc_fw(char *node_prefix)
+{
+	snprintf(info, sizeof(info),
+		"{\"type\":\"fit_node_not_found\","
+		"\"node_prefix\":\"%s\"}", node_prefix);
+}
+
+static int get_jdc_fw_node_name(const void * data_addr)
+{
+	int ret;
+	const void *fit = data_addr;
+
+    ret = fit_image_get_node_by_prefix(fit, FIT_IMAGES_PATH, "hlos",
+                            jdc_fw.hlos_name, sizeof(jdc_fw.hlos_name));
+    if (ret) {
+        handle_invalid_jdc_fw("hlos");
+		return -1;
+    }
+
+    ret = fit_image_get_node_by_prefix(fit, FIT_IMAGES_PATH, "rootfs",
+                            jdc_fw.rootfs_name, sizeof(jdc_fw.rootfs_name));
+    if (ret) {
+        handle_invalid_jdc_fw("rootfs");
+		return -1;
+    }
+
+    ret = fit_image_get_node_by_prefix(fit, FIT_IMAGES_PATH, "wififw",
+                            jdc_fw.wififw_name, sizeof(jdc_fw.wififw_name));
+    if (ret) {
+        handle_invalid_jdc_fw("wififw");
+		return -1;
+    }
+
+	return 0;
+}
+
 int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 			const ulong data_size_in_bytes, struct httpd_response *response)
 {
@@ -355,6 +397,11 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 			break;
 		}
 		case FW_TYPE_ASUSWRT_EMMC:
+			ret = check_part_exists("0:HLOS", 1);
+			if (ret)
+				break;
+			ret = check_part_exists("rootfs", 1);
+			break;
 		case FW_TYPE_QSDK:
 			ret = check_part_exists("0:HLOS", 1);
 			if (ret)
@@ -362,11 +409,10 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 			ret = check_part_exists("rootfs", 1);
 			if (ret)
 				break;
-			if (fw_type == FW_TYPE_QSDK) {
-				ret = check_part_exists("0:WIFIFW", 1);
-				if (ret)
-					break;
-			}
+			ret = check_part_exists("0:WIFIFW", 1);
+			if (ret)
+				break;
+			ret = get_jdc_fw_node_name(data_addr);
 			break;
 #endif
 #if defined(MACHINE_FLASH_TYPE_NAND)
@@ -531,13 +577,13 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 			);
 		} else if (fw_type == FW_TYPE_QSDK) {
 			sprintf(runcmd,
-				"xtract_n_flash 0x%lx hlos-0cc33b23252699d495d79a843032498bfa593aba 0:HLOS && "
-				"xtract_n_flash 0x%lx rootfs-f3c50b484767661151cfb641e2622703e45020fe rootfs && "
-				"xtract_n_flash 0x%lx wififw-45b62ade000c18bfeeb23ae30e5a6811eac05e2f 0:WIFIFW && "
+				"xtract_n_flash 0x%lx %s 0:HLOS && "
+				"xtract_n_flash 0x%lx %s rootfs && "
+				"xtract_n_flash 0x%lx %s 0:WIFIFW && "
 				"flasherase rootfs_data && bootconfig set primary",
-				data_addr,
-				data_addr,
-				data_addr
+				data_addr, jdc_fw.hlos_name,
+				data_addr, jdc_fw.rootfs_name,
+				data_addr, jdc_fw.wififw_name
 			);
 		} else if (fw_type == FW_TYPE_SYSUPGRADE ||
 			       fw_type == FW_TYPE_ASUSWRT_EMMC) {

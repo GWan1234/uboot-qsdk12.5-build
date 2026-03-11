@@ -1937,3 +1937,80 @@ int boot_get_setup_fit(bootm_headers_t *images, uint8_t arch,
 
 	return ret;
 }
+
+/**
+ * fit_image_get_node_by_prefix - 通过前缀获取完整的节点名称
+ * @fit: pointer to the FIT format image header
+ * @parent_path: 父节点路径（通常是"/images"）
+ * @prefix: 节点名前缀（如"hlos-", "rootfs-", "wififw-"）
+ * @buf: 缓冲区，用于返回完整的节点名称
+ * @buf_len: 缓冲区大小
+ *
+ * 该函数在指定父节点下查找所有子节点，返回第一个匹配指定前缀的节点名称。
+ *
+ * returns:
+ *     0, on success (找到匹配的节点，完整的节点名保存在buf中)
+ *     -1, on failure (未找到匹配的节点或发生错误)
+ */
+#if defined(CONFIG_HTTPD)
+int fit_image_get_node_by_prefix(const void *fit, const char *parent_path,
+                	const char *prefix, char *buf, int buf_len)
+{
+    int parent_offset;
+    int noffset;
+    int ndepth;
+    int prefix_len;
+    const char *node_name;
+    int len;
+    int found = 0;
+
+    if (!fit || !parent_path || !prefix || !buf || buf_len <= 0)
+        return -1;
+
+    prefix_len = strlen(prefix);
+
+    /* 获取父节点偏移 */
+    parent_offset = fdt_path_offset(fit, parent_path);
+    if (parent_offset < 0) {
+        printf("Can't find parent node '%s' (%s)\n",
+            parent_path, fdt_strerror(parent_offset));
+        return -1;
+    }
+
+    /* 遍历父节点的所有子节点 */
+    for (ndepth = 0, noffset = fdt_next_node(fit, parent_offset, &ndepth);
+         (noffset >= 0) && (ndepth > 0);
+         noffset = fdt_next_node(fit, noffset, &ndepth)) {
+
+        if (ndepth != 1)  /* 只处理直接子节点 */
+            continue;
+
+        node_name = fit_get_name(fit, noffset, &len);
+        if (!node_name)
+            continue;
+
+        /* 检查节点名是否以指定前缀开头 */
+        if (strncmp(node_name, prefix, prefix_len) == 0) {
+            /* 找到匹配的节点 */
+            if (len < buf_len) {
+                strncpy(buf, node_name, len);
+                buf[len] = '\0';
+                found = 1;
+                break;
+            } else {
+                printf("Buffer too small for node name '%s'\n",
+					node_name);
+                return -1;
+            }
+        }
+    }
+
+    if (!found) {
+        printf("No node found with prefix '%s'\n",
+			prefix);
+        return -1;
+    }
+
+    return 0;
+}
+#endif
