@@ -45,6 +45,14 @@ extern struct sdhci_host mmc_host;
 
 DECLARE_GLOBAL_DATA_PTR;
 
+#define MAX_CMD_COUNT  10
+#define MAX_CMD_LEN    256
+
+static struct cmdlist {
+	char list[MAX_CMD_COUNT][MAX_CMD_LEN];
+	int count;
+} runcmd;
+
 static struct {
 	char hlos_name[256];
 	char rootfs_name[256];
@@ -53,10 +61,10 @@ static struct {
 
 static char info[666];
 static char resp[888];
-static char runcmd[666];
 static int fw_type;
 static uint32_t flash_type;
 static qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+static int failsafe_run_command_list(struct cmdlist runcmd);
 
 /* Implemented in: u-boot-2016/board/qca/arm/common/cmd_bootqca.c */
 extern int config_select(unsigned int addr, char *rcmd, int rcmd_size);
@@ -74,25 +82,24 @@ int boot_from_mem(const ulong data_addr)
     int ret;
     char bootm_arg[66];
 
+	runcmd.count = 0;
+
 	printf("\n"
         "*****************************\n"
         "*     INITRAMFS BOOTING     *\n"
         "* DO NOT POWER OFF DEVICE ! *\n"
-        "*****************************\n\n"
-    );
+        "*****************************\n");
 
     ret = config_select((unsigned int)data_addr, bootm_arg, sizeof(bootm_arg));
 
     if (!ret)
-        sprintf(runcmd, "bootm %s", bootm_arg);
-    else
-        sprintf(runcmd, "bootm 0x%lx", data_addr);
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"bootm %s", bootm_arg);
+	else
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"bootm 0x%lx", data_addr);
 
-	printf("Executing: %s\n\n", runcmd);
-
-	ret = run_command(runcmd, 0);
-
-	return ret;
+	return failsafe_run_command_list(runcmd);
 }
 
 static uint32_t check_flash_type(void)
@@ -296,11 +303,12 @@ static inline void handle_wrong_flash_type(char *file_type, uint32_t flash_type)
 		file_type, flash_type_str);
 }
 
-static inline void handle_command_failure(char *runcmd)
+static inline void handle_runcmd_failed(char *runcmd)
 {
 	snprintf(info, sizeof(info),
-		"{\"type\":\"command_failure\","
+		"{\"type\":\"runcmd_failed\","
 		"\"runcmd\":\"%s\"}", runcmd);
+	printf("Error: failed to run command: %s\n", runcmd);
 }
 
 static inline void handle_invalid_jdc_fw(char *node_prefix)
@@ -546,55 +554,87 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 	return ret;
 }
 
+static int failsafe_run_command_list(struct cmdlist runcmd)
+{
+    int ret;
+    struct cmdlist *p = &runcmd;
+
+    if (p->count > MAX_CMD_COUNT) {
+        printf("\nError: too many commands (current: %d, max: %d), "
+			"please increase MAX_CMD_COUNT\n", p->count, MAX_CMD_COUNT);
+        return RET_FAILURE;
+    }
+
+    for (int i = 0; i < p->count; i++) {
+        printf("\n### Executing: %s\n", p->list[i]);
+        ret = run_command(p->list[i], 0);
+        if (ret) {
+            handle_runcmd_failed(p->list[i]);
+            return RET_FAILURE;
+        }
+    }
+
+    return RET_SUCCESS;
+}
+
 static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 {
-	int ret;
-
 	printf("\n"
 		"****************************\n"
 		"*    FIRMWARE UPGRADING    *\n"
 		"* DO NOT POWER OFF DEVICE! *\n"
-		"****************************\n\n"
-	);
+		"****************************\n");
 
 	switch (flash_type) {
 #if defined(MACHINE_FLASH_TYPE_EMMC) || \
 	defined(MACHINE_FLASH_TYPE_NORPLUSEMMC)
 	case SMEM_BOOT_MMC_FLASH:
 	case SMEM_BOOT_NORPLUSEMMC:
-		if (fw_type == FW_TYPE_FACTORY_KERNEL6M ||
-			fw_type == FW_TYPE_FACTORY_KERNEL12M
-		) {
-			ulong kernel_size_in_bytes = 6 * 1024 * 1024;
+		switch (fw_type) {
+		case FW_TYPE_FACTORY_KERNEL6M:
+		case FW_TYPE_FACTORY_KERNEL12M: {
+			ulong kernel_size = 6 * 1024 * 1024;
 			if (fw_type == FW_TYPE_FACTORY_KERNEL12M)
-				kernel_size_in_bytes = 12 * 1024 * 1024;
-			sprintf(runcmd,
-				"flash 0:HLOS 0x%lx 0x%lx && "
-				"flash rootfs 0x%lx 0x%lx && "
-				"bootconfig set primary",
-				data_addr, kernel_size_in_bytes,
-				data_addr + kernel_size_in_bytes, data_size - kernel_size_in_bytes
-			);
-		} else if (fw_type == FW_TYPE_QSDK) {
-			sprintf(runcmd,
-				"xtract_n_flash 0x%lx %s 0:HLOS && "
-				"xtract_n_flash 0x%lx %s rootfs && "
-				"xtract_n_flash 0x%lx %s 0:WIFIFW && "
-				"flasherase rootfs_data && bootconfig set primary",
-				data_addr, jdc_fw.hlos_name,
-				data_addr, jdc_fw.rootfs_name,
-				data_addr, jdc_fw.wififw_name
-			);
-		} else if (fw_type == FW_TYPE_SYSUPGRADE ||
-			       fw_type == FW_TYPE_ASUSWRT_EMMC) {
-			sprintf(runcmd,
-				"untar 0x%lx 0x%lx && "
-				"flash 0:HLOS $kernel_addr $kernel_size && "
-				"flash rootfs $rootfs_addr $rootfs_size && "
-				"bootconfig set primary",
-				data_addr, data_size
-			);
-		} else {
+				kernel_size = 12 * 1024 * 1024;
+			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+				"flash 0:HLOS 0x%lx 0x%lx",
+				data_addr, kernel_size);
+			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+				"flash rootfs 0x%lx 0x%lx",
+				data_addr + kernel_size,
+				data_size - kernel_size);
+			strncpy(runcmd.list[runcmd.count++],
+				"bootconfig set primary", MAX_CMD_LEN);
+			break;
+		}
+		case FW_TYPE_QSDK:
+			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+				"xtract_n_flash 0x%lx %s 0:HLOS",
+				data_addr, jdc_fw.hlos_name);
+			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+				"xtract_n_flash 0x%lx %s rootfs",
+				data_addr, jdc_fw.rootfs_name);
+			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+				"xtract_n_flash 0x%lx %s 0:WIFIFW",
+				data_addr, jdc_fw.wififw_name);
+			strncpy(runcmd.list[runcmd.count++],
+				"flasherase rootfs_data", MAX_CMD_LEN);
+			strncpy(runcmd.list[runcmd.count++],
+				"bootconfig set primary", MAX_CMD_LEN);
+			break;
+		case FW_TYPE_SYSUPGRADE:
+		case FW_TYPE_ASUSWRT_EMMC:
+			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+				"untar 0x%lx 0x%lx",
+				data_addr, data_size);
+			strncpy(runcmd.list[runcmd.count++],
+				"flash 0:HLOS $kernel_addr $kernel_size", MAX_CMD_LEN);
+			strncpy(runcmd.list[runcmd.count++],
+				"flash rootfs $rootfs_addr $rootfs_size", MAX_CMD_LEN);
+			strncpy(runcmd.list[runcmd.count++],
+				"bootconfig set primary", MAX_CMD_LEN);
+			break;
+		default:
 			handle_wrong_fw_type("FIRMWARE", fw_type);
 			return RET_WRONG_FW_TYPE;
 		}
@@ -603,11 +643,11 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 #if defined(MACHINE_FLASH_TYPE_NAND)
 	case SMEM_BOOT_NAND_FLASH:
 		if (fw_type == FW_TYPE_UBI) {
-			sprintf(runcmd,
-				"flash rootfs 0x%lx 0x%lx && "
-				"bootconfig set primary",
-				data_addr, data_size
-			);
+			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+				"flash rootfs 0x%lx 0x%lx",
+				data_addr, data_size);
+			strncpy(runcmd.list[runcmd.count++],
+				"bootconfig set primary", MAX_CMD_LEN);
 		} else {
 			handle_wrong_fw_type("UBI FIRMWARE", fw_type);
 			return RET_WRONG_FW_TYPE;
@@ -619,22 +659,12 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 		return RET_WRONG_FLASH_TYPE;
 	}
 
-	printf("Executing: %s\n\n", runcmd);
-
-	ret = run_command(runcmd, 0);
-
-	if (!ret)
-		return RET_SUCCESS;
-
-	handle_command_failure(runcmd);
-	return RET_FAILURE;
+	return failsafe_run_command_list(runcmd);
 }
 
 static int failsafe_write_uboot(const ulong data_addr, const ulong data_size)
 {
 	int ret;
-	char *p = runcmd;
-	size_t runcmd_size = sizeof(runcmd);
 
     if (fw_type != FW_TYPE_ELF) {
 		handle_wrong_fw_type("U-BOOT ELF", fw_type);
@@ -645,51 +675,38 @@ static int failsafe_write_uboot(const ulong data_addr, const ulong data_size)
         "****************************\n"
         "*     U-BOOT UPGRADING     *\n"
         "* DO NOT POWER OFF DEVICE! *\n"
-        "****************************\n\n"
-    );
+        "****************************\n");
 
 	switch (flash_type) {
 	case SMEM_BOOT_MMC_FLASH:
 	case SMEM_BOOT_NAND_FLASH:
 	case SMEM_BOOT_NORPLUSEMMC:
 	case SMEM_BOOT_SPI_FLASH:
-		if (p == runcmd)
-			p += snprintf(p, runcmd + runcmd_size - p,
-					"flash 0:APPSBL 0x%lx 0x%lx", data_addr, data_size);
-
-		if (p >= runcmd + runcmd_size)
-			break;
-
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"flash 0:APPSBL 0x%lx 0x%lx",
+			data_addr, data_size);
 		ret = check_part_exists("0:APPSBL_1", 0);
-		if (!ret)
-			p += snprintf(p, runcmd + runcmd_size - p,
-					" && flash 0:APPSBL_1 0x%lx 0x%lx", data_addr, data_size);
+		if (ret)
+			break;
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"flash 0:APPSBL_1 0x%lx 0x%lx",
+			data_addr, data_size);
 		break;
 	default:
 		handle_wrong_flash_type("U-BOOT", flash_type);
 		return RET_WRONG_FLASH_TYPE;
 	}
 
-	printf("Executing: %s\n\n", runcmd);
-
-	ret = run_command(runcmd, 0);
-
-	if (!ret)
-		return RET_SUCCESS;
-
-	handle_command_failure(runcmd);
-	return RET_FAILURE;
+	return failsafe_run_command_list(runcmd);
 }
 
 static int failsafe_write_art(const ulong data_addr, const ulong data_size)
 {
-	int ret;
-
 	printf("\n"
         "****************************\n"
         "*      ART  UPGRADING      *\n"
         "* DO NOT POWER OFF DEVICE! *\n"
-        "****************************\n\n"
+        "****************************\n"
     );
 
 	switch (flash_type) {
@@ -697,32 +714,21 @@ static int failsafe_write_art(const ulong data_addr, const ulong data_size)
 	case SMEM_BOOT_NAND_FLASH:
 	case SMEM_BOOT_NORPLUSEMMC:
 	case SMEM_BOOT_SPI_FLASH:
-		sprintf(runcmd,
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"flash 0:ART 0x%lx 0x%lx",
-			data_addr, data_size
-		);
+			data_addr, data_size);
 		break;
 	default:
 		handle_wrong_flash_type("ART", flash_type);
 		return RET_WRONG_FLASH_TYPE;
 	}
 
-	printf("Executing: %s\n\n", runcmd);
-
-	ret = run_command(runcmd, 0);
-
-	if (!ret)
-		return RET_SUCCESS;
-
-	handle_command_failure(runcmd);
-	return RET_FAILURE;
+	return failsafe_run_command_list(runcmd);
 }
 
 static int failsafe_write_cdt(const ulong data_addr, const ulong data_size)
 {
 	int ret;
-	char *p = runcmd;
-	size_t runcmd_size = sizeof(runcmd);
 
     if (fw_type != FW_TYPE_CDT) {
 		handle_wrong_fw_type("CDT", fw_type);
@@ -733,45 +739,33 @@ static int failsafe_write_cdt(const ulong data_addr, const ulong data_size)
         "****************************\n"
         "*      CDT  UPGRADING      *\n"
         "* DO NOT POWER OFF DEVICE! *\n"
-        "****************************\n\n"
-    );
+        "****************************\n");
 
 	switch (flash_type) {
 	case SMEM_BOOT_MMC_FLASH:
 	case SMEM_BOOT_NAND_FLASH:
 	case SMEM_BOOT_NORPLUSEMMC:
 	case SMEM_BOOT_SPI_FLASH:
-		if (p == runcmd)
-			p += snprintf(p, runcmd + runcmd_size - p,
-					"flash 0:CDT 0x%lx 0x%lx", data_addr, data_size);
-
-		if (p >= runcmd + runcmd_size)
-			break;
-
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"flash 0:CDT 0x%lx 0x%lx",
+			data_addr, data_size);
 		ret = check_part_exists("0:CDT_1", 0);
-		if (!ret)
-			p += snprintf(p, runcmd + runcmd_size - p,
-					" && flash 0:CDT_1 0x%lx 0x%lx", data_addr, data_size);
+		if (ret)
+			break;
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"flash 0:CDT_1 0x%lx 0x%lx",
+			data_addr, data_size);
 		break;
 	default:
 		handle_wrong_flash_type("CDT", flash_type);
 		return RET_WRONG_FLASH_TYPE;
 	}
 
-	printf("Executing: %s\n\n", runcmd);
-
-	ret = run_command(runcmd, 0);
-
-	if (!ret)
-		return RET_SUCCESS;
-
-	handle_command_failure(runcmd);
-	return RET_FAILURE;
+	return failsafe_run_command_list(runcmd);
 }
 
 static int failsafe_write_gpt(const ulong data_addr, const ulong data_size)
 {
-	int ret;
 	block_dev_desc_t *blk_dev;
     ulong data_size_in_blocks;
 
@@ -791,39 +785,27 @@ static int failsafe_write_gpt(const ulong data_addr, const ulong data_size)
 		"****************************\n"
 		"*       GPT UPGRADING      *\n"
 		"* DO NOT POWER OFF DEVICE! *\n"
-		"****************************\n\n"
-	);
+		"****************************\n");
 
 	switch (flash_type) {
 	case SMEM_BOOT_MMC_FLASH:
 	case SMEM_BOOT_NORPLUSEMMC:
-		sprintf(runcmd,
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"mmc erase 0x0 0x%lx && "
 			"mmc write 0x%lx 0x0 0x%lx",
 			data_size_in_blocks,
-			data_addr, data_size_in_blocks
-		);
+			data_addr, data_size_in_blocks);
 		break;
 	default:
 		handle_wrong_flash_type("GPT", flash_type);
 		return RET_WRONG_FLASH_TYPE;
 	}
 
-	printf("Executing: %s\n\n", runcmd);
-
-	ret = run_command(runcmd, 0);
-
-	if (!ret)
-		return RET_SUCCESS;
-
-	handle_command_failure(runcmd);
-	return RET_FAILURE;
+	return failsafe_run_command_list(runcmd);
 }
 
 static int failsafe_write_mibib(const ulong data_addr, const ulong data_size)
 {
-	int ret;
-
 	if (fw_type != FW_TYPE_MIBIB_NAND &&
 		fw_type != FW_TYPE_MIBIB_NOR
 	) {
@@ -835,38 +817,26 @@ static int failsafe_write_mibib(const ulong data_addr, const ulong data_size)
 		"****************************\n"
 		"*      MIBIB UPGRADING     *\n"
 		"* DO NOT POWER OFF DEVICE! *\n"
-		"****************************\n\n"
-	);
+		"****************************\n");
 
 	switch (flash_type) {
 	case SMEM_BOOT_NAND_FLASH:
 	case SMEM_BOOT_NORPLUSEMMC:
 	case SMEM_BOOT_SPI_FLASH:
-		sprintf(runcmd,
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"flash 0:MIBIB 0x%lx 0x%lx",
-			data_addr, data_size
-		);
+			data_addr, data_size);
 		break;
 	default:
 		handle_wrong_flash_type("MIBIB", flash_type);
 		return RET_WRONG_FLASH_TYPE;
 	}
 
-	printf("Executing: %s\n\n", runcmd);
-
-	ret = run_command(runcmd, 0);
-
-	if (!ret)
-		return RET_SUCCESS;
-
-	handle_command_failure(runcmd);
-	return RET_FAILURE;
+	return failsafe_run_command_list(runcmd);
 }
 
 static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 {
-	int ret;
-
 #if defined(MACHINE_FLASH_TYPE_EMMC) || \
 	defined(MACHINE_FLASH_TYPE_NORPLUSEMMC)
     block_dev_desc_t *blk_dev;
@@ -884,19 +854,17 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 		"*****************************\n"
 		"*       SIMG UPGRADING      *\n"
 		"* DO NOT POWER OFF DEVICE ! *\n"
-		"*****************************\n\n"
-	);
+		"*****************************\n");
 
 	switch (flash_type) {
 #if defined(MACHINE_FLASH_TYPE_EMMC)
 	case SMEM_BOOT_MMC_FLASH:
 		if (fw_type == FW_TYPE_EMMC) {
-			sprintf(runcmd,
+			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 				"mmc erase 0x0 0x%lx && "
 				"mmc write 0x%lx 0x0 0x%lx",
 				data_size_in_blocks,
-				data_addr, data_size_in_blocks
-			);
+				data_addr, data_size_in_blocks);
 		} else {
 			handle_wrong_fw_type("EMMC IMG", fw_type);
 			return RET_WRONG_FW_TYPE;
@@ -906,12 +874,11 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 #if defined(MACHINE_FLASH_TYPE_NAND)
 	case SMEM_BOOT_NAND_FLASH:
 		if (fw_type == FW_TYPE_NAND) {
-			sprintf(runcmd,
+			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 				"nand erase 0x0 0x%lx && "
 				"nand write 0x%lx 0x0 0x%lx",
 				data_size,
-				data_addr, data_size
-			);
+				data_addr, data_size);
 		} else {
 			handle_wrong_fw_type("NAND IMG", fw_type);
 			return RET_WRONG_FW_TYPE;
@@ -921,17 +888,15 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 #if defined(MACHINE_FLASH_TYPE_NORPLUSEMMC)
 	case SMEM_BOOT_NORPLUSEMMC:
 		if (fw_type == FW_TYPE_EMMC) {
-			sprintf(runcmd,
+			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 				"mmc erase 0x0 0x%lx && "
 				"mmc write 0x%lx 0x0 0x%lx",
 				data_size_in_blocks,
-				data_addr, data_size_in_blocks
-			);
+				data_addr, data_size_in_blocks);
 		} else if (fw_type == FW_TYPE_NOR) {
-			sprintf(runcmd,
+			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 				"sf probe && sf update 0x%lx 0x0 0x%lx",
-				data_addr, data_size
-			);
+				data_addr, data_size);
 		} else {
 			handle_wrong_fw_type("EMMC IMG or NOR IMG", fw_type);
 			return RET_WRONG_FW_TYPE;
@@ -943,15 +908,7 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 		return RET_WRONG_FLASH_TYPE;
 	}
 
-	printf("Executing: %s\n\n", runcmd);
-
-	ret = run_command(runcmd, 0);
-
-	if (!ret)
-		return RET_SUCCESS;
-
-	handle_command_failure(runcmd);
-	return RET_FAILURE;
+	return failsafe_run_command_list(runcmd);
 }
 
 int failsafe_write_image(const int upgrade_type, const ulong data_addr,
@@ -959,12 +916,12 @@ int failsafe_write_image(const int upgrade_type, const ulong data_addr,
 {
     int ret;
 
+	runcmd.count = 0;
 	fw_type = check_fw_type((const void *)data_addr);
 	flash_type = check_flash_type();
 
 	memset(info, 0, sizeof(info));
 	memset(resp, 0, sizeof(resp));
-    memset(runcmd, 0, sizeof(runcmd));
 
 	switch (upgrade_type) {
     case WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE:
