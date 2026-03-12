@@ -17,6 +17,7 @@
 #include <net/tcp.h>
 #include <net/httpd.h>
 #include <linux/stringify.h>
+#include <asm/arch-qca-common/smem.h>
 #include <failsafe/failsafe.h>
 #include <ipq_api.h>
 #if defined(CONFIG_DHCPD)
@@ -568,7 +569,8 @@ static int do_httpd(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	int ret;
 
 #if defined(CONFIG_HTTPD_DEBUG)
-	if (getenv("httpd_debug") != NULL)
+	if (getenv("httpd_debug") != NULL ||
+		qca_smem_flash_info.flash_type == SMEM_BOOT_NO_FLASH)
 		httpd_debug_state = 1;
 	else
 		httpd_debug_state = 0;
