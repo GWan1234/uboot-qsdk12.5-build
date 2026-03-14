@@ -427,6 +427,9 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 			ret = check_part_exists("0:WIFIFW", 1);
 			if (ret)
 				break;
+			ret = check_part_exists("rootfs_data", 1);
+			if (ret)
+				break;
 			ret = get_jdc_fw_node_name(data_addr);
 			break;
 #endif
@@ -618,6 +621,7 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 			break;
 		}
 		case FW_TYPE_QSDK:
+			setenv("verbose", "1"); /* 执行 xtract_n_flash 时输出详细信息 */
 			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 				"xtract_n_flash 0x%lx %s 0:HLOS",
 				data_addr, jdc_fw.hlos_name);
