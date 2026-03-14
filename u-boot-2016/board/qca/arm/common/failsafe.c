@@ -396,7 +396,7 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 								&kernel_addr, &kernel_size,
 								&rootfs_addr, &rootfs_size)
 			) {
-				strncpy(info,
+				strlcpy(info,
 					"{\"type\":\"wrong_file_type\","
 					"\"expected\":\"sysupgrade tar image\","
 					"\"actual\":\"not a valid sysupgrade tar image\"}",
@@ -533,7 +533,7 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 		}
 		break;
 	default:
-		strncpy(info, "{\"type\":\"wrong_upgrade_type\"}", sizeof(info));
+		strlcpy(info, "{\"type\":\"wrong_upgrade_type\"}", sizeof(info));
 		printf("Error: not supported webfailsafe upgrade type\n");
 		ret = RET_WRONG_UPGRADE_TYPE;
 	}
@@ -616,7 +616,7 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 				"flash rootfs 0x%lx 0x%lx",
 				data_addr + kernel_size,
 				data_size - kernel_size);
-			strncpy(runcmd.list[runcmd.count++],
+			strlcpy(runcmd.list[runcmd.count++],
 				"bootconfig set primary", MAX_CMD_LEN);
 			break;
 		}
@@ -631,9 +631,9 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 				"xtract_n_flash 0x%lx %s 0:WIFIFW",
 				data_addr, jdc_fw.wififw_name);
-			strncpy(runcmd.list[runcmd.count++],
+			strlcpy(runcmd.list[runcmd.count++],
 				"flasherase rootfs_data", MAX_CMD_LEN);
-			strncpy(runcmd.list[runcmd.count++],
+			strlcpy(runcmd.list[runcmd.count++],
 				"bootconfig set primary", MAX_CMD_LEN);
 			break;
 		case FW_TYPE_SYSUPGRADE:
@@ -641,11 +641,11 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 				"untar 0x%lx 0x%lx",
 				data_addr, data_size);
-			strncpy(runcmd.list[runcmd.count++],
+			strlcpy(runcmd.list[runcmd.count++],
 				"flash 0:HLOS $kernel_addr $kernel_size", MAX_CMD_LEN);
-			strncpy(runcmd.list[runcmd.count++],
+			strlcpy(runcmd.list[runcmd.count++],
 				"flash rootfs $rootfs_addr $rootfs_size", MAX_CMD_LEN);
-			strncpy(runcmd.list[runcmd.count++],
+			strlcpy(runcmd.list[runcmd.count++],
 				"bootconfig set primary", MAX_CMD_LEN);
 			break;
 		default:
@@ -660,7 +660,7 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 				"flash rootfs 0x%lx 0x%lx",
 				data_addr, data_size);
-			strncpy(runcmd.list[runcmd.count++],
+			strlcpy(runcmd.list[runcmd.count++],
 				"bootconfig set primary", MAX_CMD_LEN);
 		} else {
 			handle_wrong_fw_type("UBI FIRMWARE", fw_type);

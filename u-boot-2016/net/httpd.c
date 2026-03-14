@@ -386,9 +386,9 @@ static void add_header(const char *name, const char *value)
     if (current_request_headers.count >= MAX_HEADER_COUNT)
         return;
 
-    strncpy(current_request_headers.headers[current_request_headers.count].name,
+    strlcpy(current_request_headers.headers[current_request_headers.count].name,
             name, MAX_HEADER_NAME_LEN - 1);
-    strncpy(current_request_headers.headers[current_request_headers.count].value,
+    strlcpy(current_request_headers.headers[current_request_headers.count].value,
             value, MAX_HEADER_VALUE_LEN - 1);
 
     current_request_headers.count++;
