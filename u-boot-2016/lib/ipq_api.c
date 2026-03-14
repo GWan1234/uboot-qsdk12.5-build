@@ -208,3 +208,65 @@ void check_failsafe_env_exists(void)
 
 	return;
 }
+
+/**
+ * json_escape - 对字符串进行JSON转义处理
+ * @input: 要转义的输入字符串（可以为NULL）
+ * @output: 存储转义后字符串的输出缓冲区
+ * @output_buffer_size: 输出缓冲区的大小（字节）
+ *
+ * 该函数将输入字符串中的特殊字符转义为JSON兼容的格式，包括：
+ *   - 双引号转义为 \"
+ *   - 反斜杠转义为 \\
+ *   - 换行符转义为 \n
+ *   - 回车符转义为 \r
+ *   - 制表符转义为 \t
+ *   - 其他控制字符（< 0x20）替换为空格
+ *   - 普通字符保持不变
+ *
+ * 返回值：写入输出缓冲区的字符数（不包括结尾的'\0'）
+ */
+size_t json_escape(const char *input, char *output, size_t output_buffer_size)
+{
+	int j = 0;
+
+    if (!output || !output_buffer_size)
+        return 0;
+
+    if (!input)
+        goto done;
+
+    for (int i = 0; input[i] && j < output_buffer_size - 1; i++) {
+        switch (input[i]) {
+        case '"':
+        case '\\':
+            if (j + 2 >= output_buffer_size)
+                goto done;
+            output[j++] = '\\';
+            output[j++] = input[i];
+            break;
+        case '\n':
+        case '\r':
+        case '\t':
+            if (j + 2 >= output_buffer_size)
+                goto done;
+            output[j++] = '\\';
+            if (input[i] == '\n')
+                output[j++] = 'n';
+            else if (input[i] == '\r')
+                output[j++] = 'r';
+            else
+                output[j++] = 't';
+            break;
+        default:
+            if ((unsigned char)input[i] < 0x20)
+                output[j++] = ' ';
+            else
+                output[j++] = input[i];
+        }
+    }
+
+done:
+    output[j] = '\0';
+    return j;
+}

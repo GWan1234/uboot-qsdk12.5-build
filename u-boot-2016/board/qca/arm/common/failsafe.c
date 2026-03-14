@@ -36,6 +36,7 @@
 #include <ipq_api.h>
 #include <u-boot/md5.h>
 #include <net/httpd.h>
+#include <runcmd_capture.h>
 
 #ifndef CONFIG_SDHCI_SUPPORT
 extern qca_mmc mmc_host;
@@ -80,9 +81,7 @@ void *httpd_get_upload_buffer_ptr(size_t size)
 int boot_from_mem(const ulong data_addr)
 {
     int ret;
-    char bootm_arg[66];
-
-	runcmd.count = 0;
+	char rcmd[99], bootm_arg[66];
 
 	printf("\n"
         "*****************************\n"
@@ -93,13 +92,13 @@ int boot_from_mem(const ulong data_addr)
     ret = config_select((unsigned int)data_addr, bootm_arg, sizeof(bootm_arg));
 
     if (!ret)
-		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-			"bootm %s", bootm_arg);
+		snprintf(rcmd, sizeof(rcmd), "bootm %s", bootm_arg);
 	else
-		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-			"bootm 0x%lx", data_addr);
+		snprintf(rcmd, sizeof(rcmd), "bootm 0x%lx", data_addr);
 
-	return failsafe_run_command_list(runcmd);
+	printf("\n### Executing: %s\n", rcmd);
+
+	return run_command(rcmd, 0);
 }
 
 static uint32_t check_flash_type(void)
@@ -281,7 +280,7 @@ part_not_found:
 	return RET_PART_NOT_FOUND;
 }
 
-static inline void handle_wrong_fw_type(char *expected_file_type_str, int fw_type)
+static inline void handle_wrong_fw_type(const char *expected_file_type_str, const int fw_type)
 {
 	char *actual_file_type_str = fw_type_to_string(fw_type);
 	snprintf(info, sizeof(info),
@@ -292,7 +291,7 @@ static inline void handle_wrong_fw_type(char *expected_file_type_str, int fw_typ
 		expected_file_type_str, actual_file_type_str);
 }
 
-static inline void handle_wrong_flash_type(char *file_type, uint32_t flash_type)
+static inline void handle_wrong_flash_type(const char *file_type, const uint32_t flash_type)
 {
 	char *flash_type_str = flash_type_to_string(flash_type);
 	snprintf(info, sizeof(info),
@@ -303,15 +302,23 @@ static inline void handle_wrong_flash_type(char *file_type, uint32_t flash_type)
 		file_type, flash_type_str);
 }
 
-static inline void handle_runcmd_failed(char *runcmd)
+static inline void handle_runcmd_failed(const char *runcmd, const char *output)
 {
+	char escaped_runcmd[MAX_CMD_LEN * 2];
+	char escaped_output[CAPTURE_BUFFER_SIZE * 2];
+
+	json_escape(runcmd, escaped_runcmd, sizeof(escaped_runcmd));
+	json_escape(output, escaped_output, sizeof(escaped_output));
+
 	snprintf(info, sizeof(info),
 		"{\"type\":\"runcmd_failed\","
-		"\"runcmd\":\"%s\"}", runcmd);
+		"\"runcmd\":\"%s\",\"output\":\"%s\"}",
+		escaped_runcmd, escaped_output[0] ? escaped_output : "none");
+
 	printf("Error: failed to run command: %s\n", runcmd);
 }
 
-static inline void handle_invalid_jdc_fw(char *node_prefix)
+static inline void handle_invalid_jdc_fw(const char *node_prefix)
 {
 	snprintf(info, sizeof(info),
 		"{\"type\":\"fit_node_not_found\","
@@ -557,6 +564,7 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 static int failsafe_run_command_list(struct cmdlist runcmd)
 {
     int ret;
+	const char *output;
     struct cmdlist *p = &runcmd;
 
     if (p->count > MAX_CMD_COUNT) {
@@ -567,9 +575,11 @@ static int failsafe_run_command_list(struct cmdlist runcmd)
 
     for (int i = 0; i < p->count; i++) {
         printf("\n### Executing: %s\n", p->list[i]);
-        ret = run_command(p->list[i], 0);
+        ret = run_command_capture(p->list[i], &output);
+		if (*output)
+			puts(output);
         if (ret) {
-            handle_runcmd_failed(p->list[i]);
+            handle_runcmd_failed(p->list[i], output);
             return RET_FAILURE;
         }
     }

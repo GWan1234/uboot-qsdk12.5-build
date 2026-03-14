@@ -45,6 +45,7 @@ void led_on(const char *gpio_name);
 void led_off(const char *gpio_name);
 void led_toggle(const char *gpio_name);
 unsigned int fdt_get_gpio_by_name(const char *gpio_name, const int debug_state);
+size_t json_escape(const char *input, char *output, size_t output_buffer_size);
 
 static inline void handle_start_led_state(void)
 {
