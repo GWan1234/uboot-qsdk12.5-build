@@ -18,6 +18,8 @@ extern qca_mmc mmc_host;
 extern struct sdhci_host mmc_host;
 #endif
 
+detected_flash_device_t detected_flash_device;
+
 DECLARE_GLOBAL_DATA_PTR;
 
 unsigned int fdt_get_gpio_by_name(const char *gpio_name, const int debug_state) {
@@ -137,8 +139,10 @@ void check_button_is_pressed(void) {
         else if (strcmp(button_name, "SCREEN") == 0)
             still_pressed = button_is_pressed("screen_key", SCREEN_BUTTON_IS_PRESSED);
 
-        if (!still_pressed)
-            break;  // 按键已释放
+        if (!still_pressed) {
+			putc('\n');
+            break;
+		}
 
 		if (counter == 3) {
 #if defined(CONFIG_IPQ_ETH_INIT_DEFER)
@@ -167,11 +171,6 @@ void check_button_is_pressed(void) {
 			break;
 		}
 	}
-
-	if (counter > 0)
-		printf("\n");
-
-	return;
 }
 
 /**
@@ -207,6 +206,44 @@ void check_failsafe_env_exists(void)
 	cli_loop();
 
 	return;
+}
+
+void detect_flash_device(void)
+{
+	int ret;
+	size_t len = 0;
+	char flash_list[128];
+	detected_flash_device_t *dfd = &detected_flash_device;
+
+	dfd->spi = false;
+	dfd->nand = false;
+	dfd->mmc = false;
+
+	setenv("stdout", "nulldev");
+
+	ret = run_command("sf probe", 0);
+	if (!ret) {
+		len += strlcpy(flash_list + len, "spi", sizeof(flash_list));
+		dfd->spi = true;
+	}
+
+	ret = run_command("nand device 0", 0);
+	if (!ret) {
+		len += strlcpy(flash_list + len,
+				len ? ", nand" : "nand", sizeof(flash_list));
+		dfd->nand = true;
+	}
+
+	ret = run_command("mmc dev", 0);
+	if (!ret) {
+		len += strlcpy(flash_list + len,
+				len ? ", mmc" : "mmc", sizeof(flash_list));
+		dfd->mmc = true;
+	}
+
+	setenv("stdout", "serial");
+
+	printf("detected flash device(s): %s\n", len ? flash_list : "none");
 }
 
 /**

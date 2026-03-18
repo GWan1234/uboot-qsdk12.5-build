@@ -88,7 +88,7 @@ char *fw_type_to_string(const int fw_type) {
 	case FW_TYPE_NAND:
 		return "NAND IMAGE";
 	case FW_TYPE_NOR:
-		return "SPI-NOR IMGAGE";
+		return "SPI-NOR IMAGE";
 	case FW_TYPE_SYSUPGRADE:
 		return "SYSUPGRADE FIRMWARE";
 	case FW_TYPE_UBI:

@@ -140,6 +140,7 @@ void main_loop(void)
 #endif /* CONFIG_FORCE_NETWORK_ENV */
 
 #if defined(CONFIG_HTTPD)
+	detect_flash_device();
 	check_failsafe_env_exists();
 	check_button_is_pressed();
 #endif

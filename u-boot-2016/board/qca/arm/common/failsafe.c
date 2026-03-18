@@ -63,9 +63,8 @@ static struct {
 static char info[666];
 static char resp[888];
 static int fw_type;
-static uint32_t flash_type;
 static qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-static int failsafe_run_command_list(struct cmdlist runcmd);
+static detected_flash_device_t *dfd = &detected_flash_device;
 
 /* Implemented in: u-boot-2016/board/qca/arm/common/cmd_bootqca.c */
 extern int config_select(unsigned int addr, char *rcmd, int rcmd_size);
@@ -101,48 +100,6 @@ int boot_from_mem(const ulong data_addr)
 	return run_command(rcmd, 0);
 }
 
-static uint32_t check_flash_type(void)
-{
-	switch (sfi->flash_type) {
-	case SMEM_BOOT_SPI_FLASH:
-		if (sfi->flash_secondary_type == SMEM_BOOT_MMC_FLASH)
-			return SMEM_BOOT_NORPLUSEMMC;
-		else
-			return SMEM_BOOT_SPI_FLASH;
-	case SMEM_BOOT_NO_FLASH:
-		/*
-		 * Flashless boot, typically in 9008 emergency download mode.
-		 * Return the default flash type according to specific board configuration.
-		 */
-#if defined(MACHINE_FLASH_TYPE_EMMC)
-		return SMEM_BOOT_MMC_FLASH;
-#elif defined(MACHINE_FLASH_TYPE_NORPLUSEMMC)
-		return SMEM_BOOT_NORPLUSEMMC;
-#elif defined(MACHINE_FLASH_TYPE_NAND)
-		return SMEM_BOOT_NAND_FLASH;
-#endif
-	default:
-		return sfi->flash_type;
-	}
-}
-
-static char *flash_type_to_string(uint32_t flash_type)
-{
-	switch (sfi->flash_type) {
-	case SMEM_BOOT_MMC_FLASH: return "EMMC";
-	case SMEM_BOOT_NAND_FLASH: return "NAND";
-	case SMEM_BOOT_NO_FLASH: return "NO";
-	case SMEM_BOOT_NOR_FLASH: return "NOR";
-	case SMEM_BOOT_NORPLUSEMMC: return "NOR PLUS EMMC";
-	case SMEM_BOOT_NORPLUSNAND: return "NOR PLUS NAND";
-	case SMEM_BOOT_ONENAND_FLASH: return "ONENAND";
-	case SMEM_BOOT_QSPI_NAND_FLASH: return "QSPI NAND";
-	case SMEM_BOOT_SDC_FLASH: return "SDC";
-	case SMEM_BOOT_SPI_FLASH: return "SPI";
-	default: return "UNKNOWN";
-	}
-}
-
 /**
  * check_part_exists - 检查指定分区是否存在
  * @part_name: 分区名
@@ -155,10 +112,9 @@ static char *flash_type_to_string(uint32_t flash_type)
 static int check_part_exists(char *part_name, int flag)
 {
 	int ret;
-	block_dev_desc_t *blk_dev;
+	block_dev_desc_t *mmc_dev;
 	disk_partition_t disk_info = {0};
     uint32_t size_block, start_block;
-	static qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
 
 	switch (sfi->flash_type) {
 	case SMEM_BOOT_NAND_FLASH:
@@ -176,12 +132,12 @@ static int check_part_exists(char *part_name, int flag)
 	case SMEM_BOOT_NO_FLASH:
 	case SMEM_BOOT_SDC_FLASH:
 	default:
-		blk_dev = mmc_get_dev(mmc_host.dev_num);
-		if (blk_dev == NULL)
+		mmc_dev = mmc_get_dev(mmc_host.dev_num);
+		if (mmc_dev == NULL)
 			/* 找不到 eMMC */
 			break;
 
-		ret = get_partition_info_efi_by_name(blk_dev, part_name, &disk_info);
+		ret = get_partition_info_efi_by_name(mmc_dev, part_name, &disk_info);
 		if (!ret)
 			/* 在 eMMC 中找到指定分区 */
 			return RET_SUCCESS;
@@ -213,13 +169,12 @@ static int check_file_size_is_valid(char *file_name, char *part_name,
 							const ulong file_size_in_bytes)
 {
 	int ret;
-    block_dev_desc_t *blk_dev;
+    block_dev_desc_t *mmc_dev;
     disk_partition_t disk_info = {0};
     ulong part_size_in_blocks = 0;
 	ulong part_size_in_bytes = 0;
     ulong file_size_in_blocks = 0;
 	uint32_t size_block, start_block;
-	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
 
 	switch (sfi->flash_type) {
 	case SMEM_BOOT_NAND_FLASH:
@@ -240,11 +195,11 @@ static int check_file_size_is_valid(char *file_name, char *part_name,
 	case SMEM_BOOT_NO_FLASH:
 	case SMEM_BOOT_SDC_FLASH:
 	default:
-		blk_dev = mmc_get_dev(mmc_host.dev_num);
-		if (blk_dev == NULL)
+		mmc_dev = mmc_get_dev(mmc_host.dev_num);
+		if (mmc_dev == NULL)
 			goto part_not_found;
 
-		ret = get_partition_info_efi_by_name(blk_dev, part_name, &disk_info);
+		ret = get_partition_info_efi_by_name(mmc_dev, part_name, &disk_info);
 		if (ret)
 			goto part_not_found;
 
@@ -291,15 +246,15 @@ static inline void handle_wrong_fw_type(const char *expected_file_type_str, cons
 		expected_file_type_str, actual_file_type_str);
 }
 
-static inline void handle_wrong_flash_type(const char *file_type, const uint32_t flash_type)
+static inline void handle_flash_not_found(const int fw_type, const char *flash_type_str)
 {
-	char *flash_type_str = flash_type_to_string(flash_type);
+	char *fw_type_str = fw_type_to_string(fw_type);
 	snprintf(info, sizeof(info),
-		"{\"type\":\"wrong_flash_type\","
+		"{\"type\":\"flash_not_found\","
 		"\"filetype\":\"%s\",\"flashtype\":\"%s\"}",
-		file_type, flash_type_str);
-	printf("Error: updating %s is NOT supported for %s FLASH yet!\n",
-		file_type, flash_type_str);
+		fw_type_str, flash_type_str);
+	printf("Error: upload file is %s, but no %s FLASH found\n",
+		fw_type_str, flash_type_str);
 }
 
 static inline void handle_runcmd_failed(const char *runcmd, const char *output)
@@ -354,15 +309,227 @@ static int get_jdc_fw_node_name(const void * data_addr)
 	return 0;
 }
 
+static int failsafe_validate_firmware(const void *data_addr, const ulong data_size)
+{
+    int ret;
+
+    switch (fw_type) {
+    case FW_TYPE_FACTORY_KERNEL6M:
+    case FW_TYPE_FACTORY_KERNEL12M:
+		if (!dfd->mmc) {
+			handle_flash_not_found(fw_type, "EMMC");
+			return RET_FLASH_NOT_FOUND;
+		}
+        ulong factory_kernel_size = 6 * 1024 * 1024;
+        if (fw_type == FW_TYPE_FACTORY_KERNEL12M)
+            factory_kernel_size = 12 * 1024 * 1024;
+        ret = check_file_size_is_valid("firmware kernel", "0:HLOS", factory_kernel_size);
+        if (ret)
+            break;
+        ret = check_file_size_is_valid("firmware rootfs", "rootfs", data_size - factory_kernel_size);
+        break;
+    case FW_TYPE_SYSUPGRADE:
+		if (!dfd->mmc) {
+			handle_flash_not_found(fw_type, "EMMC");
+			return RET_FLASH_NOT_FOUND;
+		}
+        const void *kernel_addr, *rootfs_addr;
+        size_t kernel_size, rootfs_size;
+        if (parse_tar_image(data_addr, (size_t)data_size,
+                            &kernel_addr, &kernel_size,
+                            &rootfs_addr, &rootfs_size)
+        ) {
+            strlcpy(info,
+                "{\"type\":\"wrong_file_type\","
+                "\"expected\":\"sysupgrade tar image\","
+                "\"actual\":\"not a valid sysupgrade tar image\"}",
+                sizeof(info));
+            printf("Error: not a valid sysupgrade tar image\n");
+            ret = RET_WRONG_FW_TYPE;
+            break;
+        }
+        ret = check_file_size_is_valid("firmware kernel", "0:HLOS", (ulong)kernel_size);
+        if (ret)
+            break;
+        ret = check_file_size_is_valid("firmware rootfs", "rootfs", (ulong)rootfs_size);
+        break;
+    case FW_TYPE_ASUSWRT_EMMC:
+		if (!dfd->mmc) {
+			handle_flash_not_found(fw_type, "EMMC");
+			return RET_FLASH_NOT_FOUND;
+		}
+        ret = check_part_exists("0:HLOS", 1);
+        if (ret)
+            break;
+        ret = check_part_exists("rootfs", 1);
+        break;
+    case FW_TYPE_QSDK:
+		if (!dfd->mmc) {
+			handle_flash_not_found(fw_type, "EMMC");
+			return RET_FLASH_NOT_FOUND;
+		}
+        ret = check_part_exists("0:HLOS", 1);
+        if (ret)
+            break;
+        ret = check_part_exists("rootfs", 1);
+        if (ret)
+            break;
+        ret = check_part_exists("0:WIFIFW", 1);
+        if (ret)
+            break;
+        ret = check_part_exists("rootfs_data", 1);
+        if (ret)
+            break;
+        ret = get_jdc_fw_node_name(data_addr);
+        break;
+    case FW_TYPE_UBI:
+        if (!dfd->nand) {
+			handle_flash_not_found(fw_type, "NAND");
+			return RET_FLASH_NOT_FOUND;
+		}
+        ret = check_file_size_is_valid("firmware", "rootfs", data_size);
+        break;
+    default:
+        handle_wrong_fw_type("FIRMWARE", fw_type);
+        ret = RET_WRONG_FW_TYPE;
+    }
+
+    return ret;
+}
+
+static int failsafe_validate_uboot(const void *data_addr, const ulong data_size)
+{
+    if (fw_type != FW_TYPE_ELF) {
+        handle_wrong_fw_type("U-BOOT ELF", fw_type);
+        return RET_WRONG_FW_TYPE;
+    }
+
+    return check_file_size_is_valid("U-BOOT", "0:APPSBL", data_size);
+}
+
+static int failsafe_validate_art(const void *data_addr, const ulong data_size)
+{
+    /*
+     * ART 没有固定的魔数，所以无法识别一个文件是否为 ART。
+     * 这里使用排除法，排除一些已知的、非 ART 的文件类型。
+     */
+    switch (fw_type) {
+    case FW_TYPE_ASUSWRT_EMMC:
+    case FW_TYPE_CDT:
+    case FW_TYPE_ELF:
+    case FW_TYPE_EMMC:
+    case FW_TYPE_FACTORY_KERNEL6M:
+    case FW_TYPE_FACTORY_KERNEL12M:
+    case FW_TYPE_LEGACY_IMAGE:
+    case FW_TYPE_FIT:
+    case FW_TYPE_QSDK:
+    case FW_TYPE_MIBIB_NAND:
+    case FW_TYPE_MIBIB_NOR:
+    case FW_TYPE_NAND:
+    case FW_TYPE_NOR:
+    case FW_TYPE_SYSUPGRADE:
+    case FW_TYPE_UBI:
+        handle_wrong_fw_type("ART", fw_type);
+        return RET_WRONG_FW_TYPE;
+    default:
+        return check_file_size_is_valid("ART", "0:ART", data_size);
+    }
+}
+
+static int failsafe_validate_cdt(const void *data_addr, const ulong data_size)
+{
+    if (fw_type != FW_TYPE_CDT) {
+        handle_wrong_fw_type("CDT", fw_type);
+        return RET_WRONG_FW_TYPE;
+    }
+
+    return check_file_size_is_valid("CDT", "0:CDT", data_size);
+}
+
+static int failsafe_validate_gpt(const void *data_addr, const ulong data_size)
+{
+    if (fw_type != FW_TYPE_EMMC) {
+        handle_wrong_fw_type("GPT", fw_type);
+        return RET_WRONG_FW_TYPE;
+    }
+
+    if (!dfd->mmc) {
+        handle_flash_not_found(fw_type, "EMMC");
+        return RET_FLASH_NOT_FOUND;
+    }
+
+    return RET_SUCCESS;
+}
+
+static int failsafe_validate_mibib(const void *data_addr, const ulong data_size)
+{
+    switch(fw_type) {
+    case FW_TYPE_MIBIB_NAND:
+        if (!dfd->nand) {
+			handle_flash_not_found(fw_type, "NAND");
+			return RET_FLASH_NOT_FOUND;
+		}
+        break;
+    case FW_TYPE_MIBIB_NOR:
+        if (!dfd->spi) {
+            handle_flash_not_found(fw_type, "SPI-NOR");
+			return RET_FLASH_NOT_FOUND;
+        }
+        break;
+    default:
+        handle_wrong_fw_type("MIBIB", fw_type);
+        return RET_WRONG_FW_TYPE;
+    }
+
+	return check_file_size_is_valid("MIBIB", "0:MIBIB", data_size);
+}
+
+static int failsafe_validate_simg(const void *data_addr, const ulong data_size)
+{
+    switch(fw_type) {
+    case FW_TYPE_EMMC:
+        if (!dfd->mmc) {
+			handle_flash_not_found(fw_type, "EMMC");
+			return RET_FLASH_NOT_FOUND;
+		}
+        break;
+    case FW_TYPE_NAND:
+        if (!dfd->nand) {
+			handle_flash_not_found(fw_type, "NAND");
+			return RET_FLASH_NOT_FOUND;
+		}
+        break;
+    case FW_TYPE_NOR:
+        if (!dfd->spi) {
+			handle_flash_not_found(fw_type, "SPI-NOR");
+			return RET_FLASH_NOT_FOUND;
+		}
+        break;
+    default:
+        handle_wrong_fw_type("Single Image", fw_type);
+        return RET_WRONG_FW_TYPE;
+    }
+
+	return RET_SUCCESS;
+}
+
+static int failsafe_validate_initramfs(const void *data_addr, const ulong data_size)
+{
+    if (fw_type != FW_TYPE_FIT) {
+        handle_wrong_fw_type("FIT INITRAMFS UIMAGE", fw_type);
+        return RET_WRONG_FW_TYPE;
+    }
+
+    return RET_SUCCESS;
+}
+
 int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 			const ulong data_size_in_bytes, struct httpd_response *response)
 {
-	static char hexchars[] = "0123456789abcdef";
-	static char md5_str[33] = "";
-	int ret = RET_SUCCESS;
-	int fw_type = check_fw_type(data_addr);
+	int ret;
 
-	memset(md5_str, 0, sizeof(md5_str));
+	fw_type = check_fw_type(data_addr);
+
 	memset(info, 0, sizeof(info));
 	memset(resp, 0, sizeof(resp));
 
@@ -373,164 +540,28 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 
 	switch (upgrade_type) {
 	case WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE:
-		switch (fw_type) {
-#if defined(MACHINE_FLASH_TYPE_EMMC) || \
-	defined(MACHINE_FLASH_TYPE_NORPLUSEMMC)
-		case FW_TYPE_FACTORY_KERNEL6M:
-		case FW_TYPE_FACTORY_KERNEL12M: {
-			ulong kernel_size_in_bytes = 6 * 1024 * 1024;
-			if (fw_type == FW_TYPE_FACTORY_KERNEL12M)
-				kernel_size_in_bytes = 12 * 1024 * 1024;
-			ret = check_file_size_is_valid("firmware kernel", "0:HLOS",
-								kernel_size_in_bytes);
-			if (ret)
-				break;
-			ret = check_file_size_is_valid("firmware rootfs", "rootfs",
-								data_size_in_bytes - kernel_size_in_bytes);
-			break;
-		}
-		case FW_TYPE_SYSUPGRADE: {
-			const void *kernel_addr, *rootfs_addr;
-			size_t kernel_size, rootfs_size;
-			if (parse_tar_image(data_addr, (size_t)data_size_in_bytes,
-								&kernel_addr, &kernel_size,
-								&rootfs_addr, &rootfs_size)
-			) {
-				strlcpy(info,
-					"{\"type\":\"wrong_file_type\","
-					"\"expected\":\"sysupgrade tar image\","
-					"\"actual\":\"not a valid sysupgrade tar image\"}",
-					sizeof(info));
-				printf("Error: not a valid sysupgrade tar image\n");
-				ret = RET_WRONG_FW_TYPE;
-				break;
-			}
-			ret = check_file_size_is_valid("firmware kernel", "0:HLOS", (ulong)kernel_size);
-			if (ret)
-				break;
-			ret = check_file_size_is_valid("firmware rootfs", "rootfs", (ulong)rootfs_size);
-			break;
-		}
-		case FW_TYPE_ASUSWRT_EMMC:
-			ret = check_part_exists("0:HLOS", 1);
-			if (ret)
-				break;
-			ret = check_part_exists("rootfs", 1);
-			break;
-		case FW_TYPE_QSDK:
-			ret = check_part_exists("0:HLOS", 1);
-			if (ret)
-				break;
-			ret = check_part_exists("rootfs", 1);
-			if (ret)
-				break;
-			ret = check_part_exists("0:WIFIFW", 1);
-			if (ret)
-				break;
-			ret = check_part_exists("rootfs_data", 1);
-			if (ret)
-				break;
-			ret = get_jdc_fw_node_name(data_addr);
-			break;
-#endif
-#if defined(MACHINE_FLASH_TYPE_NAND)
-		case FW_TYPE_UBI:
-			ret = check_file_size_is_valid("firmware", "rootfs", data_size_in_bytes);
-			break;
-#endif
-		default:
-			handle_wrong_fw_type("FIRMWARE", fw_type);
-			ret = RET_WRONG_FW_TYPE;
-		}
+		ret = failsafe_validate_firmware(data_addr, data_size_in_bytes);
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_UBOOT:
-		if (fw_type != FW_TYPE_ELF) {
-			handle_wrong_fw_type("U-BOOT ELF", fw_type);
-			ret = RET_WRONG_FW_TYPE;
-			break;
-		}
-		ret = check_file_size_is_valid("U-BOOT", "0:APPSBL", data_size_in_bytes);
+		ret = failsafe_validate_uboot(data_addr, data_size_in_bytes);
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_ART:
-		/*
-		 * ART 没有固定的魔数，所以无法识别一个文件是否为 ART。
-		 * 这里使用排除法，排除一些已知的、非 ART 的文件类型。
-		 */
-		switch (fw_type) {
-		case FW_TYPE_ASUSWRT_EMMC:
-		case FW_TYPE_CDT:
-		case FW_TYPE_ELF:
-		case FW_TYPE_EMMC:
-		case FW_TYPE_FACTORY_KERNEL6M:
-		case FW_TYPE_FACTORY_KERNEL12M:
-		case FW_TYPE_LEGACY_IMAGE:
-		case FW_TYPE_FIT:
-		case FW_TYPE_QSDK:
-		case FW_TYPE_MIBIB_NAND:
-		case FW_TYPE_MIBIB_NOR:
-		case FW_TYPE_NAND:
-		case FW_TYPE_NOR:
-		case FW_TYPE_SYSUPGRADE:
-		case FW_TYPE_UBI:
-			handle_wrong_fw_type("ART", fw_type);
-			ret = RET_WRONG_FW_TYPE;
-			break;
-		default:
-			ret = check_file_size_is_valid("ART", "0:ART", data_size_in_bytes);
-		}
+		ret = failsafe_validate_art(data_addr, data_size_in_bytes);
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_CDT:
-		if (fw_type != FW_TYPE_CDT) {
-			handle_wrong_fw_type("CDT", fw_type);
-			ret = RET_WRONG_FW_TYPE;
-			break;
-		}
-		ret = check_file_size_is_valid("CDT", "0:CDT", data_size_in_bytes);
+		ret = failsafe_validate_cdt(data_addr, data_size_in_bytes);
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_GPT:
-		if (fw_type != FW_TYPE_EMMC) {
-			handle_wrong_fw_type("GPT", fw_type);
-			ret = RET_WRONG_FW_TYPE;
-			break;
-		}
+		ret = failsafe_validate_gpt(data_addr, data_size_in_bytes);
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_MIBIB:
-		if (fw_type != FW_TYPE_MIBIB_NAND && fw_type != FW_TYPE_MIBIB_NOR) {
-			handle_wrong_fw_type("MIBIB", fw_type);
-			ret = RET_WRONG_FW_TYPE;
-			break;
-		}
-		ret = check_file_size_is_valid("MIBIB", "0:MIBIB", data_size_in_bytes);
+		ret = failsafe_validate_mibib(data_addr, data_size_in_bytes);
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_SIMG:
-#if defined(MACHINE_FLASH_TYPE_EMMC)
-		if (fw_type != FW_TYPE_EMMC) {
-			handle_wrong_fw_type("EMMC IMG", fw_type);
-			ret = RET_WRONG_FW_TYPE;
-			break;
-		}
-#endif
-#if defined(MACHINE_FLASH_TYPE_NAND)
-		if (fw_type != FW_TYPE_NAND) {
-			handle_wrong_fw_type("NAND IMG", fw_type);
-			ret = RET_WRONG_FW_TYPE;
-			break;
-		}
-#endif
-#if defined(MACHINE_FLASH_TYPE_NORPLUSEMMC)
-		if (fw_type != FW_TYPE_EMMC && fw_type != FW_TYPE_NOR) {
-			handle_wrong_fw_type("EMMC IMG or NOR IMG", fw_type);
-			ret = RET_WRONG_FW_TYPE;
-			break;
-		}
-#endif
+		ret = failsafe_validate_simg(data_addr, data_size_in_bytes);
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS:
-		if (fw_type != FW_TYPE_FIT) {
-			handle_wrong_fw_type("FIT INITRAMFS UIMAGE", fw_type);
-			ret = RET_WRONG_FW_TYPE;
-			break;
-		}
+		ret = failsafe_validate_initramfs(data_addr, data_size_in_bytes);
 		break;
 	default:
 		strlcpy(info, "{\"type\":\"wrong_upgrade_type\"}", sizeof(info));
@@ -539,8 +570,11 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 	}
 
 	if (!ret) {
+		char *hexchars = "0123456789abcdef";
+		char md5_str[33];
 		u8 md5_sum[16];
 
+		memset(md5_str, 0, sizeof(md5_str));
 		md5((u8 *)data_addr, data_size_in_bytes, md5_sum);
 
 		for (int i = 0; i < 16; i++) {
@@ -598,79 +632,74 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 		"* DO NOT POWER OFF DEVICE! *\n"
 		"****************************\n");
 
-	switch (flash_type) {
-#if defined(MACHINE_FLASH_TYPE_EMMC) || \
-	defined(MACHINE_FLASH_TYPE_NORPLUSEMMC)
-	case SMEM_BOOT_MMC_FLASH:
-	case SMEM_BOOT_NORPLUSEMMC:
-		switch (fw_type) {
-		case FW_TYPE_FACTORY_KERNEL6M:
-		case FW_TYPE_FACTORY_KERNEL12M: {
-			ulong kernel_size = 6 * 1024 * 1024;
-			if (fw_type == FW_TYPE_FACTORY_KERNEL12M)
-				kernel_size = 12 * 1024 * 1024;
-			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-				"flash 0:HLOS 0x%lx 0x%lx",
-				data_addr, kernel_size);
-			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-				"flash rootfs 0x%lx 0x%lx",
-				data_addr + kernel_size,
-				data_size - kernel_size);
-			strlcpy(runcmd.list[runcmd.count++],
-				"bootconfig set primary", MAX_CMD_LEN);
-			break;
+	switch (fw_type) {
+	case FW_TYPE_FACTORY_KERNEL6M:
+	case FW_TYPE_FACTORY_KERNEL12M:
+		if (!dfd->mmc) {
+			handle_flash_not_found(fw_type, "EMMC");
+			return RET_FLASH_NOT_FOUND;
 		}
-		case FW_TYPE_QSDK:
-			setenv("verbose", "1"); /* 执行 xtract_n_flash 时输出详细信息 */
-			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-				"xtract_n_flash 0x%lx %s 0:HLOS",
-				data_addr, jdc_fw.hlos_name);
-			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-				"xtract_n_flash 0x%lx %s rootfs",
-				data_addr, jdc_fw.rootfs_name);
-			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-				"xtract_n_flash 0x%lx %s 0:WIFIFW",
-				data_addr, jdc_fw.wififw_name);
-			strlcpy(runcmd.list[runcmd.count++],
-				"flasherase rootfs_data", MAX_CMD_LEN);
-			strlcpy(runcmd.list[runcmd.count++],
-				"bootconfig set primary", MAX_CMD_LEN);
-			break;
-		case FW_TYPE_SYSUPGRADE:
-		case FW_TYPE_ASUSWRT_EMMC:
-			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-				"untar 0x%lx 0x%lx",
-				data_addr, data_size);
-			strlcpy(runcmd.list[runcmd.count++],
-				"flash 0:HLOS $kernel_addr $kernel_size", MAX_CMD_LEN);
-			strlcpy(runcmd.list[runcmd.count++],
-				"flash rootfs $rootfs_addr $rootfs_size", MAX_CMD_LEN);
-			strlcpy(runcmd.list[runcmd.count++],
-				"bootconfig set primary", MAX_CMD_LEN);
-			break;
-		default:
-			handle_wrong_fw_type("FIRMWARE", fw_type);
-			return RET_WRONG_FW_TYPE;
-		}
+		ulong kernel_size = 6 * 1024 * 1024;
+		if (fw_type == FW_TYPE_FACTORY_KERNEL12M)
+			kernel_size = 12 * 1024 * 1024;
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"flash 0:HLOS 0x%lx 0x%lx",
+			data_addr, kernel_size);
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"flash rootfs 0x%lx 0x%lx",
+			data_addr + kernel_size,
+			data_size - kernel_size);
+		strlcpy(runcmd.list[runcmd.count++],
+			"bootconfig set primary", MAX_CMD_LEN);
 		break;
-#endif
-#if defined(MACHINE_FLASH_TYPE_NAND)
-	case SMEM_BOOT_NAND_FLASH:
-		if (fw_type == FW_TYPE_UBI) {
-			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-				"flash rootfs 0x%lx 0x%lx",
-				data_addr, data_size);
-			strlcpy(runcmd.list[runcmd.count++],
-				"bootconfig set primary", MAX_CMD_LEN);
-		} else {
-			handle_wrong_fw_type("UBI FIRMWARE", fw_type);
-			return RET_WRONG_FW_TYPE;
+	case FW_TYPE_QSDK:
+		if (!dfd->mmc) {
+			handle_flash_not_found(fw_type, "EMMC");
+			return RET_FLASH_NOT_FOUND;
 		}
+		setenv("verbose", "1"); /* 执行 xtract_n_flash 时输出详细信息 */
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"xtract_n_flash 0x%lx %s 0:HLOS",
+			data_addr, jdc_fw.hlos_name);
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"xtract_n_flash 0x%lx %s rootfs",
+			data_addr, jdc_fw.rootfs_name);
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"xtract_n_flash 0x%lx %s 0:WIFIFW",
+			data_addr, jdc_fw.wififw_name);
+		strlcpy(runcmd.list[runcmd.count++],
+			"flasherase rootfs_data", MAX_CMD_LEN);
+		strlcpy(runcmd.list[runcmd.count++],
+			"bootconfig set primary", MAX_CMD_LEN);
 		break;
-#endif
+	case FW_TYPE_SYSUPGRADE:
+	case FW_TYPE_ASUSWRT_EMMC:
+		if (!dfd->mmc) {
+			handle_flash_not_found(fw_type, "EMMC");
+			return RET_FLASH_NOT_FOUND;
+		}
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"untar 0x%lx 0x%lx", data_addr, data_size);
+		strlcpy(runcmd.list[runcmd.count++],
+			"flash 0:HLOS $kernel_addr $kernel_size", MAX_CMD_LEN);
+		strlcpy(runcmd.list[runcmd.count++],
+			"flash rootfs $rootfs_addr $rootfs_size", MAX_CMD_LEN);
+		strlcpy(runcmd.list[runcmd.count++],
+			"bootconfig set primary", MAX_CMD_LEN);
+		break;
+	case FW_TYPE_UBI:
+		if (!dfd->nand) {
+			handle_flash_not_found(fw_type, "NAND");
+			return RET_FLASH_NOT_FOUND;
+		}
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"flash rootfs 0x%lx 0x%lx", data_addr, data_size);
+		strlcpy(runcmd.list[runcmd.count++],
+			"bootconfig set primary", MAX_CMD_LEN);
+		break;
 	default:
-		handle_wrong_flash_type("FIRMWARE", flash_type);
-		return RET_WRONG_FLASH_TYPE;
+		handle_wrong_fw_type("FIRMWARE", fw_type);
+		return RET_WRONG_FW_TYPE;
 	}
 
 	return failsafe_run_command_list(runcmd);
@@ -678,38 +707,26 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 
 static int failsafe_write_uboot(const ulong data_addr, const ulong data_size)
 {
-	int ret;
-
-    if (fw_type != FW_TYPE_ELF) {
-		handle_wrong_fw_type("U-BOOT ELF", fw_type);
-        return RET_WRONG_FW_TYPE;
-	}
-
 	printf("\n"
         "****************************\n"
         "*     U-BOOT UPGRADING     *\n"
         "* DO NOT POWER OFF DEVICE! *\n"
         "****************************\n");
 
-	switch (flash_type) {
-	case SMEM_BOOT_MMC_FLASH:
-	case SMEM_BOOT_NAND_FLASH:
-	case SMEM_BOOT_NORPLUSEMMC:
-	case SMEM_BOOT_SPI_FLASH:
-		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-			"flash 0:APPSBL 0x%lx 0x%lx",
-			data_addr, data_size);
-		ret = check_part_exists("0:APPSBL_1", 0);
-		if (ret)
-			break;
-		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-			"flash 0:APPSBL_1 0x%lx 0x%lx",
-			data_addr, data_size);
-		break;
-	default:
-		handle_wrong_flash_type("U-BOOT", flash_type);
-		return RET_WRONG_FLASH_TYPE;
+    if (fw_type != FW_TYPE_ELF) {
+		handle_wrong_fw_type("U-BOOT ELF", fw_type);
+        return RET_WRONG_FW_TYPE;
 	}
+
+	int ret;
+
+	snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+		"flash 0:APPSBL 0x%lx 0x%lx", data_addr, data_size);
+
+	ret = check_part_exists("0:APPSBL_1", 0);
+	if (!ret)
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"flash 0:APPSBL_1 0x%lx 0x%lx", data_addr, data_size);
 
 	return failsafe_run_command_list(runcmd);
 }
@@ -723,203 +740,158 @@ static int failsafe_write_art(const ulong data_addr, const ulong data_size)
         "****************************\n"
     );
 
-	switch (flash_type) {
-	case SMEM_BOOT_MMC_FLASH:
-	case SMEM_BOOT_NAND_FLASH:
-	case SMEM_BOOT_NORPLUSEMMC:
-	case SMEM_BOOT_SPI_FLASH:
-		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-			"flash 0:ART 0x%lx 0x%lx",
-			data_addr, data_size);
-		break;
-	default:
-		handle_wrong_flash_type("ART", flash_type);
-		return RET_WRONG_FLASH_TYPE;
-	}
+	snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+		"flash 0:ART 0x%lx 0x%lx", data_addr, data_size);
 
 	return failsafe_run_command_list(runcmd);
 }
 
 static int failsafe_write_cdt(const ulong data_addr, const ulong data_size)
 {
-	int ret;
-
-    if (fw_type != FW_TYPE_CDT) {
-		handle_wrong_fw_type("CDT", fw_type);
-        return RET_WRONG_FW_TYPE;
-	}
-
 	printf("\n"
         "****************************\n"
         "*      CDT  UPGRADING      *\n"
         "* DO NOT POWER OFF DEVICE! *\n"
         "****************************\n");
 
-	switch (flash_type) {
-	case SMEM_BOOT_MMC_FLASH:
-	case SMEM_BOOT_NAND_FLASH:
-	case SMEM_BOOT_NORPLUSEMMC:
-	case SMEM_BOOT_SPI_FLASH:
-		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-			"flash 0:CDT 0x%lx 0x%lx",
-			data_addr, data_size);
-		ret = check_part_exists("0:CDT_1", 0);
-		if (ret)
-			break;
-		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-			"flash 0:CDT_1 0x%lx 0x%lx",
-			data_addr, data_size);
-		break;
-	default:
-		handle_wrong_flash_type("CDT", flash_type);
-		return RET_WRONG_FLASH_TYPE;
+    if (fw_type != FW_TYPE_CDT) {
+		handle_wrong_fw_type("CDT", fw_type);
+        return RET_WRONG_FW_TYPE;
 	}
+
+	int ret;
+
+	snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+		"flash 0:CDT 0x%lx 0x%lx", data_addr, data_size);
+
+	ret = check_part_exists("0:CDT_1", 0);
+	if (!ret)
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"flash 0:CDT_1 0x%lx 0x%lx", data_addr, data_size);
 
 	return failsafe_run_command_list(runcmd);
 }
 
 static int failsafe_write_gpt(const ulong data_addr, const ulong data_size)
 {
-	block_dev_desc_t *blk_dev;
-    ulong data_size_in_blocks;
-
-	if (fw_type != FW_TYPE_EMMC) {
-		handle_wrong_fw_type("GPT", fw_type);
-		return RET_WRONG_FW_TYPE;
-	}
-
-    blk_dev = mmc_get_dev(mmc_host.dev_num);
-    if (blk_dev == NULL)
-        data_size_in_blocks = 0;
-    else
-        data_size_in_blocks = data_size / blk_dev->blksz
-                             + (data_size % blk_dev->blksz != 0);
-
 	printf("\n"
 		"****************************\n"
 		"*       GPT UPGRADING      *\n"
 		"* DO NOT POWER OFF DEVICE! *\n"
 		"****************************\n");
 
-	switch (flash_type) {
-	case SMEM_BOOT_MMC_FLASH:
-	case SMEM_BOOT_NORPLUSEMMC:
-		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-			"mmc erase 0x0 0x%lx && "
-			"mmc write 0x%lx 0x0 0x%lx",
-			data_size_in_blocks,
-			data_addr, data_size_in_blocks);
-		break;
-	default:
-		handle_wrong_flash_type("GPT", flash_type);
-		return RET_WRONG_FLASH_TYPE;
-	}
+	if (fw_type != FW_TYPE_EMMC) {
+        handle_wrong_fw_type("GPT", fw_type);
+        return RET_WRONG_FW_TYPE;
+    }
+
+    if (!dfd->mmc) {
+        handle_flash_not_found(fw_type, "EMMC");
+        return RET_FLASH_NOT_FOUND;
+    }
+
+	block_dev_desc_t *mmc_dev;
+    ulong data_size_in_blocks;
+
+    mmc_dev = mmc_get_dev(mmc_host.dev_num);
+    if (mmc_dev == NULL)
+        data_size_in_blocks = 0;
+    else
+        data_size_in_blocks = data_size / mmc_dev->blksz
+                             + (data_size % mmc_dev->blksz != 0);
+
+	snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+		"mmc erase 0x0 0x%lx && "
+		"mmc write 0x%lx 0x0 0x%lx",
+		data_size_in_blocks,
+		data_addr, data_size_in_blocks);
 
 	return failsafe_run_command_list(runcmd);
 }
 
 static int failsafe_write_mibib(const ulong data_addr, const ulong data_size)
 {
-	if (fw_type != FW_TYPE_MIBIB_NAND &&
-		fw_type != FW_TYPE_MIBIB_NOR
-	) {
-		handle_wrong_fw_type("MIBIB", fw_type);
-		return RET_WRONG_FW_TYPE;
-	}
-
 	printf("\n"
 		"****************************\n"
 		"*      MIBIB UPGRADING     *\n"
 		"* DO NOT POWER OFF DEVICE! *\n"
 		"****************************\n");
 
-	switch (flash_type) {
-	case SMEM_BOOT_NAND_FLASH:
-	case SMEM_BOOT_NORPLUSEMMC:
-	case SMEM_BOOT_SPI_FLASH:
-		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-			"flash 0:MIBIB 0x%lx 0x%lx",
-			data_addr, data_size);
-		break;
-	default:
-		handle_wrong_flash_type("MIBIB", flash_type);
-		return RET_WRONG_FLASH_TYPE;
-	}
+	switch(fw_type) {
+    case FW_TYPE_MIBIB_NAND:
+        if (!dfd->nand) {
+			handle_flash_not_found(fw_type, "NAND");
+			return RET_FLASH_NOT_FOUND;
+		}
+        break;
+    case FW_TYPE_MIBIB_NOR:
+        if (!dfd->spi) {
+            handle_flash_not_found(fw_type, "SPI-NOR");
+			return RET_FLASH_NOT_FOUND;
+        }
+        break;
+    default:
+        handle_wrong_fw_type("MIBIB", fw_type);
+        return RET_WRONG_FW_TYPE;
+    }
+
+	snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+		"flash 0:MIBIB 0x%lx 0x%lx", data_addr, data_size);
 
 	return failsafe_run_command_list(runcmd);
 }
 
 static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 {
-#if defined(MACHINE_FLASH_TYPE_EMMC) || \
-	defined(MACHINE_FLASH_TYPE_NORPLUSEMMC)
-    block_dev_desc_t *blk_dev;
-    ulong data_size_in_blocks;
-
-    blk_dev = mmc_get_dev(mmc_host.dev_num);
-    if (blk_dev == NULL)
-        data_size_in_blocks = 0;
-    else
-        data_size_in_blocks = data_size / blk_dev->blksz
-                             + (data_size % blk_dev->blksz != 0);
-#endif
-
 	printf("\n"
 		"*****************************\n"
 		"*       SIMG UPGRADING      *\n"
 		"* DO NOT POWER OFF DEVICE ! *\n"
 		"*****************************\n");
 
-	switch (flash_type) {
-#if defined(MACHINE_FLASH_TYPE_EMMC)
-	case SMEM_BOOT_MMC_FLASH:
-		if (fw_type == FW_TYPE_EMMC) {
-			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-				"mmc erase 0x0 0x%lx && "
-				"mmc write 0x%lx 0x0 0x%lx",
-				data_size_in_blocks,
-				data_addr, data_size_in_blocks);
-		} else {
-			handle_wrong_fw_type("EMMC IMG", fw_type);
-			return RET_WRONG_FW_TYPE;
+	switch (fw_type) {
+	case FW_TYPE_EMMC:
+		if (!dfd->mmc) {
+			handle_flash_not_found(fw_type, "EMMC");
+			return RET_FLASH_NOT_FOUND;
 		}
+		block_dev_desc_t *mmc_dev;
+		ulong data_size_in_blocks;
+		mmc_dev = mmc_get_dev(mmc_host.dev_num);
+		if (mmc_dev == NULL)
+			data_size_in_blocks = 0;
+		else
+			data_size_in_blocks = data_size / mmc_dev->blksz
+								+ (data_size % mmc_dev->blksz != 0);
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"mmc erase 0x0 0x%lx && "
+			"mmc write 0x%lx 0x0 0x%lx",
+			data_size_in_blocks,
+			data_addr, data_size_in_blocks);
 		break;
-#endif
-#if defined(MACHINE_FLASH_TYPE_NAND)
-	case SMEM_BOOT_NAND_FLASH:
-		if (fw_type == FW_TYPE_NAND) {
-			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-				"nand erase 0x0 0x%lx && "
-				"nand write 0x%lx 0x0 0x%lx",
-				data_size,
-				data_addr, data_size);
-		} else {
-			handle_wrong_fw_type("NAND IMG", fw_type);
-			return RET_WRONG_FW_TYPE;
+	case FW_TYPE_NAND:
+		if (!dfd->nand) {
+			handle_flash_not_found(fw_type, "NAND");
+			return RET_FLASH_NOT_FOUND;
 		}
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"nand erase 0x0 0x%lx && "
+			"nand write 0x%lx 0x0 0x%lx",
+			data_size,
+			data_addr, data_size);
 		break;
-#endif
-#if defined(MACHINE_FLASH_TYPE_NORPLUSEMMC)
-	case SMEM_BOOT_NORPLUSEMMC:
-		if (fw_type == FW_TYPE_EMMC) {
-			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-				"mmc erase 0x0 0x%lx && "
-				"mmc write 0x%lx 0x0 0x%lx",
-				data_size_in_blocks,
-				data_addr, data_size_in_blocks);
-		} else if (fw_type == FW_TYPE_NOR) {
-			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-				"sf probe && sf update 0x%lx 0x0 0x%lx",
-				data_addr, data_size);
-		} else {
-			handle_wrong_fw_type("EMMC IMG or NOR IMG", fw_type);
-			return RET_WRONG_FW_TYPE;
+	case FW_TYPE_NOR:
+		if (!dfd->spi) {
+			handle_flash_not_found(fw_type, "SPI-NOR");
+			return RET_FLASH_NOT_FOUND;
 		}
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"sf probe && sf update 0x%lx 0x0 0x%lx",
+			data_addr, data_size);
 		break;
-#endif
 	default:
-		handle_wrong_flash_type("Single Image", flash_type);
-		return RET_WRONG_FLASH_TYPE;
+		handle_wrong_fw_type("Single Image", fw_type);
+		return RET_WRONG_FW_TYPE;
 	}
 
 	return failsafe_run_command_list(runcmd);
@@ -932,7 +904,6 @@ int failsafe_write_image(const int upgrade_type, const ulong data_addr,
 
 	runcmd.count = 0;
 	fw_type = check_fw_type((const void *)data_addr);
-	flash_type = check_flash_type();
 
 	memset(info, 0, sizeof(info));
 	memset(resp, 0, sizeof(resp));
