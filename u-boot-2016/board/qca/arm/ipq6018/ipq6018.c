@@ -740,8 +740,10 @@ void enable_caches(void)
 			    &sfi->flash_block_size,
 			    &sfi->flash_density);
 	icache_enable();
-	/*Skips dcache_enable during JTAG recovery */
+	/* Skips dcache_enable during JTAG recovery */
+#ifndef CONFIG_HTTPD
 	if (sfi->flash_type)
+#endif
 		dcache_enable();
 }
 
