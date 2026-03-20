@@ -446,42 +446,31 @@ static int failsafe_validate_cdt(const void *data_addr, const ulong data_size)
     return check_file_size_is_valid("CDT", "0:CDT", data_size);
 }
 
-static int failsafe_validate_gpt(const void *data_addr, const ulong data_size)
+static int failsafe_validate_ptable(const void *data_addr, const ulong data_size)
 {
-    if (fw_type != FW_TYPE_EMMC) {
-        handle_wrong_fw_type("GPT", fw_type);
-        return RET_WRONG_FW_TYPE;
-    }
-
-    if (!dfd->mmc) {
-        handle_flash_not_found(fw_type, "EMMC");
-        return RET_FLASH_NOT_FOUND;
-    }
-
-    return RET_SUCCESS;
-}
-
-static int failsafe_validate_mibib(const void *data_addr, const ulong data_size)
-{
-    switch(fw_type) {
+	switch(fw_type) {
+	case FW_TYPE_EMMC:
+		if (!dfd->mmc) {
+			handle_flash_not_found(fw_type, "EMMC");
+			return RET_FLASH_NOT_FOUND;
+		}
+		return RET_SUCCESS;
     case FW_TYPE_MIBIB_NAND:
         if (!dfd->nand) {
 			handle_flash_not_found(fw_type, "NAND");
 			return RET_FLASH_NOT_FOUND;
 		}
-        break;
+        return check_file_size_is_valid("MIBIB", "0:MIBIB", data_size);
     case FW_TYPE_MIBIB_NOR:
         if (!dfd->spi) {
             handle_flash_not_found(fw_type, "SPI-NOR");
 			return RET_FLASH_NOT_FOUND;
         }
-        break;
+        return check_file_size_is_valid("MIBIB", "0:MIBIB", data_size);
     default:
-        handle_wrong_fw_type("MIBIB", fw_type);
+        handle_wrong_fw_type("PTABLE", fw_type);
         return RET_WRONG_FW_TYPE;
     }
-
-	return check_file_size_is_valid("MIBIB", "0:MIBIB", data_size);
 }
 
 static int failsafe_validate_simg(const void *data_addr, const ulong data_size)
@@ -551,11 +540,8 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 	case WEBFAILSAFE_UPGRADE_TYPE_CDT:
 		ret = failsafe_validate_cdt(data_addr, data_size_in_bytes);
 		break;
-	case WEBFAILSAFE_UPGRADE_TYPE_GPT:
-		ret = failsafe_validate_gpt(data_addr, data_size_in_bytes);
-		break;
-	case WEBFAILSAFE_UPGRADE_TYPE_MIBIB:
-		ret = failsafe_validate_mibib(data_addr, data_size_in_bytes);
+	case WEBFAILSAFE_UPGRADE_TYPE_PTABLE:
+		ret = failsafe_validate_ptable(data_addr, data_size_in_bytes);
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_SIMG:
 		ret = failsafe_validate_simg(data_addr, data_size_in_bytes);
@@ -772,24 +758,8 @@ static int failsafe_write_cdt(const ulong data_addr, const ulong data_size)
 	return failsafe_run_command_list(runcmd);
 }
 
-static int failsafe_write_gpt(const ulong data_addr, const ulong data_size)
+static void handle_gpt_write_cmd(const ulong data_addr, const ulong data_size)
 {
-	printf("\n"
-		"****************************\n"
-		"*       GPT UPGRADING      *\n"
-		"* DO NOT POWER OFF DEVICE! *\n"
-		"****************************\n");
-
-	if (fw_type != FW_TYPE_EMMC) {
-        handle_wrong_fw_type("GPT", fw_type);
-        return RET_WRONG_FW_TYPE;
-    }
-
-    if (!dfd->mmc) {
-        handle_flash_not_found(fw_type, "EMMC");
-        return RET_FLASH_NOT_FOUND;
-    }
-
 	block_dev_desc_t *mmc_dev;
     ulong data_size_in_blocks;
 
@@ -805,38 +775,44 @@ static int failsafe_write_gpt(const ulong data_addr, const ulong data_size)
 		"mmc write 0x%lx 0x0 0x%lx",
 		data_size_in_blocks,
 		data_addr, data_size_in_blocks);
-
-	return failsafe_run_command_list(runcmd);
 }
 
-static int failsafe_write_mibib(const ulong data_addr, const ulong data_size)
+static int failsafe_write_ptable(const ulong data_addr, const ulong data_size)
 {
 	printf("\n"
 		"****************************\n"
-		"*      MIBIB UPGRADING     *\n"
+		"*     PTABLE UPGRADING     *\n"
 		"* DO NOT POWER OFF DEVICE! *\n"
 		"****************************\n");
 
 	switch(fw_type) {
+	case FW_TYPE_EMMC:
+		if (!dfd->mmc) {
+			handle_flash_not_found(fw_type, "EMMC");
+			return RET_FLASH_NOT_FOUND;
+		}
+		handle_gpt_write_cmd(data_addr, data_size);
+		break;
     case FW_TYPE_MIBIB_NAND:
         if (!dfd->nand) {
 			handle_flash_not_found(fw_type, "NAND");
 			return RET_FLASH_NOT_FOUND;
 		}
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"flash 0:MIBIB 0x%lx 0x%lx", data_addr, data_size);
         break;
     case FW_TYPE_MIBIB_NOR:
         if (!dfd->spi) {
             handle_flash_not_found(fw_type, "SPI-NOR");
 			return RET_FLASH_NOT_FOUND;
         }
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"flash 0:MIBIB 0x%lx 0x%lx", data_addr, data_size);
         break;
     default:
-        handle_wrong_fw_type("MIBIB", fw_type);
+        handle_wrong_fw_type("PTABLE", fw_type);
         return RET_WRONG_FW_TYPE;
     }
-
-	snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-		"flash 0:MIBIB 0x%lx 0x%lx", data_addr, data_size);
 
 	return failsafe_run_command_list(runcmd);
 }
@@ -855,19 +831,7 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 			handle_flash_not_found(fw_type, "EMMC");
 			return RET_FLASH_NOT_FOUND;
 		}
-		block_dev_desc_t *mmc_dev;
-		ulong data_size_in_blocks;
-		mmc_dev = mmc_get_dev(mmc_host.dev_num);
-		if (mmc_dev == NULL)
-			data_size_in_blocks = 0;
-		else
-			data_size_in_blocks = data_size / mmc_dev->blksz
-								+ (data_size % mmc_dev->blksz != 0);
-		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-			"mmc erase 0x0 0x%lx && "
-			"mmc write 0x%lx 0x0 0x%lx",
-			data_size_in_blocks,
-			data_addr, data_size_in_blocks);
+		handle_gpt_write_cmd(data_addr, data_size);
 		break;
 	case FW_TYPE_NAND:
 		if (!dfd->nand) {
@@ -921,11 +885,8 @@ int failsafe_write_image(const int upgrade_type, const ulong data_addr,
     case WEBFAILSAFE_UPGRADE_TYPE_CDT:
         ret = failsafe_write_cdt(data_addr, data_size);
         break;
-    case WEBFAILSAFE_UPGRADE_TYPE_GPT:
-        ret = failsafe_write_gpt(data_addr, data_size);
-        break;
-    case WEBFAILSAFE_UPGRADE_TYPE_MIBIB:
-        ret = failsafe_write_mibib(data_addr, data_size);
+    case WEBFAILSAFE_UPGRADE_TYPE_PTABLE:
+        ret = failsafe_write_ptable(data_addr, data_size);
         break;
     case WEBFAILSAFE_UPGRADE_TYPE_SIMG:
         ret = failsafe_write_simg(data_addr, data_size);

@@ -329,15 +329,9 @@ static void upload_handler(enum httpd_uri_handler_status status,
 			goto done;
 		}
 
-		form_value = httpd_request_find_value(request, "gpt");
+		form_value = httpd_request_find_value(request, "ptable");
 		if (form_value) {
-			upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_GPT;
-			goto done;
-		}
-
-		form_value = httpd_request_find_value(request, "mibib");
-		if (form_value) {
-			upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_MIBIB;
+			upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_PTABLE;
 			goto done;
 		}
 
@@ -534,8 +528,7 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/flashing.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/art.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/cdt.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/gpt.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/mibib.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/ptable.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/simg.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/initramfs.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/reboot.html", &html_handler, NULL);
