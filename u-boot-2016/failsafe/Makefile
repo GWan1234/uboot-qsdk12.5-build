@@ -2,6 +2,7 @@
 
 ifneq ($(CONFIG_SPL_BUILD),y)
 
+obj-y += modules/
 obj-y += fs.o failsafe.o
 
 FS_GEN_SCRIPT := makefsdata

@@ -1031,6 +1031,153 @@ html[data-theme="dark"] .separator {
     to { transform: rotate(359deg); }
 }
 
+/* ====== 环境变量管理页面样式 ====== */
+
+/* 环境变量工具栏 */
+.env-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+}
+
+.env-count {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.env-status {
+    color: var(--muted);
+}
+
+.env-toolbar .sep {
+    color: var(--border);
+    opacity: 0.5;
+}
+
+/* 环境变量输出区域 */
+.env-output {
+    width: 100%;
+    min-height: 200px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 0.75rem 1rem;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin-bottom: 1rem;
+    resize: vertical;
+}
+
+.env-output:empty::before {
+    content: attr(data-placeholder);
+    color: var(--muted);
+    opacity: 0.6;
+}
+
+/* 表单行布局 */
+.form-row {
+    width: 100%;
+    margin-bottom: 1rem;
+}
+
+.form-row-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+/* 字段容器 */
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.field label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.field-control {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border-radius: 0.25rem;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 0.85rem;
+    transition: border-color var(--anim), box-shadow var(--anim);
+    outline: none;
+    box-sizing: border-box;
+}
+
+.field-control:hover,
+.field-control:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(49, 161, 161, 0.12);
+}
+
+/* 按钮组 */
+.form-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    margin: 1rem 0;
+}
+
+/* 警告按钮变体 */
+.button-warn {
+    background-color: #f59e0b !important;
+}
+
+.button-warn:hover {
+    background-color: #d97706 !important;
+}
+
+/* 危险按钮变体 */
+.button-danger {
+    background-color: var(--danger) !important;
+}
+
+.button-danger:hover {
+    background-color: #dc2626 !important;
+}
+
+/* 恢复提示 */
+.env-restore-hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background: var(--panel-2);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--primary);
+}
+
+/* 暗色主题适配 */
+html[data-theme="dark"] .env-output {
+    background: #1a1f2e;
+    border-color: rgba(148, 163, 184, 0.15);
+}
+
+html[data-theme="dark"] .field-control {
+    background: #1a1f2e;
+}
+
 /* 响应式设计 - 移动端显示切换按钮 */
 @media (max-width: 768px) {
     .sidebar-toggle {
@@ -1111,6 +1258,20 @@ html[data-theme="dark"] .separator {
         justify-content: center;
         font-size: 10px;
         margin: 1.25rem auto 0.75rem;
+    }
+
+    .form-row-2 {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+
+    .form-actions {
+        justify-content: center;
+    }
+
+    .env-output {
+        max-height: 250px;
+        font-size: 0.8rem;
     }
 }
 

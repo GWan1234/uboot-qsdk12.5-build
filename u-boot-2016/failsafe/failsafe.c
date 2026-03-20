@@ -24,6 +24,7 @@
 #include <net/dhcpd.h>
 #endif
 #include "fs.h"
+#include "modules/env.h"
 
 #if defined(CONFIG_HTTPD_DEBUG)
 int httpd_debug_state;
@@ -547,6 +548,13 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/result", &result_handler, NULL);
 	httpd_register_uri_handler(inst, "/upload", &upload_handler, NULL);
 	httpd_register_uri_handler(inst, "/version", &version_handler, NULL);
+
+	httpd_register_uri_handler(inst, "/env.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/env/list", &env_list_handler, NULL);
+	httpd_register_uri_handler(inst, "/env/set", &env_set_handler, NULL);
+	httpd_register_uri_handler(inst, "/env/unset", &env_unset_handler, NULL);
+	httpd_register_uri_handler(inst, "/env/reset", &env_reset_handler, NULL);
+	httpd_register_uri_handler(inst, "/env/restore", &env_restore_handler, NULL);
 
 	httpd_register_uri_handler(inst, "", &not_found_handler, NULL);
 

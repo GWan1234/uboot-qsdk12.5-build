@@ -58,6 +58,7 @@ class SidebarManager {
             '/uboot.html': 'uboot',
             '/art.html': 'art',
             '/cdt.html': 'cdt',
+            '/env.html': 'env',
             '/gpt.html': 'gpt',
             '/mibib.html': 'mibib',
             '/simg.html': 'simg',
@@ -96,12 +97,8 @@ class SidebarManager {
             system: {
                 titleKey: "nav.system",
                 items: [
-                    {
-                        path: "/reboot.html",
-                        labelKey: "nav.reboot",
-                        id: "reboot",
-                        onClick: () => confirm(t("reboot.confirm"))
-                    }
+                    { path: "/env.html", labelKey: "nav.env", id: "env" },
+                    { path: "/reboot.html", labelKey: "nav.reboot", id: "reboot", onClick: () => confirm(t("reboot.confirm")) }
                 ]
             }
         };
@@ -1482,6 +1479,11 @@ function appInit(pageName) {
         document.body.classList.add("ready");
     }, 0);
 
+    // 根据页面初始化对应模块
+    if (pageName === "env") {
+        envManager.init();
+    }
+
     // 获取版本信息
     getVersion();
 }
@@ -1622,6 +1624,384 @@ function handleInvalidResultResponse(message, elements) {
 }
 
 // ==============================
+// 环境变量管理模块
+// ==============================
+
+/**
+ * 环境变量管理器
+ * 负责处理 U-Boot 环境变量的查看、添加、修改、删除等操作
+ */
+const envManager = (() => {
+    // 私有变量
+    let elements = null;
+    let refreshTimer = null;
+
+    /**
+     * 获取或缓存 DOM 元素
+     */
+    function getElements() {
+        if (elements) return elements;
+
+        elements = {
+            list: document.getElementById("env_list"),
+            name: document.getElementById("env_name"),
+            value: document.getElementById("env_value"),
+            status: document.getElementById("env_status"),
+            count: document.getElementById("env_count"),
+            file: document.getElementById("env_file")
+        };
+
+        return elements;
+    }
+
+    /**
+     * 设置状态提示
+     */
+    function setStatus(text) {
+        const el = getElements().status;
+        if (el) el.textContent = text || "";
+    }
+
+    /**
+     * 统计变量数量
+     */
+    function countVariables(text) {
+        if (!text) return 0;
+
+        const lines = text.split("\n");
+        let count = 0;
+
+        for (const line of lines) {
+            if (line && line.includes("=")) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    /**
+     * 格式化错误信息
+     */
+    function formatError(error) {
+        if (!error) return t("error.unknown");
+
+        if (error.message) {
+            return error.message;
+        }
+
+        return String(error);
+    }
+
+    /**
+     * 显示错误提示
+     */
+    function showError(error) {
+        const errorMsg = formatError(error);
+        setStatus(`❌ ${errorMsg}`);
+        console.error("Environment Manager Error:", error);
+    }
+
+    /**
+     * 刷新环境变量列表
+     */
+    async function refresh() {
+        try {
+            setStatus(t("env.status.loading"));
+
+            // 清空当前列表显示
+            const el = getElements().list;
+            if (el) {
+                el.textContent = t("env.status.loading");
+            }
+
+            const response = await fetch("/env/list", {
+                method: "GET",
+                cache: "no-store",
+                headers: {
+                    "Accept": "text/plain"
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`${t("env.status.http")} ${response.status}`);
+            }
+
+            const text = await response.text();
+
+            // 更新列表
+            if (el) {
+                el.textContent = text || "";
+            }
+
+            // 更新计数
+            const countEl = getElements().count;
+            if (countEl) {
+                const count = countVariables(text);
+                countEl.textContent = `${t("env.count")} ${count}`;
+            }
+
+            setStatus(t("env.status.ready"));
+
+        } catch (error) {
+            showError(error);
+
+            // 在列表中显示错误
+            const el = getElements().list;
+            if (el) {
+                el.textContent = t("env.status.error");
+            }
+        }
+    }
+
+    /**
+     * 设置/更新环境变量
+     */
+    async function set() {
+        const nameEl = getElements().name;
+        const valueEl = getElements().value;
+
+        if (!nameEl || !nameEl.value) {
+            alert(t("env.error.no_name"));
+            nameEl?.focus();
+            return;
+        }
+
+        const name = nameEl.value.trim();
+        const value = valueEl ? valueEl.value : "";
+
+        try {
+            setStatus(t("env.status.saving"));
+
+            const formData = new FormData();
+            formData.append("name", name);
+            formData.append("value", value);
+
+            const response = await fetch("/env/set", {
+                method: "POST",
+                body: formData
+            });
+
+            const result = await response.text();
+
+            if (!response.ok) {
+                throw new Error(`${t("env.status.http")} ${response.status}: ${result}`);
+            }
+
+            if (result !== "ok") {
+                throw new Error(result || t("env.status.error"));
+            }
+
+            setStatus(t("env.status.saved"));
+
+            // 清空输入
+            nameEl.value = "";
+            if (valueEl) valueEl.value = "";
+
+            // 刷新列表
+            await refresh();
+
+        } catch (error) {
+            showError(error);
+        }
+    }
+
+    /**
+     * 删除环境变量
+     */
+    async function unset() {
+        const nameEl = getElements().name;
+
+        if (!nameEl || !nameEl.value) {
+            alert(t("env.error.no_name"));
+            nameEl?.focus();
+            return;
+        }
+
+        const name = nameEl.value.trim();
+
+        if (!confirm(`${t("env.confirm.delete")} "${name}" ?`)) {
+            return;
+        }
+
+        try {
+            setStatus(t("env.status.saving"));
+
+            const formData = new FormData();
+            formData.append("name", name);
+
+            const response = await fetch("/env/unset", {
+                method: "POST",
+                body: formData
+            });
+
+            const result = await response.text();
+
+            if (!response.ok) {
+                throw new Error(`${t("env.status.http")} ${response.status}: ${result}`);
+            }
+
+            if (result !== "ok") {
+                throw new Error(result || t("env.status.error"));
+            }
+
+            setStatus(t("env.status.deleted"));
+
+            // 清空输入
+            nameEl.value = "";
+
+            // 刷新列表
+            await refresh();
+
+        } catch (error) {
+            showError(error);
+        }
+    }
+
+    /**
+     * 重置为默认环境变量
+     */
+    async function reset() {
+        if (!confirm(t("env.confirm.reset"))) {
+            return;
+        }
+
+        try {
+            setStatus(t("env.status.saving"));
+
+            const response = await fetch("/env/reset", {
+                method: "POST"
+            });
+
+            const result = await response.text();
+
+            if (!response.ok) {
+                throw new Error(`${t("env.status.http")} ${response.status}: ${result}`);
+            }
+
+            if (result !== "ok") {
+                throw new Error(result || t("env.status.error"));
+            }
+
+            setStatus(t("env.status.reset"));
+
+            // 刷新列表
+            await refresh();
+
+        } catch (error) {
+            showError(error);
+        }
+    }
+
+    /**
+     * 从文件恢复环境变量
+     */
+    async function restore() {
+        const fileEl = getElements().file;
+
+        if (!fileEl || !fileEl.files || !fileEl.files.length) {
+            alert(t("env.error.no_file"));
+            return;
+        }
+
+        if (!confirm(t("env.confirm.restore"))) {
+            return;
+        }
+
+        const file = fileEl.files[0];
+
+        // 文件大小检查（可选，根据实际需求调整）
+        const maxSize = 64 * 1024; // 64KB
+        if (file.size > maxSize) {
+            alert(t("env.error.file_too_big"));
+            return;
+        }
+
+        try {
+            setStatus(t("env.status.saving"));
+
+            const formData = new FormData();
+            formData.append("envfile", file);
+
+            const response = await fetch("/env/restore", {
+                method: "POST",
+                body: formData
+            });
+
+            const result = await response.text();
+
+            if (!response.ok) {
+                throw new Error(`${t("env.status.http")} ${response.status}: ${result}`);
+            }
+
+            if (result !== "ok") {
+                throw new Error(result || t("env.status.error"));
+            }
+
+            setStatus(t("env.status.restored"));
+
+            // 清空文件选择
+            fileEl.value = "";
+
+            // 刷新列表
+            await refresh();
+
+        } catch (error) {
+            showError(error);
+        }
+    }
+
+    /**
+     * 初始化环境变量管理器
+     */
+    function init() {
+        // 获取元素引用
+        getElements();
+
+        // 设置列表占位符
+        const listEl = elements.list;
+        if (listEl) {
+            listEl.setAttribute("data-placeholder", t("env.placeholder"));
+        }
+
+        // 添加键盘事件支持
+        const nameEl = elements.name;
+        const valueEl = elements.value;
+
+        if (nameEl && valueEl) {
+            // Ctrl+Enter 提交
+            valueEl.addEventListener("keydown", (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                    e.preventDefault();
+                    set();
+                }
+            });
+
+            // Tab 键在输入框间切换
+            nameEl.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    valueEl.focus();
+                }
+            });
+        }
+
+        // 自动刷新一次
+        refresh();
+    }
+
+    // 导出公共 API
+    return {
+        init,
+        refresh,
+        set,
+        unset,
+        reset,
+        restore,
+    };
+})();
+
+// ==============================
 // 国际化数据
 // ==============================
 
@@ -1654,6 +2034,7 @@ const I18N = (() => {
             "nav.mibib": "MIBIB Update",
             "nav.initramfs": "Load Initramfs",
             "nav.system": "System",
+            "nav.env": "Environment Management",
             "nav.reboot": "Reboot",
             "control.language": "🌐 Language",
             "control.theme": "🌓 Theme",
@@ -1700,6 +2081,38 @@ const I18N = (() => {
             "simg.hint": t.en.updateHint("Single Image (written starting from offset 0x0 of the flash memory device)"),
             "simg.warn.1": t.en.warnChoose("Single Image"),
             "simg.warn.2": t.en.warnDanger("Single Image"),
+            "env.title": "U-BOOT ENV",
+            "env.hint": "Manage <strong>U-Boot environment variables</strong>. Changes will be saved to storage.",
+            "env.count": "Variables:",
+            "env.status.loading": "Loading...",
+            "env.status.ready": "Ready",
+            "env.status.saving": "Saving...",
+            "env.status.saved": "✓ Saved",
+            "env.status.deleted": "✓ Deleted",
+            "env.status.reset": "✓ Reset to defaults",
+            "env.status.restored": "✓ Restored",
+            "env.status.exporting": "Exporting...",
+            "env.status.exported": "✓ Exported",
+            "env.status.http": "HTTP error:",
+            "env.status.error": "Error",
+            "env.label.name": "Name:",
+            "env.label.value": "Value:",
+            "env.label.file": "Env file:",
+            "env.action.set": "Add / Update",
+            "env.action.unset": "Delete",
+            "env.action.refresh": "Refresh",
+            "env.action.reset": "Reset to defaults",
+            "env.action.restore": "Restore",
+            "env.confirm.delete": "Delete variable",
+            "env.confirm.reset": "Reset all environment variables to defaults?",
+            "env.confirm.restore": "Restore environment from file? This will overwrite all current variables.",
+            "env.error.no_name": "Please enter variable name",
+            "env.error.no_file": "Please select a file",
+            "env.error.file_too_big": "File too large (max 64KB)",
+            "env.placeholder": "No environment variables loaded",
+            "env.restore.hint": "Upload a previously saved binary U-Boot environment image (CRC + data) to restore.",
+            "env.warn.1": "Modifying environment variables may affect boot behavior.",
+            "env.warn.2": "Do not power off during save or restore.",
             "reboot.confirm": "Reboot device now?",
             "reboot.title.in_progress": "REBOOTING DEVICE",
             "reboot.hint.in_progress": "Reboot request has been sent. Please wait...<br>This page may be in not responding status for a short time.",
@@ -1738,6 +2151,7 @@ const I18N = (() => {
             "nav.simg": "闪存镜像更新",
             "nav.initramfs": "启动内存固件",
             "nav.system": "系统",
+            "nav.env": "环境变量管理",
             "nav.reboot": "重启",
             "control.language": "🌐 语言",
             "control.theme": "🌓 主题",
@@ -1784,6 +2198,38 @@ const I18N = (() => {
             "simg.hint": t["zh-cn"].updateHint("闪存镜像（从闪存设备的偏移量 0x0 处开始写入）"),
             "simg.warn.1": t["zh-cn"].warnChoose("闪存镜像"),
             "simg.warn.2": t["zh-cn"].warnDanger("闪存镜像"),
+            "env.title": "U-Boot 环境变量",
+            "env.hint": "管理 <strong>U-Boot 环境变量</strong>。更改将保存到存储设备。",
+            "env.count": "变量数:",
+            "env.status.loading": "加载中...",
+            "env.status.ready": "就绪",
+            "env.status.saving": "保存中...",
+            "env.status.saved": "✓ 已保存",
+            "env.status.deleted": "✓ 已删除",
+            "env.status.reset": "✓ 已重置为默认值",
+            "env.status.restored": "✓ 已恢复",
+            "env.status.exporting": "导出中...",
+            "env.status.exported": "✓ 已导出",
+            "env.status.http": "HTTP 错误:",
+            "env.status.error": "错误",
+            "env.label.name": "名称:",
+            "env.label.value": "值:",
+            "env.label.file": "环境变量文件:",
+            "env.action.set": "添加/更新",
+            "env.action.unset": "删除",
+            "env.action.refresh": "刷新",
+            "env.action.reset": "重置为默认值",
+            "env.action.restore": "恢复",
+            "env.confirm.delete": "删除变量",
+            "env.confirm.reset": "确定将所有环境变量重置为默认值？",
+            "env.confirm.restore": "确定从文件恢复环境变量？这将覆盖所有当前变量。",
+            "env.error.no_name": "请输入变量名称",
+            "env.error.no_file": "请选择文件",
+            "env.error.file_too_big": "文件过大（最大 64KB）",
+            "env.placeholder": "暂无环境变量",
+            "env.restore.hint": "上传之前保存的二进制环境变量镜像文件（含 CRC）进行恢复。",
+            "env.warn.1": "修改环境变量可能影响系统启动行为。",
+            "env.warn.2": "保存或恢复过程中请勿断电。",
             "reboot.confirm": "确认立即重启设备？",
             "reboot.title.in_progress": "正在重启设备",
             "reboot.hint.in_progress": "已发送重启请求，请稍候…<br>该页面短时间可能显示无响应，这是正常现象。",

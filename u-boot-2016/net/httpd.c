@@ -586,7 +586,11 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 		httpd_debug("[DEBUG] %s(): pdata->upload_ptr = 0x%p\n",
 			__func__, (void *)pdata->upload_ptr);
 
-		progress = pdata->upload_size * 100 / pdata->payload_size;
+		if (pdata->payload_size)
+			progress = pdata->upload_size * 100 / pdata->payload_size;
+		else
+			progress = 100;
+
 		last_progress = progress;
 		printf("    Progress: %2lu%% ", progress);
 
@@ -708,61 +712,6 @@ static char *name_extract(char *s)
 	return name;
 }
 
-static int httpd_handle_request(struct httpd_instance *inst,
-				 struct tcp_cb_data *cbd)
-{
-	struct httpd_tcp_pdata *pdata = cbd->pdata;
-	struct httpd_request *req = &pdata->request;
-
-	// TODO: 这个函数的作用是什么？
-	// schedule();
-
-	req->urih = httpd_find_uri_handler(inst, pdata->uri);
-	if (!req->urih) {
-		/* TODO: no handler / response 404 */
-		tcp_close_conn(cbd->conn, 1);
-		return 1;
-	}
-
-	/* call uri handler */
-	assert((size_t)req->urih->cb > CONFIG_SYS_SDRAM_BASE);
-	req->urih->cb(HTTP_CB_NEW, req, &pdata->response);
-
-	if (pdata->response.status == HTTP_RESP_NONE) {
-		tcp_close_conn(cbd->conn, 0);
-		return 1;
-	}
-
-	if (pdata->response.status == HTTP_RESP_STD) {
-		/* generate HTTP response header */
-		u32 size;
-
-		pdata->response.info.content_length = pdata->response.size;
-
-		size = http_make_response_header(&pdata->response.info,
-						pdata->buf, sizeof(pdata->buf));
-
-		/* send response header */
-		tcp_send_data(cbd->conn, pdata->buf, size);
-		pdata->resp_std_cnt = 0;
-	} else {
-		/* send first response data */
-		tcp_send_data(cbd->conn, pdata->response.data,
-			      pdata->response.size);
-	}
-
-	/* 根据是否有 POST 数据决定下一步状态 */
-	if (req->method == HTTP_POST && pdata->payload_size > 0) {
-		/* 有 POST 数据，需要后续解析，先设置为 HEADER_SENT 状态 */
-		pdata->status = HTTPD_S_HEADER_SENT;
-	} else {
-		/* 没有 POST 数据，直接进入 RESPONDING 状态 */
-		pdata->status = HTTPD_S_RESPONDING;
-	}
-
-	return 0;
-}
-
 /**
  * httpd_parse_post_data - 解析 POST 请求的 multipart 数据
  * @cbd: TCP 回调数据
@@ -781,6 +730,9 @@ static int httpd_parse_post_data(struct tcp_cb_data *cbd)
 
 	static const char name_str[] = "name=";
 	static const char filename_str[] = "filename=";
+
+	if (req->method != HTTP_POST)
+		return 0;
 
 	boundarylen = strlen(pdata->boundary);
 	boundary = malloc(boundarylen + 3);
@@ -871,6 +823,71 @@ static int httpd_parse_post_data(struct tcp_cb_data *cbd)
 	return 0;
 }
 
+static int httpd_handle_request(struct httpd_instance *inst,
+				 struct tcp_cb_data *cbd)
+{
+	bool parse_post_data_later;
+	struct httpd_tcp_pdata *pdata = cbd->pdata;
+	struct httpd_request *req = &pdata->request;
+
+	// TODO: 这个函数的作用是什么？
+	// schedule();
+
+	req->urih = httpd_find_uri_handler(inst, pdata->uri);
+	if (!req->urih) {
+		/* TODO: no handler / response 404 */
+		tcp_close_conn(cbd->conn, 1);
+		return 1;
+	}
+
+	if (req->method == HTTP_POST && pdata->payload_size > 0 && !strcmp(pdata->uri, "/upload"))
+		parse_post_data_later = true;
+	else
+		parse_post_data_later = false;
+
+	if (req->method == HTTP_POST && !parse_post_data_later) {
+		if (httpd_parse_post_data(cbd)) {
+			tcp_close_conn(cbd->conn, 1);
+			pdata->status = HTTPD_S_CLOSING;
+			return 1;
+		}
+	}
+
+	/* call uri handler */
+	assert((size_t)req->urih->cb > CONFIG_SYS_SDRAM_BASE);
+	req->urih->cb(HTTP_CB_NEW, req, &pdata->response);
+
+	if (pdata->response.status == HTTP_RESP_NONE) {
+		tcp_close_conn(cbd->conn, 0);
+		return 1;
+	}
+
+	if (pdata->response.status == HTTP_RESP_STD) {
+		/* generate HTTP response header */
+		u32 size;
+
+		pdata->response.info.content_length = pdata->response.size;
+
+		size = http_make_response_header(&pdata->response.info,
+						pdata->buf, sizeof(pdata->buf));
+
+		/* send response header */
+		tcp_send_data(cbd->conn, pdata->buf, size);
+		pdata->resp_std_cnt = 0;
+	} else {
+		/* send first response data */
+		tcp_send_data(cbd->conn, pdata->response.data,
+			      pdata->response.size);
+	}
+
+	if (parse_post_data_later)
+		pdata->status = HTTPD_S_HEADER_SENT;
+	else
+		pdata->status = HTTPD_S_RESPONDING;
+
+	return 0;
+}
+
 static void httpd_rx(struct httpd_instance *inst, struct tcp_cb_data *cbd)
 {
 	struct httpd_tcp_pdata *pdata = cbd->pdata;
@@ -917,14 +934,11 @@ static void httpd_tx(struct httpd_instance *inst, struct tcp_cb_data *cbd)
 	}
 
 	if (pdata->status == HTTPD_S_HEADER_SENT) {
-		int ret = httpd_parse_post_data(cbd);
-
-		if (ret) {
+		if (httpd_parse_post_data(cbd)) {
 			tcp_close_conn(cbd->conn, 1);
 			pdata->status = HTTPD_S_CLOSING;
 			return;
 		}
-
 		pdata->status = HTTPD_S_RESPONDING;
 	}
 
