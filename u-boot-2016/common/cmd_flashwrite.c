@@ -42,13 +42,16 @@ extern struct sdhci_host mmc_host;
 #define HEADER_MAGIC2 0xCD7F127A
 #define HEADER_VERSION 4
 
-#define SHA1_SIG_LEN 41
 #define SZ_1M 0x00100000
 
 struct header {
 	unsigned magic[2];
 	unsigned version;
 } __attribute__ ((__packed__));
+#endif
+
+#if defined(CONFIG_IPQ_MIBIB_RELOAD) || defined(CONFIG_IPQ_XTRACT_N_FLASH)
+#define SHA1_SIG_LEN 41
 #endif
 
 uint32_t flash_type_new = -1;
