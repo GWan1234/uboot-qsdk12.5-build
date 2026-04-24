@@ -216,15 +216,19 @@ int parse_tar_image(const void *data, size_t size,
 			goto next_file;
 
 		if (!strcmp(p + 1, kernel_str)) {
-			*kernel_data = file.data;
-			*kernel_size = file.size;
 			has_kernel = true;
+			if (kernel_data)
+				*kernel_data = file.data;
+			if (kernel_size)
+				*kernel_size = file.size;
 		}
 
 		if (!strcmp(p + 1, rootfs_str)) {
-			*rootfs_data = file.data;
-			*rootfs_size = file.size;
 			has_root = true;
+			if (rootfs_data)
+				*rootfs_data = file.data;
+			if (rootfs_size)
+				*rootfs_size = file.size;
 		}
 
 		if (has_kernel && has_root)
@@ -306,6 +310,6 @@ static int do_untar(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]) {
 
 U_BOOT_CMD(
 	untar, 3, 0, do_untar,
-	"unstar [file_addr] [file_size]",
+	"untar [file_addr] [file_size]",
 	"get offset and size of kernel and rootfs in sysupgrade tar image\n"
 );

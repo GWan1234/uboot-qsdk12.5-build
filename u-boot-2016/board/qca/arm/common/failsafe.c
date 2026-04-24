@@ -333,12 +333,9 @@ static int failsafe_validate_firmware(const void *data_addr, const ulong data_si
 			handle_flash_not_found(fw_type, "EMMC");
 			return RET_FLASH_NOT_FOUND;
 		}
-        const void *kernel_addr, *rootfs_addr;
         size_t kernel_size, rootfs_size;
         if (parse_tar_image(data_addr, (size_t)data_size,
-                            &kernel_addr, &kernel_size,
-                            &rootfs_addr, &rootfs_size)
-        ) {
+                            NULL, &kernel_size, NULL, &rootfs_size)) {
             strlcpy(info,
                 "{\"type\":\"wrong_file_type\","
                 "\"expected\":\"sysupgrade tar image\","
