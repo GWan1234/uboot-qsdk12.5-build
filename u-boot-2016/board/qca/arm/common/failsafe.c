@@ -636,7 +636,7 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 			data_addr + kernel_size,
 			data_size - kernel_size);
 		strlcpy(runcmd.list[runcmd.count++],
-			"bootconfig set primary", MAX_CMD_LEN);
+			"bootconfig set all 0 && bootconfig sync", MAX_CMD_LEN);
 		break;
 	case FW_TYPE_QSDK:
 		if (!dfd->mmc) {
@@ -656,7 +656,7 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 		strlcpy(runcmd.list[runcmd.count++],
 			"flasherase rootfs_data", MAX_CMD_LEN);
 		strlcpy(runcmd.list[runcmd.count++],
-			"bootconfig set primary", MAX_CMD_LEN);
+			"bootconfig set all 0 && bootconfig sync", MAX_CMD_LEN);
 		break;
 	case FW_TYPE_SYSUPGRADE:
 	case FW_TYPE_ASUSWRT_EMMC:
@@ -671,7 +671,7 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 		strlcpy(runcmd.list[runcmd.count++],
 			"flash rootfs $rootfs_addr $rootfs_size", MAX_CMD_LEN);
 		strlcpy(runcmd.list[runcmd.count++],
-			"bootconfig set primary", MAX_CMD_LEN);
+			"bootconfig set all 0 && bootconfig sync", MAX_CMD_LEN);
 		break;
 	case FW_TYPE_UBI:
 		if (!dfd->nand) {
@@ -681,7 +681,7 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"flash rootfs 0x%lx 0x%lx", data_addr, data_size);
 		strlcpy(runcmd.list[runcmd.count++],
-			"bootconfig set primary", MAX_CMD_LEN);
+			"bootconfig set all 0 && bootconfig sync", MAX_CMD_LEN);
 		break;
 	default:
 		handle_wrong_fw_type("FIRMWARE", fw_type);
@@ -723,8 +723,7 @@ static int failsafe_write_art(const ulong data_addr, const ulong data_size)
         "****************************\n"
         "*      ART  UPGRADING      *\n"
         "* DO NOT POWER OFF DEVICE! *\n"
-        "****************************\n"
-    );
+        "****************************\n");
 
 	snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 		"flash 0:ART 0x%lx 0x%lx", data_addr, data_size);
