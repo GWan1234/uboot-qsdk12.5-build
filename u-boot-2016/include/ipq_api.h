@@ -11,7 +11,11 @@ typedef struct {
 extern detected_flash_device_t detected_flash_device;
 
 /* loadaddr 环境变量的默认值 (u-boot-2016/include/env_default.h) */
-#define CONFIG_LOADADDR CONFIG_SYS_LOAD_ADDR
+#if defined(CONFIG_IPQ40XX)
+#define CONFIG_LOADADDR 0x84000000
+#else
+#define CONFIG_LOADADDR 0x44000000
+#endif
 
 /*
  * 每次启动都会检查环境变量：ipaddr、netmask 和 serverip，并将其重置为默认值。

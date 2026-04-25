@@ -9,6 +9,7 @@
  */
 
 #include <env_callback.h>
+#include <ipq_api.h>
 
 #ifdef DEFAULT_ENV_INSTANCE_EMBEDDED
 env_t environment __PPCENV__ = {
