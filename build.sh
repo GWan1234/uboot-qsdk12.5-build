@@ -527,6 +527,7 @@ clean_cache() {
             u-boot-2016/.stgit-edit.txt \
             u-boot-2016/.u-boot* \
             u-boot-2016/arch/arm/dts/dtbtable.S \
+            u-boot-2016/dtb_combined* \
             u-boot-2016/httpd/fsdata.c \
             u-boot-2016/include/config \
             u-boot-2016/include/generated \
