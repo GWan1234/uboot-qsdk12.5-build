@@ -251,26 +251,25 @@ static int do_untar(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]) {
 	int fw_type;
 
 	switch (argc) {
-		case 1:
-			fileaddr = getenv("fileaddr");
-			if (fileaddr == NULL)
-				return CMD_RET_USAGE;
-
-			filesize = getenv("filesize");
-			if (filesize == NULL)
-				return CMD_RET_USAGE;
-
-			file_addr = (const void *)simple_strtoul(fileaddr, NULL, 16);
-			file_size = (size_t)simple_strtoul(filesize, NULL, 16);
-
-			break;
-		case 3:
-			file_addr = (const void *)simple_strtoul(argv[1], NULL, 16);
-			file_size = (size_t)simple_strtoul(argv[2], NULL, 16);
-			break;
-		default:
+	case 1:
+		fileaddr = getenv("fileaddr");
+		if (fileaddr == NULL)
 			return CMD_RET_USAGE;
-			break;
+
+		filesize = getenv("filesize");
+		if (filesize == NULL)
+			return CMD_RET_USAGE;
+
+		file_addr = (const void *)simple_strtoul(fileaddr, NULL, 16);
+		file_size = (size_t)simple_strtoul(filesize, NULL, 16);
+
+		break;
+	case 3:
+		file_addr = (const void *)simple_strtoul(argv[1], NULL, 16);
+		file_size = (size_t)simple_strtoul(argv[2], NULL, 16);
+		break;
+	default:
+		return CMD_RET_USAGE;
 	}
 
 	fw_type = check_fw_type(file_addr);

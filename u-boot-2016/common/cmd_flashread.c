@@ -86,21 +86,21 @@ static int read_partition(const char *part_name, const ulong load_addr)
             load_addr, (ulong)disk_info.start, (ulong)disk_info.size);
 	}
 
-    setenv_hex("fileaddr", load_addr);
-    setenv_hex("filesize", size_in_bytes);
-    setenv_hex("filesize_128k", (size_in_bytes / 131072 + (size_in_bytes % 131072 != 0)) * 131072);
-
     ret = run_command(buf, 0);
 	if (ret) {
 		printf("Failed to read partition %s\n", part_name);
 		return ret;
 	}
 
-    return 0;
+    setenv_hex("fileaddr", load_addr);
+    setenv_hex("filesize", size_in_bytes);
+    setenv_hex("filesize_128k", (size_in_bytes / 131072 + (size_in_bytes % 131072 != 0)) * 131072);
+
+    return CMD_RET_SUCCESS;
 
 part_not_found:
     printf("Partition %s not found\n", part_name);
-    return -1;
+    return CMD_RET_FAILURE;
 }
 
 static int do_flash_read(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
@@ -120,7 +120,6 @@ static int do_flash_read(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv
         break;
     default:
         return CMD_RET_USAGE;
-        break;
 	}
 
     return read_partition(argv[1], load_addr);
