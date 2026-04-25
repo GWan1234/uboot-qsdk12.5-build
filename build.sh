@@ -109,6 +109,335 @@ setup_build_env() {
     export PATH="${STAGING_DIR}/toolchain-arm_cortex-a7_gcc-5.2.0_musl-1.1.16_eabi/bin:$PATH"
 }
 
+# 检查编译依赖函数
+check_dependencies() {
+    local missing_deps=0
+    local optional_missing=0
+
+    setup_build_env
+    echo "检查编译依赖"
+
+    # 必需的系统工具
+    local required_tools=(
+        "make"
+        "gcc"
+        "g++"
+        "arm-openwrt-linux-gcc"
+        "arm-openwrt-linux-strip"
+        "dtc"
+        "python3"
+        "perl"
+        "truncate"
+        "stat"
+        "find"
+        "rm"
+        "mkdir"
+        "cp"
+        "mv"
+    )
+
+    # 可选工具（用于网页文件压缩）
+    local optional_tools=(
+        "html-minifier-terser"
+        "cleancss"
+        "terser"
+    )
+
+    # Perl 模块依赖
+    local perl_modules=(
+        "IO::Compress::Gzip"
+    )
+
+    # 获取工具版本号的函数
+    get_version() {
+        local tool=$1
+        local version=""
+
+        case $tool in
+            "make")
+                version=$(make --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                ;;
+            "gcc")
+                version=$(gcc --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                ;;
+            "g++")
+                version=$(g++ --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                ;;
+            "arm-openwrt-linux-gcc")
+                version=$($tool --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                [ -z "$version" ] && version=$($tool -dumpversion 2>/dev/null)
+                ;;
+            "arm-openwrt-linux-strip")
+                version=$($tool --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                ;;
+            "dtc")
+                version=$(dtc --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                ;;
+            "python3")
+                version=$(python3 --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                ;;
+            "perl")
+                version=$(perl --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1 | sed 's/v//')
+                ;;
+            "truncate")
+                version=$(truncate --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                [ -z "$version" ] && version=$(coreutils --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                ;;
+            "stat")
+                version=$(stat --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                [ -z "$version" ] && version=$(coreutils --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                ;;
+            "find")
+                version=$(find --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                [ -z "$version" ] && version=$(findutils --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                ;;
+            "rm"|"mkdir"|"cp"|"mv")
+                version=$($tool --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                [ -z "$version" ] && version=$(coreutils --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+                ;;
+            "html-minifier-terser")
+                version=$(html-minifier-terser --version 2>/dev/null)
+                ;;
+            "cleancss")
+                version=$(cleancss --version 2>/dev/null)
+                ;;
+            "terser")
+                version=$(terser --version 2>/dev/null)
+                ;;
+            *)
+                version=""
+                ;;
+        esac
+
+        if [ -n "$version" ]; then
+            echo "$version"
+        else
+            echo "未知版本"
+        fi
+    }
+
+    # 检查必需工具
+    echo "检查必需工具:"
+    for tool in "${required_tools[@]}"; do
+        if command -v "$tool" >/dev/null 2>&1; then
+            local version=$(get_version "$tool")
+            echo "  ✓ $tool (版本: $version)"
+        else
+            echo "  ✗ $tool (缺失)"
+            missing_deps=$((missing_deps + 1))
+        fi
+    done
+
+    # 检查可选工具
+    echo -e "\n检查可选工具（用于网页文件压缩）:"
+    for tool in "${optional_tools[@]}"; do
+        if command -v "$tool" >/dev/null 2>&1; then
+            local version=$(get_version "$tool")
+            echo "  ✓ $tool (版本: $version)"
+        else
+            echo "  ✗ $tool (缺失 - 可选)"
+            optional_missing=$((optional_missing + 1))
+        fi
+    done
+
+    # 检查 Perl 模块
+    echo -e "\n检查 Perl 模块:"
+    for module in "${perl_modules[@]}"; do
+        if perl -M"$module" -e "1" 2>/dev/null; then
+            # 尝试获取模块版本
+            local version=$(perl -M"$module" -e "print \$${module}::VERSION" 2>/dev/null)
+            if [ -n "$version" ]; then
+                echo "  ✓ $module (版本: $version)"
+            else
+                echo "  ✓ $module (版本未知)"
+            fi
+        else
+            echo "  ✗ $module (缺失)"
+            missing_deps=$((missing_deps + 1))
+        fi
+    done
+
+    # 检查 Python3 模块
+    echo -e "\n检查 Python3 模块:"
+    if command -v python3 >/dev/null 2>&1; then
+        local py_version=$(python3 --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+        echo "  ✓ Python3 (版本: $py_version)"
+
+        # 检查必要的 Python 模块
+        local py_modules=("os" "sys" "struct")
+        for py_mod in "${py_modules[@]}"; do
+            if python3 -c "import $py_mod" 2>/dev/null; then
+                echo "    ✓ $py_mod"
+            else
+                echo "    ✗ $py_mod (缺失)"
+                missing_deps=$((missing_deps + 1))
+            fi
+        done
+    else
+        echo "  ✗ Python3 (无法运行)"
+        missing_deps=$((missing_deps + 1))
+    fi
+
+    # 输出总结
+    echo -e "\n=== 依赖检查总结 ==="
+    if [ $missing_deps -eq 0 ]; then
+        echo "所有必需依赖已满足 ✓"
+        if [ $optional_missing -gt 0 ]; then
+            echo "注意: 有 $optional_missing 个可选工具未安装"
+            echo "      这将影响网页文件的压缩效果"
+        fi
+        return 0
+    else
+        echo "错误: 缺少 $missing_deps 个必需依赖 ✗"
+        echo "请运行 'sudo ./build.sh install_deps' 安装缺失的依赖"
+        return 1
+    fi
+}
+
+# 安装编译依赖函数
+install_dependencies() {
+    # 检查是否以 root 权限运行
+    if [ "$EUID" -ne 0 ]; then
+        echo "错误: 安装依赖需要 root 权限"
+        echo "请使用 sudo 运行此命令:"
+        echo "  sudo ${BASH_SOURCE[0]} install_deps"
+        return 1
+    fi
+
+    setup_build_env
+
+    echo "开始安装编译依赖..."
+
+    # 检测包管理器
+    local pkg_manager=""
+    local install_cmd=""
+    local update_cmd=""
+
+    if command -v apt >/dev/null 2>&1; then
+        pkg_manager="apt"
+        install_cmd="apt install -y"
+        update_cmd="apt update"
+    elif command -v yum >/dev/null 2>&1; then
+        pkg_manager="yum"
+        install_cmd="yum install -y"
+        update_cmd="yum check-update"
+    elif command -v dnf >/dev/null 2>&1; then
+        pkg_manager="dnf"
+        install_cmd="dnf install -y"
+        update_cmd="dnf check-update"
+    elif command -v pacman >/dev/null 2>&1; then
+        pkg_manager="pacman"
+        install_cmd="pacman -S --noconfirm"
+        update_cmd="pacman -Sy"
+    elif command -v apk >/dev/null 2>&1; then
+        pkg_manager="apk"
+        install_cmd="apk add"
+        update_cmd="apk update"
+    else
+        echo "错误: 未找到支持的包管理器 (apt, yum, dnf, pacman, apk)"
+        return 1
+    fi
+
+    echo "检测到包管理器: $pkg_manager"
+
+    # 更新包索引
+    echo "更新包索引..."
+    eval "$update_cmd"
+
+    # 安装基础开发工具
+    echo "安装基础开发工具..."
+    case $pkg_manager in
+        apt)
+            $install_cmd build-essential
+            $install_cmd device-tree-compiler
+            $install_cmd python3
+            $install_cmd perl
+            $install_cmd coreutils  # 提供 truncate 等工具
+            $install_cmd nodejs npm  # 用于安装 html-minifier-terser, cleancss, terser
+            ;;
+        yum|dnf)
+            $install_cmd gcc gcc-c++ make
+            $install_cmd dtc
+            $install_cmd python3
+            $install_cmd perl
+            $install_cmd coreutils
+            $install_cmd nodejs npm
+            ;;
+        pacman)
+            $install_cmd base-devel
+            $install_cmd dtc
+            $install_cmd python
+            $install_cmd perl
+            $install_cmd coreutils
+            $install_cmd nodejs npm
+            ;;
+        apk)
+            $install_cmd build-base
+            $install_cmd dtc
+            $install_cmd python3
+            $install_cmd perl
+            $install_cmd coreutils
+            $install_cmd nodejs npm
+            ;;
+    esac
+
+    # 安装 Perl 模块
+    echo "安装 Perl 模块..."
+    if command -v cpan >/dev/null 2>&1; then
+        # 尝试使用包管理器安装 Perl 模块
+        case $pkg_manager in
+            apt)
+                $install_cmd libio-compress-perl
+                ;;
+            yum|dnf)
+                $install_cmd perl-IO-Compress
+                ;;
+            pacman)
+                $install_cmd perl-io-compress
+                ;;
+            apk)
+                $install_cmd perl-io-compress
+                ;;
+        esac
+
+        # 如果包管理器安装失败，使用 cpan
+        if ! perl -MIO::Compress::Gzip -e 1 2>/dev/null; then
+            echo "尝试使用 cpan 安装 IO::Compress::Gzip..."
+            cpan -i IO::Compress::Gzip
+        fi
+    else
+        echo "警告: cpan 未安装，无法自动安装 Perl 模块"
+        echo "请手动安装 Perl 模块 IO::Compress::Gzip"
+    fi
+
+    # 安装 Node.js 工具（用于网页文件压缩）
+    echo "安装 Node.js 工具（用于网页文件压缩）..."
+    if command -v npm >/dev/null 2>&1; then
+        echo "安装 html-minifier-terser..."
+        npm install -g html-minifier-terser
+
+        echo "安装 clean-css-cli..."
+        npm install -g clean-css-cli
+
+        echo "安装 terser..."
+        npm install -g terser
+    else
+        echo "警告: npm 未安装，无法安装 Node.js 工具"
+        echo "如需网页文件压缩功能，请手动安装:"
+        echo "  npm install -g html-minifier-terser clean-css-cli terser"
+    fi
+
+    # 检查工具链
+    if ! command -v arm-openwrt-linux-gcc >/dev/null 2>&1; then
+        echo -e "\n注意: 未找到 arm-openwrt-linux-gcc 工具链"
+        echo "请确保工具链已安装并在 PATH 环境变量中"
+        echo "工具链通常位于: ${SCRIPT_DIR}/staging_dir/toolchain-arm_cortex-a7_gcc-5.2.0_musl-1.1.16_eabi/bin/"
+    fi
+
+    echo "依赖安装完成！"
+    echo "建议运行 './build.sh check_deps' 验证安装结果"
+}
+
 # 文件大小检查和填充函数
 check_and_pad_file() {
     local file_path=$1
@@ -313,20 +642,27 @@ show_help() {
     echo "用法: ${BASH_SOURCE[0]} [选项]"
     echo ""
     echo "选项:"
-    echo "  help                    显示此帮助信息"
-    echo "  setup_env               仅设置编译环境 (需使用 source 执行 ${BASH_SOURCE[0]})"
-    echo "  clean_cache             清理编译过程中产生的缓存"
-    echo "  build_ax18              编译 CMIOT AX18"
-    echo "  build_re-cs-02          编译 JDCloud AX6600 (Athena)"
-    echo "  build_re-cs-07          编译 JDCloud ER1"
-    echo "  build_re-ss-01          编译 JDCloud AX1800 Pro (Arthur)"
-    echo "  build_nn6000            编译 Link NN6000 (V1 & V2)"
-    echo "  build_ly1800            编译 Philips LY1800"
-    echo "  build_360v6             编译 Qihoo 360V6"
-    echo "  build_ax5-jdcloud       编译 Redmi AX5 JDCloud"
-    echo "  build_y6010             编译 SY Y6010"
-    echo "  build_m2                编译 ZN M2"
-    echo "  build_all               编译所有支持的设备"
+    echo "  编译环境："
+    echo "    setup_env                 设置编译环境 (需使用 source 执行 ${BASH_SOURCE[0]})"
+    echo "    clean_cache               清理编译过程中产生的缓存"
+    echo "    check_deps                检查编译依赖是否完整"
+    echo "    install_deps              安装编译所需的依赖"
+    echo "  设备："
+    echo "    IPQ60xx:"
+    echo "      build_ax18              编译 CMIOT AX18"
+    echo "      build_re-cs-02          编译 JDCloud AX6600 (Athena)"
+    echo "      build_re-cs-07          编译 JDCloud ER1"
+    echo "      build_re-ss-01          编译 JDCloud AX1800 Pro (Arthur)"
+    echo "      build_nn6000            编译 Link NN6000 (V1 & V2)"
+    echo "      build_ly1800            编译 Philips LY1800"
+    echo "      build_360v6             编译 Qihoo 360V6"
+    echo "      build_ax5-jdcloud       编译 Redmi AX5 JDCloud"
+    echo "      build_y6010             编译 SY Y6010"
+    echo "      build_m2                编译 ZN M2"
+    echo "    所有设备："
+    echo "      build_all               编译所有支持的设备"
+    echo "  其他："
+    echo "    help                      显示此帮助信息"
 }
 
 # 以上是函数定义，脚本从这里开始执行
@@ -349,6 +685,14 @@ case "$1" in
         # 对于非编译操作，不设置日志文件
         clean_cache
         echo "编译缓存清理完成!"
+        ;;
+
+    "check_deps"|"check_dependencies")
+        check_dependencies
+        ;;
+
+    "install_deps"|"install_dependencies")
+        install_dependencies
         ;;
 
     "build_ax18")
