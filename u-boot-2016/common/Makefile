@@ -82,6 +82,7 @@ obj-$(CONFIG_CMD_DATE) += cmd_date.o
 obj-$(CONFIG_CMD_DEMO) += cmd_demo.o
 obj-$(CONFIG_CMD_SOUND) += cmd_sound.o
 obj-$(CONFIG_CMD_UNTAR) += cmd_untar.o
+obj-$(CONFIG_CMD_FLASHREAD) += cmd_flashread.o
 ifdef CONFIG_4xx
 obj-$(CONFIG_CMD_SETGETDCR) += cmd_dcr.o
 endif
