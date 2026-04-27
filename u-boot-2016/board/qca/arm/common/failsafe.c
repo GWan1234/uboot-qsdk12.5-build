@@ -174,7 +174,7 @@ static int check_file_size_is_valid(char *file_name, char *part_name,
     ulong part_size_in_blocks = 0;
 	ulong part_size_in_bytes = 0;
     ulong file_size_in_blocks = 0;
-	uint32_t size_block, start_block;
+	uint32_t offset_bytes, size_bytes;
 
 	switch (sfi->flash_type) {
 	case SMEM_BOOT_NAND_FLASH:
@@ -184,9 +184,9 @@ static int check_file_size_is_valid(char *file_name, char *part_name,
 	case SMEM_BOOT_ONENAND_FLASH:
 	case SMEM_BOOT_QSPI_NAND_FLASH:
 	case SMEM_BOOT_SPI_FLASH:
-		ret = smem_getpart(part_name, &start_block, &size_block);
+		ret = getpart_offset_size(part_name, &offset_bytes, &size_bytes);
 		if (!ret) {
-			part_size_in_bytes = (ulong)(sfi->flash_block_size * size_block);
+			part_size_in_bytes = (ulong)size_bytes;
 			if (file_size_in_bytes > part_size_in_bytes)
 				goto file_too_big;
 			break;

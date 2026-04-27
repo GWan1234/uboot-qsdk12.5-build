@@ -38,8 +38,7 @@ static int read_partition(const char *part_name, const ulong load_addr)
 	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
 	block_dev_desc_t *mmc_dev;
 	disk_partition_t disk_info = {0};
-	uint32_t offset_in_blocks = 0, size_in_blocks = 0;
-	ulong offset_in_bytes = 0, size_in_bytes = 0;
+	uint32_t offset_in_bytes = 0, size_in_bytes = 0;
     char buf[128];
 	int ret;
 
@@ -51,21 +50,17 @@ static int read_partition(const char *part_name, const ulong load_addr)
 	case SMEM_BOOT_ONENAND_FLASH:
 	case SMEM_BOOT_QSPI_NAND_FLASH:
 	case SMEM_BOOT_SPI_FLASH:
-		ret = smem_getpart((char *)part_name, &offset_in_blocks, &size_in_blocks);
+		ret = getpart_offset_size((char *)part_name, &offset_in_bytes, &size_in_bytes);
 		if (!ret) {
-            offset_in_bytes = (ulong)(sfi->flash_block_size * offset_in_blocks);
-            size_in_bytes = (ulong)(sfi->flash_block_size * size_in_blocks);
-
             if (sfi->flash_type == SMEM_BOOT_NAND_FLASH ||
                 sfi->flash_type == SMEM_BOOT_ONENAND_FLASH ||
                 sfi->flash_type == SMEM_BOOT_QSPI_NAND_FLASH) {
                 sprintf(buf, "nand read 0x%lx 0x%lx 0x%lx",
-                    load_addr, offset_in_bytes, size_in_bytes);
+                    load_addr, (ulong)offset_in_bytes, (ulong)size_in_bytes);
             } else {
                 sprintf(buf, "sf probe && sf read 0x%lx 0x%lx 0x%lx",
-                    load_addr, offset_in_bytes, size_in_bytes);
+                    load_addr, (ulong)offset_in_bytes, (ulong)size_in_bytes);
             }
-
             break;
         }
 	case SMEM_BOOT_MMC_FLASH:
@@ -80,7 +75,7 @@ static int read_partition(const char *part_name, const ulong load_addr)
 		if (ret)
 			goto part_not_found;
 
-		size_in_bytes = (ulong)(disk_info.size * disk_info.blksz);
+		size_in_bytes = (uint32_t)(disk_info.size * disk_info.blksz);
 
         sprintf(buf, "mmc read 0x%lx 0x%lx 0x%lx",
             load_addr, (ulong)disk_info.start, (ulong)disk_info.size);
