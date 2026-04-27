@@ -207,7 +207,7 @@ static int write_bootconfig(const char *part_name, struct bootconfig_info *bootc
 		return -ENOMEM;
 	}
 
-	memset(load_addr, 0, 1024);
+	memset(load_addr, 0, 1024 * 1024);
 	memcpy(load_addr, bootcfg, sizeof(struct bootconfig_info));
 
 	sprintf(buf, "flash %s 0x%lx 0x%lx",
