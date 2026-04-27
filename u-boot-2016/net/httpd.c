@@ -560,10 +560,13 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 			debug("    Content-Type: boundary=\"%s\"\n", b_ptr);
 		}
 
+		/* calculate new cache address */
+		pdata->upload_ptr = httpd_get_upload_buffer_ptr(pdata->payload_size);
+
 		if (hdr_size + pdata->payload_size < sizeof(pdata->buf)) {
-			/* upload payload can be put into the cache */
-			pdata->upload_ptr = pdata->buf + hdr_size;
 			pdata->upload_size = pdata->bufsize - hdr_size;
+			/* copy received parts to new cache */
+			memcpy(pdata->upload_ptr, pdata->buf + hdr_size, pdata->upload_size);
 		} else {
 			/* upload payload must be put into unused ram region */
 			if (is_uploading) {
@@ -574,9 +577,6 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 
 			/* generate new upload identifier */
 			upload_id = rand();
-
-			/* calculate new cache address */
-			pdata->upload_ptr = httpd_get_upload_buffer_ptr(pdata->payload_size);
 
 			pdata->upload_size = cbd->datalen - hdr_size;
 			/* copy received parts to new cache */
