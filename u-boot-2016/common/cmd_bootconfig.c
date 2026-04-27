@@ -66,7 +66,6 @@ static int get_bootconfig_partition_info(const char *part_name,
 	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
 	block_dev_desc_t *mmc_dev;
 	disk_partition_t disk_info = {0};
-	uint32_t offset_in_blocks = 0, size_in_blocks = 0;
 	uint32_t offset_in_bytes = 0, size_in_bytes = 0;
 	int ret;
 
@@ -78,13 +77,10 @@ static int get_bootconfig_partition_info(const char *part_name,
 	case SMEM_BOOT_ONENAND_FLASH:
 	case SMEM_BOOT_QSPI_NAND_FLASH:
 	case SMEM_BOOT_SPI_FLASH:
-		ret = smem_getpart((char *)part_name, &offset_in_blocks, &size_in_blocks);
+		ret = getpart_offset_size((char *)part_name, &offset_in_bytes, &size_in_bytes);
 		if (ret)
 			return -ENOENT;
-		offset_in_bytes = sfi->flash_block_size * offset_in_blocks;
-		size_in_bytes = sfi->flash_block_size * size_in_blocks;
 		break;
-
 	case SMEM_BOOT_MMC_FLASH:
 	case SMEM_BOOT_NO_FLASH:
 	case SMEM_BOOT_SDC_FLASH:
@@ -97,7 +93,6 @@ static int get_bootconfig_partition_info(const char *part_name,
 		offset_in_bytes = (uint32_t)(disk_info.start * disk_info.blksz);
 		size_in_bytes = (uint32_t)(disk_info.size * disk_info.blksz);
 		break;
-
 	default:
 		return -EINVAL;
 	}
@@ -113,7 +108,8 @@ static int get_bootconfig_partition_info(const char *part_name,
 /**
  * read_bootconfig - Read bootconfig partition and copy data to bootcfg structure
  */
-static int read_bootconfig(const char *part_name, struct bootconfig_info *bootcfg)
+static int read_bootconfig(const char *part_name,
+			struct bootconfig_info *bootcfg, int ignore_error)
 {
 	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
 	uint32_t offset, size;
@@ -176,13 +172,13 @@ static int read_bootconfig(const char *part_name, struct bootconfig_info *bootcf
 	unmap_sysmem(load_addr);
 
 	/* Validate magic numbers */
-	if (bootcfg->magic_start != BOOTCONFIG_MAGIC_START &&
+	if (!ignore_error && bootcfg->magic_start != BOOTCONFIG_MAGIC_START &&
 	    bootcfg->magic_start != BOOTCONFIG_MAGIC_START_TRYMODE) {
 		printf("Invalid magic_start: 0x%08x in %s\n", bootcfg->magic_start, part_name);
 		return -EINVAL;
 	}
 
-	if (bootcfg->magic_end != BOOTCONFIG_MAGIC_END) {
+	if (!ignore_error && bootcfg->magic_end != BOOTCONFIG_MAGIC_END) {
 		printf("Invalid magic_end: 0x%08x in %s\n", bootcfg->magic_end, part_name);
 		return -EINVAL;
 	}
@@ -260,14 +256,14 @@ static int do_bootconfig_sync(void)
 	}
 
 	/* Read BOOTCONFIG partition */
-	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg);
+	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg, 0);
 	if (ret) {
 		printf("Failed to read %s partition\n", BOOTCONFIG_PART_NAME);
 		return CMD_RET_FAILURE;
 	}
 
 	/* Read BOOTCONFIG1 partition */
-	ret = read_bootconfig(BOOTCONFIG1_PART_NAME, &bootcfg1);
+	ret = read_bootconfig(BOOTCONFIG1_PART_NAME, &bootcfg1, 1);
 	if (ret) {
 		printf("Failed to read %s partition\n", BOOTCONFIG1_PART_NAME);
 		return CMD_RET_FAILURE;
@@ -303,7 +299,7 @@ static int do_bootconfig_print(void)
 	struct bootconfig_info bootcfg;
 	int i, ret;
 
-	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg);
+	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg, 0);
 	if (ret)
 		return CMD_RET_FAILURE;
 
@@ -334,7 +330,7 @@ static int do_bootconfig_get(char *part_name)
 	struct bootconfig_info bootcfg;
 	int i, ret;
 
-	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg);
+	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg, 0);
 	if (ret)
 		return CMD_RET_FAILURE;
 
@@ -364,7 +360,7 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 		return CMD_RET_FAILURE;
 	}
 
-	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg);
+	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg, 0);
 	if (ret)
 		return CMD_RET_FAILURE;
 
