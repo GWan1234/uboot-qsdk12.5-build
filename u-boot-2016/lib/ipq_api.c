@@ -6,7 +6,8 @@
 #include <part.h>
 #include <mmc.h>
 #include <sdhci.h>
-#include <cmd_untar.h>
+#include <spi.h>
+#include <spi_flash.h>
 #include <asm/arch-qca-common/smem.h>
 #include <linux/mtd/mtd.h>
 #include <nand.h>
@@ -210,38 +211,37 @@ void check_failsafe_env_exists(void)
 
 void detect_flash_device(void)
 {
-	int ret;
 	size_t len = 0;
 	char flash_list[128];
+	struct spi_flash *spi;
+	struct mmc *mmc;
+	block_dev_desc_t *mmc_dev;
 	detected_flash_device_t *dfd = &detected_flash_device;
 
 	dfd->spi = false;
 	dfd->nand = false;
 	dfd->mmc = false;
 
-	setenv("stdout", "nulldev");
-
-	ret = run_command("sf probe", 0);
-	if (!ret) {
+	spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
+			CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
+	if (spi) {
 		len += strlcpy(flash_list + len, "spi", sizeof(flash_list));
 		dfd->spi = true;
 	}
 
-	ret = run_command("nand device 0", 0);
-	if (!ret) {
+	if (nand_info[CONFIG_NAND_FLASH_INFO_IDX].name) {
 		len += strlcpy(flash_list + len,
 				len ? ", nand" : "nand", sizeof(flash_list));
 		dfd->nand = true;
 	}
 
-	ret = run_command("mmc dev", 0);
-	if (!ret) {
+	mmc = find_mmc_device(mmc_host.dev_num);
+	mmc_dev = mmc_get_dev(mmc_host.dev_num);
+	if (mmc && mmc_dev && mmc_dev->type != DEV_TYPE_UNKNOWN) {
 		len += strlcpy(flash_list + len,
 				len ? ", mmc" : "mmc", sizeof(flash_list));
 		dfd->mmc = true;
 	}
-
-	setenv("stdout", "serial");
 
 	printf("detected flash device(s): %s\n", len ? flash_list : "none");
 }
