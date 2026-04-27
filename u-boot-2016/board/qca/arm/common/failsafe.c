@@ -813,6 +813,20 @@ static int failsafe_write_ptable(const ulong data_addr, const ulong data_size)
 	return failsafe_run_command_list(runcmd);
 }
 
+static inline ulong get_writable_data_size(const uint32_t data_size)
+{
+	uint32_t adj_size, writable_size = data_size;
+	nand_info_t *nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
+
+	if (nand->writesize) {
+		adj_size = data_size % nand->writesize;
+		if (adj_size)
+			writable_size += nand->writesize - adj_size;
+	}
+
+	return (ulong)writable_size;
+}
+
 static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 {
 	printf("\n"
@@ -834,11 +848,12 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 			handle_flash_not_found(fw_type, "NAND");
 			return RET_FLASH_NOT_FOUND;
 		}
+		ulong writable_size = get_writable_data_size((const uint32_t)data_size);
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"nand erase 0x0 0x%lx && "
 			"nand write 0x%lx 0x0 0x%lx",
-			data_size,
-			data_addr, data_size);
+			writable_size,
+			data_addr, writable_size);
 		break;
 	case FW_TYPE_NOR:
 		if (!dfd->spi) {
