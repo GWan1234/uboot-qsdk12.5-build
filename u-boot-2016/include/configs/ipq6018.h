@@ -379,7 +379,6 @@ extern loff_t board_env_size;
 #define CONFIG_IPQ_XTRACT_N_FLASH
 #define CONFIG_CMD_BOOTCONFIG
 #define CONFIG_CMD_IMI
-#define CONFIG_CMD_UNTAR
 #define CONFIG_CMD_FLASHREAD
 #define CONFIG_DHCPD
 #define CONFIG_HTTPD

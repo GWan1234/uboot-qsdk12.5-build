@@ -16,4 +16,4 @@ endif
 obj-y += fdt_fixup.o
 obj-y += ethaddr.o
 obj-$(CONFIG_QCA_APPSBL_DLOAD) += crashdump.o
-obj-$(CONFIG_HTTPD) += failsafe.o fw.o
+obj-$(CONFIG_HTTPD) += failsafe.o fw.o untar.o

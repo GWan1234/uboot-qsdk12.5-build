@@ -26,7 +26,6 @@
 #include <part.h>
 #include <mmc.h>
 #include <sdhci.h>
-#include <cmd_untar.h>
 #include <asm/arch-qca-common/smem.h>
 #include <linux/mtd/mtd.h>
 #include <nand.h>
@@ -37,6 +36,8 @@
 #include <u-boot/md5.h>
 #include <net/httpd.h>
 #include <runcmd_capture.h>
+
+#include "untar.h"
 
 #ifndef CONFIG_SDHCI_SUPPORT
 extern qca_mmc mmc_host;

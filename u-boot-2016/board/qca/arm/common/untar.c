@@ -15,8 +15,9 @@
 #include <command.h>
 #include <errno.h>
 #include <stdbool.h>
-#include <cmd_untar.h>
 #include <failsafe/fw.h>
+
+#include "untar.h"
 
 struct tar_hdr {
 	char name[100];			/*   0 */
