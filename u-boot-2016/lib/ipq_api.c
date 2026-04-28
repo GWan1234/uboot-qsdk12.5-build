@@ -214,7 +214,6 @@ void detect_flash_device(void)
 	size_t len = 0;
 	char flash_list[128];
 	struct spi_flash *spi;
-	struct mmc *mmc;
 	block_dev_desc_t *mmc_dev;
 	detected_flash_device_t *dfd = &detected_flash_device;
 
@@ -235,9 +234,8 @@ void detect_flash_device(void)
 		dfd->nand = true;
 	}
 
-	mmc = find_mmc_device(mmc_host.dev_num);
 	mmc_dev = mmc_get_dev(mmc_host.dev_num);
-	if (mmc && mmc_dev && mmc_dev->type != DEV_TYPE_UNKNOWN) {
+	if (mmc_dev && mmc_dev->type != DEV_TYPE_UNKNOWN) {
 		len += strlcpy(flash_list + len,
 				len ? ", mmc" : "mmc", sizeof(flash_list));
 		dfd->mmc = true;
