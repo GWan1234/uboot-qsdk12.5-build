@@ -56,7 +56,9 @@ static int read_partition(const char *part_name, const ulong load_addr)
 		if (!ret) {
             if (sfi->flash_type == SMEM_BOOT_NAND_FLASH ||
                 sfi->flash_type == SMEM_BOOT_ONENAND_FLASH ||
-                sfi->flash_type == SMEM_BOOT_QSPI_NAND_FLASH) {
+                sfi->flash_type == SMEM_BOOT_QSPI_NAND_FLASH ||
+                (sfi->flash_type == SMEM_BOOT_SPI_FLASH &&
+                    get_which_flash_param((char *)part_name))) {
                 sprintf(buf, "nand read 0x%lx 0x%lx 0x%lx",
                     load_addr, (ulong)offset_in_bytes, (ulong)size_in_bytes);
             } else {
