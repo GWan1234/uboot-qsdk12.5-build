@@ -26,6 +26,9 @@
 #include <nand.h>
 #include <mmc.h>
 #include <sdhci.h>
+#include <spi.h>
+#include <spi_flash.h>
+#include <malloc.h>
 #include <mapmem.h>
 #include <errno.h>
 #include <ipq_api.h>
@@ -115,26 +118,32 @@ static int get_bootconfig_partition_info(const char *part_name,
 static int read_bootconfig(const char *part_name,
 			struct bootconfig_info *bootcfg, int ignore_error)
 {
+	struct spi_flash *spi;
+	nand_info_t *nand;
+	block_dev_desc_t *mmc_dev;
 	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-	uint32_t offset, size;
-	char buf[128];
-	void *load_addr;
+	detected_flash_device_t *dfd = &detected_flash_device;
+	uint32_t offset_in_bytes, size_in_bytes;
+	uint32_t offset_in_blocks = 0, size_in_blocks = 0;
+	size_t readsize;
+	ulong readblks;
+	void *buf;
 	int ret;
 
-	ret = get_bootconfig_partition_info(part_name, &offset, &size);
+	ret = get_bootconfig_partition_info(part_name, &offset_in_bytes, &size_in_bytes);
 	if (ret) {
 		printf("Partition %s not found\n", part_name);
 		return ret;
 	}
 
-	if (size < sizeof(struct bootconfig_info)) {
+	if (size_in_bytes < sizeof(struct bootconfig_info)) {
 		printf("Partition %s size too small for bootconfig\n", part_name);
 		return -ENOSPC;
 	}
 
-	load_addr = map_sysmem(CONFIG_SYS_LOAD_ADDR, size);
-	if (!load_addr) {
-		printf("Failed to map memory\n");
+	buf = malloc(size_in_bytes);
+	if (!buf) {
+		printf("Failed to allocate memory\n");
 		return -ENOMEM;
 	}
 
@@ -143,39 +152,49 @@ static int read_bootconfig(const char *part_name,
 	case SMEM_BOOT_NORPLUSEMMC:
 	case SMEM_BOOT_NORPLUSNAND:
 	case SMEM_BOOT_SPI_FLASH:
-		sprintf(buf, "sf probe && sf read 0x%lx 0x%lx 0x%lx",
-			(ulong)CONFIG_SYS_LOAD_ADDR, (ulong)offset, (ulong)size);
+		spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
+				CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
+		ret = spi_flash_read(spi, offset_in_bytes, size_in_bytes, buf);
 		break;
 	case SMEM_BOOT_NAND_FLASH:
 	case SMEM_BOOT_ONENAND_FLASH:
 	case SMEM_BOOT_QSPI_NAND_FLASH:
-		sprintf(buf, "nand read 0x%lx 0x%lx 0x%lx",
-			(ulong)CONFIG_SYS_LOAD_ADDR, (ulong)offset, (ulong)size);
+		readsize = size_in_bytes;
+		nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
+		ret = nand_read_skip_bad(nand, offset_in_bytes, &readsize,
+				NULL, size_in_bytes, (u_char *)buf);
 		break;
 	case SMEM_BOOT_MMC_FLASH:
 	case SMEM_BOOT_NO_FLASH:
 	case SMEM_BOOT_SDC_FLASH:
 		if (!dfd->mmc)
 			return -ENODEV;
-		sprintf(buf, "mmc read 0x%lx 0x%lx 0x%lx",
-			(ulong)CONFIG_SYS_LOAD_ADDR, (ulong)(offset / 512), (ulong)(size / 512));
+		mmc_dev = mmc_get_dev(mmc_host.dev_num);
+		if (!mmc_dev)
+			return -ENODEV;
+		if (mmc_dev->blksz) {
+			offset_in_blocks = offset_in_bytes / mmc_dev->blksz;
+			size_in_blocks = size_in_bytes / mmc_dev->blksz;
+		}
+		readblks = mmc_dev->block_read(mmc_host.dev_num,
+					offset_in_blocks, size_in_blocks, buf);
+		ret = (readblks == size_in_blocks) ? 0 : 1;
 		break;
 	default:
-		unmap_sysmem(load_addr);
+		free(buf);
 		printf("Unsupported flash type\n");
 		return -EINVAL;
 	}
 
-	ret = run_command(buf, 0);
 	if (ret) {
-		unmap_sysmem(load_addr);
+		free(buf);
 		printf("Failed to read bootconfig partition %s\n", part_name);
 		return ret;
 	}
 
 	/* Copy data to bootcfg structure */
-	memcpy(bootcfg, load_addr, sizeof(struct bootconfig_info));
-	unmap_sysmem(load_addr);
+	memcpy(bootcfg, buf, sizeof(struct bootconfig_info));
+	free(buf);
 
 	/* Validate magic numbers */
 	if (!ignore_error && bootcfg->magic_start != BOOTCONFIG_MAGIC_START &&
@@ -278,21 +297,21 @@ static int do_bootconfig_sync(void)
 	/* Compare the two bootconfig structures */
 	ret = compare_bootconfig(&bootcfg, &bootcfg1);
 	if (ret) {
-		printf("\n✓ BOOTCONFIG and BOOTCONFIG1 are already in sync\n");
+		printf("✓ BOOTCONFIG and BOOTCONFIG1 are already in sync\n");
 		return CMD_RET_SUCCESS;
 	}
 
 	/* They are different, need to sync */
-	printf("\n✗ BOOTCONFIG and BOOTCONFIG1 are inconsistent\n");
-	printf("Syncing BOOTCONFIG1 with BOOTCONFIG...\n");
+	printf("✗ BOOTCONFIG and BOOTCONFIG1 are inconsistent\n");
+	printf("Syncing BOOTCONFIG1 with BOOTCONFIG...\n\n");
 
 	/* Write BOOTCONFIG data to BOOTCONFIG1 partition */
 	ret = write_bootconfig(BOOTCONFIG1_PART_NAME, &bootcfg);
 	if (!ret) {
-		printf("\n✓ BOOTCONFIG1 successfully synced with BOOTCONFIG\n");
+		printf("\n✓ BOOTCONFIG1 successfully synced with BOOTCONFIG\n\n");
 		return CMD_RET_SUCCESS;
 	} else {
-		printf("\n✗ Failed to sync BOOTCONFIG1 with BOOTCONFIG\n");
+		printf("\n✗ Failed to sync BOOTCONFIG1 with BOOTCONFIG\n\n");
 		return CMD_RET_FAILURE;
 	}
 }
@@ -410,10 +429,10 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 	if (modified) {
 		ret = write_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg);
 		if (!ret) {
-			printf("Bootconfig updated successfully\n");
+			printf("\nBootconfig updated successfully\n\n");
 			return CMD_RET_SUCCESS;
 		} else {
-			printf("Failed to write bootconfig\n");
+			printf("\nFailed to write bootconfig\n\n");
 			return CMD_RET_FAILURE;
 		}
 	}
