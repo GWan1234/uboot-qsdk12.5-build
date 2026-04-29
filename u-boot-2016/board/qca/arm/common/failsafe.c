@@ -132,9 +132,11 @@ static int check_part_exists(const char *part_name, int flag)
 	case SMEM_BOOT_NO_FLASH:
 	case SMEM_BOOT_SDC_FLASH:
 	default:
+		if (!dfd->mmc)
+			break;
+
 		mmc_dev = mmc_get_dev(mmc_host.dev_num);
-		if (mmc_dev == NULL)
-			/* 找不到 eMMC */
+		if (!mmc_dev)
 			break;
 
 		ret = get_partition_info_efi_by_name(mmc_dev, part_name, &disk_info);
@@ -195,6 +197,9 @@ static int check_file_size_is_valid(char *file_name, char *part_name,
 	case SMEM_BOOT_NO_FLASH:
 	case SMEM_BOOT_SDC_FLASH:
 	default:
+		if (!dfd->mmc)
+			goto part_not_found;
+
 		mmc_dev = mmc_get_dev(mmc_host.dev_num);
 		if (mmc_dev == NULL)
 			goto part_not_found;

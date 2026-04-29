@@ -26,6 +26,7 @@
 #include <nand.h>
 #include <mmc.h>
 #include <sdhci.h>
+#include <ipq_api.h>
 
 #ifndef CONFIG_SDHCI_SUPPORT
 extern qca_mmc mmc_host;
@@ -36,6 +37,7 @@ extern struct sdhci_host mmc_host;
 static int read_partition(const char *part_name, const ulong load_addr)
 {
 	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+    detected_flash_device_t *dfd = &detected_flash_device;
 	block_dev_desc_t *mmc_dev;
 	disk_partition_t disk_info = {0};
 	uint32_t offset_in_bytes = 0, size_in_bytes = 0;
@@ -67,6 +69,9 @@ static int read_partition(const char *part_name, const ulong load_addr)
 	case SMEM_BOOT_NO_FLASH:
 	case SMEM_BOOT_SDC_FLASH:
 	default:
+        if (!dfd->mmc)
+			goto part_not_found;
+
 		mmc_dev = mmc_get_dev(mmc_host.dev_num);
 		if (mmc_dev == NULL)
 			goto part_not_found;

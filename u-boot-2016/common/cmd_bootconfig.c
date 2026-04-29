@@ -28,6 +28,7 @@
 #include <sdhci.h>
 #include <mapmem.h>
 #include <errno.h>
+#include <ipq_api.h>
 
 #ifndef CONFIG_SDHCI_SUPPORT
 extern qca_mmc mmc_host;
@@ -64,6 +65,7 @@ static int get_bootconfig_partition_info(const char *part_name,
 				uint32_t *offset, uint32_t *size)
 {
 	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+	detected_flash_device_t *dfd = &detected_flash_device;
 	block_dev_desc_t *mmc_dev;
 	disk_partition_t disk_info = {0};
 	uint32_t offset_in_bytes = 0, size_in_bytes = 0;
@@ -84,8 +86,10 @@ static int get_bootconfig_partition_info(const char *part_name,
 	case SMEM_BOOT_MMC_FLASH:
 	case SMEM_BOOT_NO_FLASH:
 	case SMEM_BOOT_SDC_FLASH:
+		if (!dfd->mmc)
+			return -ENODEV;
 		mmc_dev = mmc_get_dev(mmc_host.dev_num);
-		if (mmc_dev == NULL)
+		if (!mmc_dev)
 			return -ENODEV;
 		ret = get_partition_info_efi_by_name(mmc_dev, (char *)part_name, &disk_info);
 		if (ret)
@@ -151,6 +155,8 @@ static int read_bootconfig(const char *part_name,
 	case SMEM_BOOT_MMC_FLASH:
 	case SMEM_BOOT_NO_FLASH:
 	case SMEM_BOOT_SDC_FLASH:
+		if (!dfd->mmc)
+			return -ENODEV;
 		sprintf(buf, "mmc read 0x%lx 0x%lx 0x%lx",
 			(ulong)CONFIG_SYS_LOAD_ADDR, (ulong)(offset / 512), (ulong)(size / 512));
 		break;
