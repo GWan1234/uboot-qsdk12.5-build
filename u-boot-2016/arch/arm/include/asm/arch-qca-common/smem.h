@@ -53,6 +53,7 @@ struct version_entry
 } __attribute__ ((__packed__));
 
 
+bool smem_part_exists(const char *part_name);
 unsigned int smem_get_board_platform_type(void);
 int smem_ptable_init(void);
 #ifdef CONFIG_IPQ_MIBIB_RELOAD

@@ -1194,6 +1194,17 @@ int check_flash_exceed(struct smem_ptn *p, uint32_t offset, uint32_t psize) {
 	return 0;
 }
 
+bool smem_part_exists(const char *part_name)
+{
+	for (unsigned i = 0; i < smem_ptable.len; i++) {
+		if (!strncmp(smem_ptable.parts[i].name, part_name,
+				SMEM_PTN_NAME_MAX))
+			return true;
+	}
+
+	return false;
+}
+
 int do_smeminfo(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
 	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;

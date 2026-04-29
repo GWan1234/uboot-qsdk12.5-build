@@ -110,12 +110,11 @@ int boot_from_mem(const ulong data_addr)
  *
  * NOTE: 目前不支持查找 NAND FLASH 中的 UBI 卷。
  */
-static int check_part_exists(char *part_name, int flag)
+static int check_part_exists(const char *part_name, int flag)
 {
 	int ret;
 	block_dev_desc_t *mmc_dev;
 	disk_partition_t disk_info = {0};
-    uint32_t size_block, start_block;
 
 	switch (sfi->flash_type) {
 	case SMEM_BOOT_NAND_FLASH:
@@ -125,8 +124,8 @@ static int check_part_exists(char *part_name, int flag)
 	case SMEM_BOOT_ONENAND_FLASH:
 	case SMEM_BOOT_QSPI_NAND_FLASH:
 	case SMEM_BOOT_SPI_FLASH:
-		ret = smem_getpart(part_name, &start_block, &size_block);
-		if (!ret)
+		ret = smem_part_exists(part_name);
+		if (ret)
 			/* 在 SMEM (Shared Memory) 中找到指定分区 */
 			return RET_SUCCESS;
 	case SMEM_BOOT_MMC_FLASH:
