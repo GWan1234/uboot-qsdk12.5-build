@@ -114,6 +114,16 @@
 #include "tcp.h"
 #endif
 #include <ipq_api.h>
+#include <mmc.h>
+#include <sdhci.h>
+#include <part.h>
+
+#ifndef CONFIG_SDHCI_SUPPORT
+extern qca_mmc mmc_host;
+#else
+extern struct sdhci_host mmc_host;
+#endif
+
 DECLARE_GLOBAL_DATA_PTR;
 
 /** BOOTP EXTENTIONS **/
@@ -404,6 +414,7 @@ int net_loop(enum proto_t protocol)
 	net_restarted = 0;
 	net_dev_exists = 0;
 	net_try_count = 1;
+	detected_flash_device_t *dfd = &detected_flash_device;
 	debug_cond(DEBUG_INT_STATE, "--- net_loop Entry\n");
 
 	bootstage_mark_name(BOOTSTAGE_ID_ETH_START, "eth_start");
@@ -648,9 +659,18 @@ restart:
 			if (net_boot_file_size > 0) {
 				printf("Bytes transferred = %d (0x%x)\n",
 				       net_boot_file_size, net_boot_file_size);
-				setenv_hex("filesize", net_boot_file_size);
-				setenv_hex("filesize_128k", (net_boot_file_size / 131072 + (net_boot_file_size % 131072 != 0)) * 131072);
 				setenv_hex("fileaddr", load_addr);
+				setenv_hex("filesize", net_boot_file_size);
+				if (dfd->mmc) {
+					ulong file_size_in_blocks;
+					block_dev_desc_t *mmc_dev;
+					mmc_dev = mmc_get_dev(mmc_host.dev_num);
+					if (mmc_dev && mmc_dev->blksz) {
+						file_size_in_blocks = net_boot_file_size / mmc_dev->blksz +
+										(net_boot_file_size % mmc_dev->blksz != 0);
+						setenv_hex("filesize_blks", file_size_in_blocks);
+					}
+				}
 			}
 			if (protocol != NETCONS)
 				eth_halt();

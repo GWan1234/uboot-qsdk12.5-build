@@ -114,7 +114,15 @@ static int read_partition(const char *part_name, const ulong load_addr)
 
     setenv_hex("fileaddr", load_addr);
     setenv_hex("filesize", size_in_bytes);
-    setenv_hex("filesize_128k", (size_in_bytes / 131072 + (size_in_bytes % 131072 != 0)) * 131072);
+    if (dfd->mmc) {
+        ulong size_in_blocks;
+        mmc_dev = mmc_get_dev(mmc_host.dev_num);
+        if (mmc_dev && mmc_dev->blksz) {
+            size_in_blocks = size_in_bytes / mmc_dev->blksz +
+                            (size_in_bytes % mmc_dev->blksz != 0);
+            setenv_hex("filesize_blks", size_in_blocks);
+        }
+    }
 
     return CMD_RET_SUCCESS;
 
