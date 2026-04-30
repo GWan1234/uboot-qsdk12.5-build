@@ -34,6 +34,8 @@ extern qca_mmc mmc_host;
 extern struct sdhci_host mmc_host;
 #endif
 
+DECLARE_GLOBAL_DATA_PTR;
+
 static int read_partition(const char *part_name, const ulong load_addr)
 {
 	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
@@ -75,7 +77,7 @@ static int read_partition(const char *part_name, const ulong load_addr)
 			goto part_not_found;
 
 		mmc_dev = mmc_get_dev(mmc_host.dev_num);
-		if (mmc_dev == NULL)
+		if (!mmc_dev)
 			goto part_not_found;
 
 		ret = get_partition_info_efi_by_name(mmc_dev, (char *)part_name, &disk_info);
@@ -87,6 +89,22 @@ static int read_partition(const char *part_name, const ulong load_addr)
         sprintf(buf, "mmc read 0x%lx 0x%lx 0x%lx",
             load_addr, (ulong)disk_info.start, (ulong)disk_info.size);
 	}
+
+	/*
+	 * The file to be loaded should not overwrite the
+	 * code/stack area.
+	 */
+#ifdef CONFIG_IPQ806X
+    if ((load_addr + size_in_bytes) >= IPQ_TFTP_MAX_ADDR)
+#else
+    if (((load_addr + size_in_bytes) >= CONFIG_SYS_SDRAM_END) ||
+        (((load_addr + size_in_bytes) >= CONFIG_IPQ_FDT_HIGH) &&
+            ((load_addr + size_in_bytes) < CONFIG_TZ_END_ADDR)))
+#endif /* CONFIG_IPQ806X */
+    {
+        puts("Error: partition size too large\n");
+        return CMD_RET_FAILURE;
+    }
 
     ret = run_command(buf, 0);
 	if (ret) {
@@ -123,6 +141,24 @@ static int do_flash_read(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv
     default:
         return CMD_RET_USAGE;
 	}
+
+    /*
+     * Do not load files to the reserved region or the
+     * region where linux is executed.
+     */
+#ifdef CONFIG_IPQ806X
+    if ((load_addr < IPQ_TFTP_MIN_ADDR) ||
+        (load_addr >= IPQ_TFTP_MAX_ADDR))
+#else
+    if ((load_addr < IPQ_TFTP_MIN_ADDR) ||
+        (load_addr >= CONFIG_SYS_SDRAM_END) ||
+        ((load_addr >= CONFIG_IPQ_FDT_HIGH) &&
+        (load_addr < CONFIG_TZ_END_ADDR)))
+#endif /* CONFIG_IPQ806X */
+    {
+        puts("Error: specified load address not allowed\n");
+        return CMD_RET_FAILURE;
+    }
 
     return read_partition(argv[1], load_addr);
 }
