@@ -133,6 +133,7 @@ part_not_found:
 
 static int do_flash_read(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
+    char *part_name;
     char *loadaddr;
     ulong load_addr;
 
@@ -141,10 +142,12 @@ static int do_flash_read(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv
         loadaddr = getenv("loadaddr");
         if (loadaddr == NULL)
             return CMD_RET_USAGE;
+        part_name = argv[1];
         load_addr = simple_strtoul(loadaddr, NULL, 16);
         break;
     case 3:
-        load_addr = simple_strtoul(argv[2], NULL, 16);
+        part_name = argv[2];
+        load_addr = simple_strtoul(argv[1], NULL, 16);
         break;
     default:
         return CMD_RET_USAGE;
@@ -168,12 +171,12 @@ static int do_flash_read(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv
         return CMD_RET_FAILURE;
     }
 
-    return read_partition(argv[1], load_addr);
+    return read_partition(part_name, load_addr);
 }
 
 U_BOOT_CMD(
 	flashread, 3, 0, do_flash_read,
 	"flashread part_name\n"
-    "\tflashread part_name load_addr",
+    "\tflashread load_addr part_name",
 	"read partition from flash memory device\n"
 );
