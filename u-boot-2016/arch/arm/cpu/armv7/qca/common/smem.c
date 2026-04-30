@@ -1205,6 +1205,11 @@ bool smem_part_exists(const char *part_name)
 	return false;
 }
 
+const void *get_smem_ptable_addr(void)
+{
+	return &smem_ptable;
+}
+
 int do_smeminfo(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
 	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;

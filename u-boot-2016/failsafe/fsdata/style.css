@@ -1187,6 +1187,95 @@ html[data-theme="dark"] .field-control {
     background: #1a1f2e;
 }
 
+/* ====== 备份页面样式 ====== */
+
+/* 备份表单容器 */
+.backup-form {
+    width: 100%;
+}
+
+/* 自定义范围区域 */
+.backup-range {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--panel-2);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+}
+
+/* 范围提示信息 */
+.backup-range-hint {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--panel);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    color: var(--primary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    border-left: 3px solid var(--primary);
+    word-break: break-all;
+}
+
+/* 备份状态显示 */
+.backup-status {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--panel-2);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    color: var(--text);
+    text-align: center;
+    border: 1px solid var(--border);
+    word-break: break-word;
+}
+
+/* 备份进度条 - 复用已有的 bar-circle 样式，但可以添加特定调整 */
+#backup_progress {
+    margin: 1rem auto;
+}
+
+/* 备份页面表单行调整 */
+.backup-form .form-row-2 {
+    margin-bottom: 0.5rem;
+}
+
+/* 备份目标选择器样式增强 */
+#backup_target {
+    cursor: pointer;
+}
+
+#backup_target option {
+    padding: 0.5rem;
+    font-size: 0.85rem;
+}
+
+/* 备份页面字段标签 */
+.backup-form .field label {
+    font-weight: 500;
+    color: var(--text);
+    font-size: 0.85rem;
+}
+
+/* 备份页面输入框占位符样式 */
+.backup-form input.field-control::placeholder {
+    color: var(--muted);
+    opacity: 0.6;
+    font-size: 0.8rem;
+}
+
+/* 暗色主题下的备份区域样式优化 */
+html[data-theme="dark"] .backup-range {
+    background: rgba(17, 28, 51, 0.8);
+}
+
+html[data-theme="dark"] .backup-range-hint {
+    background: rgba(15, 23, 42, 0.8);
+}
+
+html[data-theme="dark"] .backup-status {
+    background: rgba(17, 28, 51, 0.6);
+}
+
 /* 响应式设计 - 移动端显示切换按钮 */
 @media (max-width: 768px) {
     .sidebar-toggle {
@@ -1281,6 +1370,16 @@ html[data-theme="dark"] .field-control {
     .env-output {
         max-height: 250px;
         font-size: 0.8rem;
+    }
+
+    .backup-range-hint {
+        font-size: 0.7rem;
+        padding: 0.4rem 0.6rem;
+    }
+
+    .backup-status {
+        font-size: 0.75rem;
+        padding: 0.6rem 0.8rem;
     }
 }
 

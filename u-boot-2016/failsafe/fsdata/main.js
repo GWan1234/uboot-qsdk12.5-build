@@ -57,6 +57,7 @@ class SidebarManager {
             '/index.html': 'firmware',
             '/uboot.html': 'uboot',
             '/art.html': 'art',
+            '/backup.html': 'backup',
             '/cdt.html': 'cdt',
             '/env.html': 'env',
             '/ptable.html': 'ptable',
@@ -95,6 +96,7 @@ class SidebarManager {
             system: {
                 titleKey: "nav.system",
                 items: [
+                    { path: "/backup.html", labelKey: "nav.backup", id: "backup" },
                     { path: "/env.html", labelKey: "nav.env", id: "env" },
                     { path: "/reboot.html", labelKey: "nav.reboot", id: "reboot", onClick: () => confirm(t("reboot.confirm")) }
                 ]
@@ -1480,6 +1482,10 @@ function appInit(pageName) {
     // 根据页面初始化对应模块
     if (pageName === "env") {
         envManager.init();
+    } else if (pageName === "backup") {
+        if (typeof backupInit === "function") {
+            backupInit();
+        }
     }
 
     // 获取版本信息
@@ -1622,6 +1628,295 @@ function handleInvalidResultResponse(message, elements) {
 }
 
 // ==============================
+// 备份功能模块
+// ==============================
+
+/**
+ * 设置备份状态显示
+ */
+function setBackupStatus(text) {
+    const el = document.getElementById("backup_status");
+    if (el) {
+        el.style.display = text ? "block" : "none";
+        el.textContent = text || "";
+    }
+}
+
+/**
+ * 设置备份进度
+ */
+function setBackupProgress(percent) {
+    const el = document.getElementById("backup_progress");
+    if (el) {
+        const p = Math.max(0, Math.min(100, parseInt(percent || 0)));
+        el.style.display = "block";
+        el.style.setProperty("--percent", p);
+    }
+}
+
+/**
+ * 解析用户输入的长度（支持十六进制和K/M后缀）
+ */
+function parseUserLen(str) {
+    if (!str) return null;
+    str = String(str).trim();
+    if (str === "") return null;
+
+    const match = /^\s*(0x[0-9a-fA-F]+|\d+)\s*([a-zA-Z]*)\s*$/.exec(str);
+    if (!match) return null;
+
+    let val = match[1].toLowerCase().indexOf("0x") === 0 ?
+              parseInt(match[1], 16) : parseInt(match[1], 10);
+    if (!isFinite(val) || val < 0) return null;
+
+    const suffix = (match[2] || "").toLowerCase();
+    if (suffix === "" || suffix === "b") return val;
+    if (suffix === "k" || suffix === "kb" || suffix === "kib") return val * 1024;
+    if (suffix === "m" || suffix === "mb" || suffix === "mib") return val * 1024 * 1024;
+
+    return null;
+}
+
+/**
+ * 更新范围提示
+ */
+function backupUpdateRangeHint() {
+    const hint = document.getElementById("backup_range_hint");
+    const startVal = parseUserLen(document.getElementById("backup_start").value);
+    const endVal = parseUserLen(document.getElementById("backup_end").value);
+
+    if (hint) {
+        if (startVal === null || endVal === null) {
+            hint.textContent = t("backup.range.hint");
+        } else if (endVal > startVal) {
+            const size = endVal - startVal;
+            hint.textContent = "Start=" + startVal + " B (" + bytesToHuman(startVal) + ")" +
+                              ", End=" + endVal + " B (" + bytesToHuman(endVal) + ")" +
+                              ", Size=" + size + " B (" + bytesToHuman(size) + ")";
+        } else {
+            hint.textContent = t("backup.range.hint");
+        }
+    }
+}
+
+/**
+ * 备份页面初始化
+ */
+function backupInit() {
+    const modeSelect = document.getElementById("backup_mode");
+    const targetSelect = document.getElementById("backup_target");
+    const rangeDiv = document.getElementById("backup_range");
+    const startInput = document.getElementById("backup_start");
+    const endInput = document.getElementById("backup_end");
+
+    function updateUI() {
+        const isRange = modeSelect.value === "range";
+        if (isRange) {
+            rangeDiv.style.display = "block";
+            backupUpdateRangeHint();
+        } else {
+            rangeDiv.style.display = "none";
+        }
+    }
+
+    modeSelect.onchange = updateUI;
+    if (startInput) startInput.oninput = backupUpdateRangeHint;
+    if (endInput) endInput.oninput = backupUpdateRangeHint;
+
+    updateUI();
+    setBackupStatus("");
+
+    // 获取存储设备信息
+    ajax({
+        url: "/backup/info",
+        done: function(text) {
+            let info;
+            try {
+                info = JSON.parse(text);
+            } catch (e) {
+                setBackupStatus("Failed to parse backup info");
+                return;
+            }
+
+            // 填充目标选择器
+            if (targetSelect) {
+                targetSelect.innerHTML = '<option value="" data-i18n="backup.target.placeholder"></option>';
+
+                // 添加RAW选项
+                if (info.devices) {
+                    if (info.devices.spi && info.devices.spi.present) {
+                        const opt = document.createElement("option");
+                        opt.value = "raw:spi";
+                        opt.textContent = "[RAW] SPI: " +
+                            (info.devices.spi.name ? info.devices.spi.name : "") +
+                            (info.devices.spi.size ? " (" + bytesToHuman(info.devices.spi.size) + ")" : "");
+                        targetSelect.appendChild(opt);
+                    }
+
+                    if (info.devices.mmc && info.devices.mmc.present) {
+                        const opt = document.createElement("option");
+                        opt.value = "raw:mmc";
+                        opt.textContent = "[RAW] MMC: " +
+                            (info.devices.mmc.product ? info.devices.mmc.product : "") +
+                            (info.devices.mmc.size ? " (" + bytesToHuman(info.devices.mmc.size) + ")" : "");
+                        targetSelect.appendChild(opt);
+                    }
+
+                    if (info.devices.nand && info.devices.nand.present) {
+                        const opt = document.createElement("option");
+                        opt.value = "raw:nand";
+                        opt.textContent = "[RAW] NAND: " +
+                            (info.devices.nand.name ? info.devices.nand.name : "") +
+                            (info.devices.nand.size ? " (" + bytesToHuman(info.devices.nand.size) + ")" : "");
+                        targetSelect.appendChild(opt);
+                    }
+                }
+
+                // 添加SMEM选项
+                if (info.smem && info.smem.present && info.smem.parts && info.smem.parts.length) {
+                    info.smem.parts.forEach(function(part) {
+                        if (part && part.name) {
+                            const opt = document.createElement("option");
+                            opt.value = "smem:" + part.name;
+                            opt.textContent = "[SMEM] " + part.name +
+                                             (part.size ? " (" + bytesToHuman(part.size) + ")" : "");
+                            targetSelect.appendChild(opt);
+                        }
+                    });
+                }
+
+                // 添加MMC选项
+                if (info.mmc && info.mmc.present) {
+                    if (info.mmc.parts && info.mmc.parts.length) {
+                        info.mmc.parts.forEach(function(part) {
+                            if (part && part.name) {
+                                const opt = document.createElement("option");
+                                opt.value = "mmc:" + part.name;
+                                opt.textContent = "[MMC] " + part.name +
+                                                 (part.size ? " (" + bytesToHuman(part.size) + ")" : "");
+                                targetSelect.appendChild(opt);
+                            }
+                        });
+                    }
+                }
+
+                // 选择第一个有效选项
+                if (targetSelect.options.length > 1) {
+                    targetSelect.selectedIndex = 1;
+                }
+
+                applyI18n(targetSelect);
+            }
+        }
+    });
+}
+
+/**
+ * 解析Content-Disposition中的文件名
+ */
+function parseFilenameFromDisposition(header) {
+    if (!header) return "";
+    const match = /filename\s*=\s*"([^"]+)"/i.exec(header);
+    if (match && match[1]) return match[1];
+    const match2 = /filename\s*=\s*([^;\s]+)/i.exec(header);
+    if (match2 && match2[1]) return match2[1].replace(/^"|"$/g, "");
+    return "";
+}
+
+/**
+ * 开始备份
+ */
+async function startBackup() {
+    const modeSelect = document.getElementById("backup_mode");
+    const targetSelect = document.getElementById("backup_target");
+
+    if (!modeSelect || !targetSelect) return;
+
+    const mode = modeSelect.value;
+    const target = targetSelect.value;
+
+    if (!target) {
+        alert(t("backup.error.no_target"));
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("mode", mode);
+    formData.append("target", target);
+
+    if (mode === "range") {
+        const startInput = document.getElementById("backup_start");
+        const endInput = document.getElementById("backup_end");
+
+        if (!startInput || !endInput || !startInput.value || !endInput.value) {
+            alert(t("backup.error.bad_range"));
+            return;
+        }
+
+        formData.append("start", startInput.value);
+        formData.append("end", endInput.value);
+    }
+
+    setBackupProgress(0);
+    setBackupStatus(t("backup.status.starting"));
+
+    try {
+        const response = await fetch("/backup/main", { method: "POST", body: formData });
+
+        if (!response.ok) {
+            setBackupStatus(t("backup.error.http") + " " + response.status);
+            return;
+        }
+
+        const contentLength = response.headers.get("Content-Length");
+        const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
+        let filename = parseFilenameFromDisposition(response.headers.get("Content-Disposition"));
+        if (!filename) filename = "backup.bin";
+
+        // 获取文件名中的备份信息
+        if (typeof makeBackupDownloadName === "function") {
+            filename = makeBackupDownloadName(filename);
+        }
+
+        let received = 0;
+        const chunks = [];
+        const reader = response.body.getReader();
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.length;
+            if (totalSize) {
+                setBackupProgress((received / totalSize) * 100);
+            }
+            setBackupStatus(t("backup.status.downloading") + " " +
+                           bytesToHuman(received) + (totalSize ? " / " + bytesToHuman(totalSize) : ""));
+        }
+
+        setBackupProgress(100);
+        setBackupStatus(t("backup.status.preparing"));
+
+        // 保存文件
+        const blob = new Blob(chunks, { type: "application/octet-stream" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        setBackupStatus(t("backup.status.done") + " " + filename);
+
+    } catch (error) {
+        setBackupStatus(t("backup.error.exception") + " " + (error.message || String(error)));
+    }
+}
+
+// 导出备份初始化函数供appInit调用
+window.backupInit = backupInit;
+
+// ==============================
 // 环境变量管理模块
 // ==============================
 
@@ -1632,7 +1927,6 @@ function handleInvalidResultResponse(message, elements) {
 const envManager = (() => {
     // 私有变量
     let elements = null;
-    let refreshTimer = null;
 
     /**
      * 获取或缓存 DOM 元素
@@ -2031,6 +2325,7 @@ const I18N = (() => {
             "nav.simg": "SIMG Update",
             "nav.initramfs": "Load Initramfs",
             "nav.system": "System",
+            "nav.backup": "Flash Backup",
             "nav.env": "Environment Management",
             "nav.reboot": "Reboot",
             "control.language": "🌐 Language",
@@ -2074,6 +2369,30 @@ const I18N = (() => {
             "simg.hint": t.en.updateHint("Single Image (written starting from offset 0x0 of the flash memory device)"),
             "simg.warn.1": t.en.warnChoose("Single Image"),
             "simg.warn.2": t.en.warnDanger("Single Image"),
+            "backup.title": "FLASH BACKUP",
+            "backup.hint": "Download a backup from device storage as a <strong>binary file</strong>.<br>The backup data will be streamed to your browser and saved on your computer.",
+            "backup.label.mode": "Mode:",
+            "backup.label.target": "Target:",
+            "backup.label.start": "Start:",
+            "backup.label.end": "End (exclusive):",
+            "backup.mode.part": "Partition backup",
+            "backup.mode.range": "Custom range",
+            "backup.action.download": "Download",
+            "backup.status.starting": "Starting backup...",
+            "backup.status.downloading": "Downloading data...",
+            "backup.status.preparing": "Preparing file...",
+            "backup.status.done": "Backup completed:",
+            "backup.status.starting": "Starting backup...",
+            "backup.error.no_target": "Please select a target",
+            "backup.error.bad_range": "Invalid range",
+            "backup.error.http": "HTTP error:",
+            "backup.error.exception": "Error:",
+            "backup.range.hint": "Start and end offsets (supports hex 0x... or decimal with K/KiB suffix)",
+            "backup.target.placeholder": "-- Select target --",
+            "backup.storage.not_present": "Not present",
+            "backup.warn.1": "Do not power off the device during backup.",
+            "backup.warn.2": "Custom range reads raw bytes; be careful with offsets.",
+            "backup.warn.3": "Large backups may take a long time depending on storage speed.",
             "env.title": "U-BOOT ENV",
             "env.hint": "Manage <strong>U-Boot environment variables</strong>. Changes will be saved to storage.",
             "env.count": "Variables:",
@@ -2143,6 +2462,7 @@ const I18N = (() => {
             "nav.simg": "闪存镜像更新",
             "nav.initramfs": "启动内存固件",
             "nav.system": "系统",
+            "nav.backup": "闪存备份",
             "nav.env": "环境变量管理",
             "nav.reboot": "重启",
             "control.language": "🌐 语言",
@@ -2186,6 +2506,29 @@ const I18N = (() => {
             "simg.hint": t["zh-cn"].updateHint("闪存镜像（从闪存设备的偏移量 0x0 处开始写入）"),
             "simg.warn.1": t["zh-cn"].warnChoose("闪存镜像"),
             "simg.warn.2": t["zh-cn"].warnDanger("闪存镜像"),
+            "backup.title": "闪存备份",
+            "backup.hint": "从设备存储下载备份为<strong>二进制文件</strong>。<br>备份数据将流式传输到浏览器并保存到您的计算机。",
+            "backup.label.mode": "模式:",
+            "backup.label.target": "目标:",
+            "backup.label.start": "起始偏移:",
+            "backup.label.end": "结束偏移(不含):",
+            "backup.mode.part": "分区备份",
+            "backup.mode.range": "自定义范围",
+            "backup.action.download": "下载",
+            "backup.status.starting": "开始备份...",
+            "backup.status.downloading": "正在下载数据...",
+            "backup.status.preparing": "准备文件中...",
+            "backup.status.done": "备份完成:",
+            "backup.error.no_target": "请选择目标",
+            "backup.error.bad_range": "无效的范围",
+            "backup.error.http": "HTTP错误:",
+            "backup.error.exception": "错误:",
+            "backup.range.hint": "起始和结束偏移量支持十进制、0x 十六进制及 KiB / MiB 后缀",
+            "backup.target.placeholder": "-- 选择目标 --",
+            "backup.storage.not_present": "不存在",
+            "backup.warn.1": "备份过程中请勿断电！",
+            "backup.warn.2": "自定义范围读取原始字节，请谨慎设置偏移量！",
+            "backup.warn.3": "大容量备份可能需要较长时间，取决于存储速度！",
             "env.title": "U-Boot 环境变量",
             "env.hint": "管理 <strong>U-Boot 环境变量</strong>。更改将保存到存储设备。",
             "env.count": "变量数:",
