@@ -29,6 +29,18 @@ extern detected_flash_device_t detected_flash_device;
 #define CONFIG_TFTP_DIGITAL_PROGRESS
 #endif
 
+#define NO_FLASH_STR         "no"
+#define NOR_FLASH_STR        "nor"
+#define NAND_FLASH_STR       "nand"
+#define ONENAND_FLASH_STR    "onenand"
+#define SDC_FLASH_STR        "sdc"
+#define MMC_FLASH_STR        "mmc"
+#define SPI_FLASH_STR        "spi"
+#define NORPLUSNAND_STR      "nor_plus_nand"
+#define NORPLUSEMMC_STR      "nor_plus_emmc"
+#define QSPI_NAND_FLASH_STR  "qspi_nand"
+#define UNKNOWN_FLASH_STR    "unknown"
+
 void check_failsafe_env_exists(void);
 void check_button_is_pressed(void);
 void detect_flash_device(void);
@@ -38,6 +50,8 @@ void led_toggle(const char *gpio_name);
 unsigned int fdt_get_gpio_by_name(const char *gpio_name, const int debug_state);
 size_t json_escape(const char *input, char *output, size_t output_buffer_size);
 bool mmc_part_exists(const char *part_name);
+const char *flash_type_to_string(const uint32_t flash_type);
+int string_to_flash_type(const char *str);
 
 static inline void handle_start_led_state(void)
 {

@@ -62,6 +62,7 @@ class SidebarManager {
             '/env.html': 'env',
             '/ptable.html': 'ptable',
             '/simg.html': 'simg',
+            '/sysinfo.html': 'sysinfo',
             '/initramfs.html': 'initramfs',
             '/reboot.html': 'reboot',
             '/flashing.html': 'flashing',
@@ -96,6 +97,7 @@ class SidebarManager {
             system: {
                 titleKey: "nav.system",
                 items: [
+                    { path: "/sysinfo.html", labelKey: "nav.sysinfo", id: "sysinfo" },
                     { path: "/backup.html", labelKey: "nav.backup", id: "backup" },
                     { path: "/env.html", labelKey: "nav.env", id: "env" },
                     { path: "/reboot.html", labelKey: "nav.reboot", id: "reboot", onClick: () => confirm(t("reboot.confirm")) }
@@ -1480,12 +1482,22 @@ function appInit(pageName) {
     }, 0);
 
     // 根据页面初始化对应模块
-    if (pageName === "env") {
-        envManager.init();
-    } else if (pageName === "backup") {
-        if (typeof backupInit === "function") {
-            backupInit();
-        }
+    switch (pageName) {
+        case "env":
+            envManager.init();
+            break;
+        case "backup":
+            if (typeof backupInit === "function") {
+                backupInit();
+            }
+            break;
+        case "sysinfo":
+            if (typeof sysinfoInit === "function") {
+                sysinfoInit();
+            }
+            break;
+        default:
+            break;
     }
 
     // 获取版本信息
@@ -2294,6 +2306,430 @@ const envManager = (() => {
 })();
 
 // ==============================
+// 系统信息模块
+// ==============================
+
+/**
+ * 创建表格行
+ * @param {string} labelKey - 标签的国际化 key
+ * @param {string} value - 显示的值
+ * @param {string} [valueClass] - 值的额外 CSS 类
+ * @returns {HTMLTableRowElement}
+ */
+function createInfoRow(labelKey, value, valueClass) {
+    const tr = document.createElement("tr");
+    tr.className = "tr";
+
+    const tdLabel = document.createElement("td");
+    tdLabel.className = "td left";
+    tdLabel.setAttribute("width", "33%");
+    tdLabel.setAttribute("data-i18n", labelKey);
+    tdLabel.textContent = t(labelKey);
+
+    const tdValue = document.createElement("td");
+    tdValue.className = "td left";
+    if (valueClass) {
+        tdValue.classList.add(valueClass);
+    }
+    tdValue.textContent = value !== undefined && value !== null ? String(value) : t("sysinfo.no_data");
+
+    tr.appendChild(tdLabel);
+    tr.appendChild(tdValue);
+    return tr;
+}
+
+/**
+ * 创建板块表格容器
+ * @param {string} sectionId - 板块元素 ID
+ * @param {string} titleKey - 标题的国际化 key
+ * @returns {HTMLTableElement}
+ */
+function createSectionTable(sectionId, titleKey) {
+    const section = document.getElementById(sectionId);
+    if (!section) return null;
+
+    // 清空并设置标题
+    const inner = section.querySelector(".card-main-inner");
+    if (!inner) return null;
+
+    inner.innerHTML = "";
+
+    const h2 = document.createElement("h2");
+    h2.setAttribute("data-i18n", titleKey);
+    h2.textContent = t(titleKey);
+    inner.appendChild(h2);
+
+    const table = document.createElement("table");
+    table.className = "table";
+    inner.appendChild(table);
+
+    return table;
+}
+
+/**
+ * 格式化字节数为可读字符串
+ * @param {number} bytes
+ * @returns {string}
+ */
+function formatHexBytes(bytes) {
+    if (bytes === undefined || bytes === null) return t("sysinfo.no_data");
+    const hex = "0x" + bytes.toString(16).toUpperCase();
+    const human = bytesToHuman(bytes);
+    return hex + " (" + human + ")";
+}
+
+/**
+ * 处理设备信息
+ * @param {object} device - 设备对象
+ * @param {string} type - 设备类型 (spi/mmc/nand)
+ * @param {HTMLTableElement} table - 目标表格
+ */
+function renderDeviceInfo(device, type, table) {
+    if (!device || !device.present) return;
+
+    // 添加设备类型标题行
+    let deviceName;
+    if (type === "mmc" && device.vendor && device.product) {
+        deviceName = device.vendor + " / " + device.product;
+    } else if (device.name) {
+        deviceName = device.name;
+    } else {
+        deviceName = t("sysinfo.present");
+    }
+
+    const headerTr = document.createElement("tr");
+    headerTr.className = "tr";
+
+    const headerTd = document.createElement("td");
+    headerTd.className = "td left";
+    headerTd.setAttribute("colspan", "2");
+    headerTd.style.fontWeight = "600";
+    headerTd.style.color = "var(--primary)";
+    headerTd.style.backgroundColor = "var(--panel-2)";
+    headerTd.textContent = type.toUpperCase() + " (" + deviceName + ")";
+
+    headerTr.appendChild(headerTd);
+    table.appendChild(headerTr);
+
+    // 大小
+    if (device.size !== undefined) {
+        table.appendChild(createInfoRow("sysinfo.size", formatHexBytes(device.size)));
+    }
+
+    // 根据设备类型显示不同属性
+    const spiProps = {
+        "page_size": "sysinfo.page_size",
+        "block_size": "sysinfo.block_size",
+        "sector_size": "sysinfo.sector_size",
+        "erase_size": "sysinfo.erase_size",
+    };
+
+    const mmcProps = {
+        "block_size": "sysinfo.block_size",
+        "version": "sysinfo.version",
+    };
+
+    const nandProps = {
+        "page_size": "sysinfo.page_size",
+        "block_size": "sysinfo.block_size",
+        "oob_size": "sysinfo.oob_size",
+        "oob_avail": "sysinfo.oob_avail",
+        "ecc_step_size": "sysinfo.ecc_step_size",
+        "ecc_strength": "sysinfo.ecc_strength",
+    };
+
+    let propsToShow;
+    if (type === "spi") {
+        propsToShow = spiProps;
+    } else if (type === "mmc") {
+        propsToShow = mmcProps;
+    } else if (type === "nand") {
+        propsToShow = nandProps;
+    }
+
+    for (const [prop, labelKey] of Object.entries(propsToShow)) {
+        if (device[prop] !== undefined) {
+            let value = device[prop];
+            // 大小相关的用十六进制显示
+            if (prop.includes("size")) {
+                value = formatHexBytes(value);
+            }
+            table.appendChild(createInfoRow(labelKey, value));
+        }
+    }
+}
+
+/**
+ * 渲染分区信息
+ * @param {object} partitionsInfo - 分区数据
+ * @param {HTMLTableElement} table - 目标表格
+ */
+function renderPartitions(partitionsInfo, table) {
+    if (!partitionsInfo) return;
+
+    const partTypes = ["smem", "mmc"];
+
+    partTypes.forEach(function(partType) {
+        const partData = partitionsInfo[partType];
+        if (!partData || !partData.present || !partData.parts || !partData.parts.length) {
+            return;
+        }
+
+        // 添加分区类型标题行
+        const headerTr = document.createElement("tr");
+        headerTr.className = "tr";
+
+        const headerTd = document.createElement("td");
+        headerTd.className = "td left";
+        headerTd.setAttribute("colspan", "5");
+        headerTd.style.fontWeight = "600";
+        headerTd.style.color = "var(--primary)";
+        headerTd.style.backgroundColor = "var(--panel-2)";
+        headerTd.textContent = partType.toUpperCase() + " " + t("sysinfo.title.partitions_info");
+
+        headerTr.appendChild(headerTd);
+        table.appendChild(headerTr);
+
+        // 添加表头行
+        const theadTr = document.createElement("tr");
+        theadTr.className = "tr";
+
+        // 列定义：序号、分区名、起始地址、结束地址、大小
+        const columns = [
+            { key: "sysinfo.part_index", text: t("sysinfo.part_index"), width: "8%" },
+            { key: "sysinfo.name", text: t("sysinfo.name"), width: "20%" },
+            { key: "sysinfo.part_start", text: t("sysinfo.part_start"), width: "24%" },
+            { key: "sysinfo.part_end", text: t("sysinfo.part_end"), width: "24%" },
+            { key: "sysinfo.size", text: t("sysinfo.size"), width: "24%" }
+        ];
+
+        columns.forEach(function(col) {
+            const th = document.createElement("td");
+            th.className = "td left";
+            th.setAttribute("width", col.width);
+            th.setAttribute("data-i18n", col.key);
+            th.textContent = col.text;
+            th.style.fontWeight = "500";
+            th.style.fontSize = "0.85rem";
+            th.style.color = "var(--muted)";
+            theadTr.appendChild(th);
+        });
+
+        table.appendChild(theadTr);
+
+        // 添加每个分区
+        partData.parts.forEach(function(part, index) {
+            const tr = document.createElement("tr");
+            tr.className = "tr";
+
+            // 序号（从 1 开始）
+            const tdIndex = document.createElement("td");
+            tdIndex.className = "td left";
+            tdIndex.setAttribute("width", "8%");
+            tdIndex.textContent = index + 1;
+            tdIndex.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+            tdIndex.style.fontSize = "0.85rem";
+
+            // 分区名
+            const tdName = document.createElement("td");
+            tdName.className = "td left";
+            tdName.setAttribute("width", "20%");
+            tdName.textContent = part.name || "";
+            tdName.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+            tdName.style.fontSize = "0.85rem";
+
+            // 起始地址
+            const tdStart = document.createElement("td");
+            tdStart.className = "td left";
+            tdStart.setAttribute("width", "24%");
+            const start = part.start || 0;
+            tdStart.textContent = "0x" + start.toString(16).toUpperCase();
+            tdStart.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+            tdStart.style.fontSize = "0.85rem";
+
+            // 结束地址 = 起始地址 + 大小 - 1
+            const tdEnd = document.createElement("td");
+            tdEnd.className = "td left";
+            tdEnd.setAttribute("width", "24%");
+            const size = part.size || 0;
+            const end = start + size - 1;
+            tdEnd.textContent = "0x" + end.toString(16).toUpperCase();
+            tdEnd.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+            tdEnd.style.fontSize = "0.85rem";
+
+            // 大小
+            const tdSize = document.createElement("td");
+            tdSize.className = "td left";
+            tdSize.setAttribute("width", "24%");
+            tdSize.textContent = "0x" + size.toString(16).toUpperCase() + " (" + bytesToHuman(size) + ")";
+            tdSize.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+            tdSize.style.fontSize = "0.85rem";
+
+            tr.appendChild(tdIndex);
+            tr.appendChild(tdName);
+            tr.appendChild(tdStart);
+            tr.appendChild(tdEnd);
+            tr.appendChild(tdSize);
+            table.appendChild(tr);
+        });
+    });
+}
+
+/**
+ * 渲染系统信息数据
+ * @param {object} data - 解析后的系统信息数据
+ */
+function renderSysinfoData(sections, data) {
+    // ========== 设备信息 ==========
+    var boardTable = createSectionTable("board_info", "sysinfo.title.board_info");
+    if (boardTable) {
+        // 设备详细信息
+        if (data.board) {
+            var b = data.board;
+            if (b.hostname) boardTable.appendChild(createInfoRow("sysinfo.hostname", b.hostname));
+            if (b.model) boardTable.appendChild(createInfoRow("sysinfo.model", b.model));
+            if (b.compatible) boardTable.appendChild(createInfoRow("sysinfo.compatible", b.compatible));
+            if (b.machid) boardTable.appendChild(createInfoRow("sysinfo.machid", b.machid));
+            if (b.ram_size !== undefined) {
+                boardTable.appendChild(createInfoRow("sysinfo.ram_size", formatHexBytes(b.ram_size)));
+            }
+        }
+
+        // 启动模式
+        if (data.is_9008_mode !== undefined) {
+            const bootMode = data.is_9008_mode ? "9008" : "Normal";
+            boardTable.appendChild(createInfoRow("sysinfo.boot_mode", bootMode));
+        }
+
+        // U-Boot 版本
+        if (data.uboot_version) {
+            boardTable.appendChild(createInfoRow("sysinfo.uboot_version", data.uboot_version));
+        }
+    }
+
+    // ========== 存储信息 ==========
+    var flashTable = createSectionTable("flash_info", "sysinfo.title.flash_info");
+    if (flashTable) {
+        // SMEM 信息
+        if (data.smeminfo) {
+
+            // 添加 SMEM 信息标题行
+            const headerTr = document.createElement("tr");
+            headerTr.className = "tr";
+
+            const headerTd = document.createElement("td");
+            headerTd.className = "td left";
+            headerTd.setAttribute("colspan", "2");
+            headerTd.style.fontWeight = "600";
+            headerTd.style.color = "var(--primary)";
+            headerTd.style.backgroundColor = "var(--panel-2)";
+            headerTd.setAttribute("data-i18n", "sysinfo.smeminfo");
+            headerTd.textContent = t("sysinfo.smeminfo");
+
+            headerTr.appendChild(headerTd);
+            flashTable.appendChild(headerTr);
+
+            var smem = data.smeminfo;
+            if (smem.flash_type) flashTable.appendChild(createInfoRow("sysinfo.flash_type", smem.flash_type));
+            if (smem.flash_block_size) flashTable.appendChild(createInfoRow("sysinfo.flash_block_size", formatHexBytes(smem.flash_block_size)));
+            if (smem.flash_density) flashTable.appendChild(createInfoRow("sysinfo.flash_density", formatHexBytes(smem.flash_density)));
+            if (smem.flash_secondary_type) flashTable.appendChild(createInfoRow("sysinfo.flash_secondary_type", smem.flash_secondary_type));
+        }
+
+        // 设备信息
+        if (data.devices) {
+            var devices = data.devices;
+
+            // SPI
+            if (devices.spi && devices.spi.present) {
+                renderDeviceInfo(devices.spi, "spi", flashTable);
+            }
+
+            // MMC
+            if (devices.mmc && devices.mmc.present) {
+                renderDeviceInfo(devices.mmc, "mmc", flashTable);
+            }
+
+            // NAND
+            if (devices.nand && devices.nand.present) {
+                renderDeviceInfo(devices.nand, "nand", flashTable);
+            }
+        }
+
+        // 如果没有任何设备，显示提示
+        if (flashTable.querySelectorAll("tr").length === 0) {
+            flashTable.appendChild(createInfoRow("sysinfo.no_data", t("sysinfo.no_data")));
+        }
+    }
+
+    // ========== 分区信息 ==========
+    var partitionTable = createSectionTable("partitions_info", "sysinfo.title.partitions_info");
+    if (partitionTable) {
+        if (data.partitions) {
+            renderPartitions(data.partitions, partitionTable);
+        }
+
+        // 如果没有任何分区，显示提示
+        if (partitionTable.querySelectorAll("tr").length === 0) {
+            partitionTable.appendChild(createInfoRow("sysinfo.no_data", t("sysinfo.no_data")));
+        }
+    }
+
+    // 应用国际化
+    sections.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) {
+            applyI18n(el);
+        }
+    });
+}
+
+/**
+ * 系统信息页面初始化
+ */
+function sysinfoInit() {
+    // 显示加载状态
+    const sections = ["board_info", "flash_info", "partitions_info"];
+    sections.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) {
+            var inner = el.querySelector(".card-main-inner");
+            if (inner) {
+                inner.innerHTML = '<span style="color: var(--muted);">' + t("sysinfo.loading") + '</span>';
+            }
+        }
+    });
+
+    // 请求系统信息
+    ajax({
+        url: "/sysinfo",
+        timeout: 10000,
+        done: function(responseText) {
+            var data;
+            try {
+                data = JSON.parse(responseText);
+            } catch (e) {
+                sections.forEach(function(id) {
+                    var el = document.getElementById(id);
+                    if (el) {
+                        var inner = el.querySelector(".card-main-inner");
+                        if (inner) {
+                            inner.innerHTML = '<span style="color: var(--danger);">' + t("sysinfo.error.parse") + '</span>';
+                        }
+                    }
+                });
+                return;
+            }
+
+            renderSysinfoData(sections, data);
+        }
+    });
+}
+
+// 导出初始化函数
+window.sysinfoInit = sysinfoInit;
+
+// ==============================
 // 国际化数据
 // ==============================
 
@@ -2325,6 +2761,7 @@ const I18N = (() => {
             "nav.simg": "SIMG Update",
             "nav.initramfs": "Load Initramfs",
             "nav.system": "System",
+            "nav.sysinfo": "System Info",
             "nav.backup": "Flash Backup",
             "nav.env": "Environment Management",
             "nav.reboot": "Reboot",
@@ -2425,6 +2862,44 @@ const I18N = (() => {
             "env.restore.hint": "Upload a previously saved binary U-Boot environment image (CRC + data) to restore.",
             "env.warn.1": "Modifying environment variables may affect boot behavior.",
             "env.warn.2": "Do not power off during save or restore.",
+            "sysinfo.title": "SYSTEM INFORMATION",
+            "sysinfo.title.board_info": "Board Info",
+            "sysinfo.title.flash_info": "Flash Info",
+            "sysinfo.title.partitions_info": "Partitions",
+            "sysinfo.loading": "Loading system information...",
+            "sysinfo.error.load": "Failed to load system information",
+            "sysinfo.error.parse": "Failed to parse system information",
+            "sysinfo.uboot_version": "U-Boot Version",
+            "sysinfo.hostname": "Hostname",
+            "sysinfo.model": "Model",
+            "sysinfo.compatible": "Compatible",
+            "sysinfo.machid": "Machine ID",
+            "sysinfo.ram_size": "RAM Size",
+            "sysinfo.smeminfo": "SMEM INFO",
+            "sysinfo.flash_type": "Flash Type",
+            "sysinfo.flash_secondary_type": "2nd Flash Type",
+            "sysinfo.flash_block_size": "Block Size",
+            "sysinfo.flash_density": "Density",
+            "sysinfo.present": "Present",
+            "sysinfo.name": "Name",
+            "sysinfo.size": "Size",
+            "sysinfo.page_size": "Page Size",
+            "sysinfo.sector_size": "Sector Size",
+            "sysinfo.erase_size": "Erase Size",
+            "sysinfo.block_size": "Block Size",
+            "sysinfo.oob_size": "OOB Size",
+            "sysinfo.oob_avail": "OOB Available",
+            "sysinfo.ecc_step_size": "ECC Step Size",
+            "sysinfo.ecc_strength": "ECC Strength",
+            "sysinfo.vendor": "Vendor",
+            "sysinfo.product": "Product",
+            "sysinfo.version": "Version",
+            "sysinfo.type": "Type",
+            "sysinfo.part_index": "Index",
+            "sysinfo.part_start": "Start Address",
+            "sysinfo.part_end": "End Address",
+            "sysinfo.no_data": "No data available",
+            "sysinfo.boot_mode": "Boot Mode",
             "reboot.confirm": "Reboot device now?",
             "reboot.title.in_progress": "REBOOTING DEVICE",
             "reboot.hint.in_progress": "Reboot request has been sent. Please wait...<br>This page may be in not responding status for a short time.",
@@ -2462,6 +2937,7 @@ const I18N = (() => {
             "nav.simg": "闪存镜像更新",
             "nav.initramfs": "启动内存固件",
             "nav.system": "系统",
+            "nav.sysinfo": "系统信息",
             "nav.backup": "闪存备份",
             "nav.env": "环境变量管理",
             "nav.reboot": "重启",
@@ -2561,6 +3037,44 @@ const I18N = (() => {
             "env.restore.hint": "上传之前保存的二进制环境变量镜像文件（含 CRC）进行恢复。",
             "env.warn.1": "修改环境变量可能影响系统启动行为。",
             "env.warn.2": "保存或恢复过程中请勿断电。",
+            "sysinfo.title": "系统信息",
+            "sysinfo.title.board_info": "设备信息",
+            "sysinfo.title.flash_info": "存储信息",
+            "sysinfo.title.partitions_info": "分区信息",
+            "sysinfo.loading": "正在加载系统信息...",
+            "sysinfo.error.load": "加载系统信息失败",
+            "sysinfo.error.parse": "解析系统信息失败",
+            "sysinfo.uboot_version": "U-Boot 版本",
+            "sysinfo.hostname": "主机名",
+            "sysinfo.model": "型号",
+            "sysinfo.compatible": "兼容平台",
+            "sysinfo.machid": "机器 ID",
+            "sysinfo.ram_size": "内存大小",
+            "sysinfo.smeminfo": "SMEM 信息",
+            "sysinfo.flash_type": "闪存类型",
+            "sysinfo.flash_secondary_type": "次级闪存类型",
+            "sysinfo.flash_block_size": "块大小",
+            "sysinfo.flash_density": "容量密度",
+            "sysinfo.present": "存在",
+            "sysinfo.name": "名称",
+            "sysinfo.size": "大小",
+            "sysinfo.page_size": "页大小",
+            "sysinfo.sector_size": "扇区大小",
+            "sysinfo.erase_size": "擦除块大小",
+            "sysinfo.block_size": "块大小",
+            "sysinfo.oob_size": "OOB 大小",
+            "sysinfo.oob_avail": "可用 OOB",
+            "sysinfo.ecc_step_size": "ECC 步长",
+            "sysinfo.ecc_strength": "ECC 强度",
+            "sysinfo.vendor": "厂商",
+            "sysinfo.product": "产品",
+            "sysinfo.version": "版本",
+            "sysinfo.type": "类型",
+            "sysinfo.part_index": "序号",
+            "sysinfo.part_start": "起始地址",
+            "sysinfo.part_end": "结束地址",
+            "sysinfo.no_data": "无数据",
+            "sysinfo.boot_mode": "启动模式",
             "reboot.confirm": "确认立即重启设备？",
             "reboot.title.in_progress": "正在重启设备",
             "reboot.hint.in_progress": "已发送重启请求，请稍候…<br>该页面短时间可能显示无响应，这是正常现象。",

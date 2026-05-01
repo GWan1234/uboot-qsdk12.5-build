@@ -2,3 +2,4 @@
 
 obj-y += backup.o
 obj-y += env.o
+obj-y += sysinfo.o

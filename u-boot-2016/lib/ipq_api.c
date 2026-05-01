@@ -324,3 +324,46 @@ bool mmc_part_exists(const char *part_name)
 
 	return ret ? false : true;
 }
+
+const char *flash_type_to_string(const uint32_t flash_type)
+{
+    switch (flash_type) {
+    case SMEM_BOOT_NO_FLASH: return NO_FLASH_STR;
+    case SMEM_BOOT_NOR_FLASH: return NOR_FLASH_STR;
+    case SMEM_BOOT_NAND_FLASH: return NAND_FLASH_STR;
+    case SMEM_BOOT_ONENAND_FLASH: return ONENAND_FLASH_STR;
+    case SMEM_BOOT_SDC_FLASH: return SDC_FLASH_STR;
+    case SMEM_BOOT_MMC_FLASH: return MMC_FLASH_STR;
+    case SMEM_BOOT_SPI_FLASH: return SPI_FLASH_STR;
+    case SMEM_BOOT_NORPLUSNAND: return NORPLUSNAND_STR;
+    case SMEM_BOOT_NORPLUSEMMC: return NORPLUSEMMC_STR;
+    case SMEM_BOOT_QSPI_NAND_FLASH: return QSPI_NAND_FLASH_STR;
+    default: return UNKNOWN_FLASH_STR;
+    }
+}
+
+int string_to_flash_type(const char *str)
+{
+    if (!strcasecmp(str, NO_FLASH_STR))
+        return SMEM_BOOT_NO_FLASH;
+    else if (!strcasecmp(str, NOR_FLASH_STR))
+        return SMEM_BOOT_NOR_FLASH;
+    else if (!strcasecmp(str, NAND_FLASH_STR))
+        return SMEM_BOOT_NAND_FLASH;
+    else if (!strcasecmp(str, ONENAND_FLASH_STR))
+        return SMEM_BOOT_ONENAND_FLASH;
+    else if (!strcasecmp(str, SDC_FLASH_STR))
+        return SMEM_BOOT_SDC_FLASH;
+    else if (!strcasecmp(str, MMC_FLASH_STR))
+        return SMEM_BOOT_MMC_FLASH;
+    else if (!strcasecmp(str, SPI_FLASH_STR))
+        return SMEM_BOOT_SPI_FLASH;
+    else if (!strcasecmp(str, NORPLUSNAND_STR))
+        return SMEM_BOOT_NORPLUSNAND;
+    else if (!strcasecmp(str, NORPLUSEMMC_STR))
+        return SMEM_BOOT_NORPLUSEMMC;
+    else if (!strcasecmp(str, QSPI_NAND_FLASH_STR))
+        return SMEM_BOOT_QSPI_NAND_FLASH;
+    else
+        return -1;
+}

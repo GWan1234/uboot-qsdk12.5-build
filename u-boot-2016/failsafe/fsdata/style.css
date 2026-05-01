@@ -1276,6 +1276,80 @@ html[data-theme="dark"] .backup-status {
     background: rgba(17, 28, 51, 0.6);
 }
 
+/* ====== 系统信息表格样式 ====== */
+
+/* 表格容器 */
+.card-main-section .table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
+}
+
+/* 表格行 */
+.card-main-section .table .tr {
+    border-bottom: 1px solid var(--border);
+    transition: background-color 0.15s ease;
+}
+
+.card-main-section .table .tr:last-child {
+    border-bottom: none;
+}
+
+.card-main-section .table .tr:hover {
+    background-color: var(--panel-2);
+}
+
+/* 表格单元格 */
+.card-main-section .table .td {
+    padding: 0.7rem 1rem;
+    vertical-align: middle;
+    line-height: 1.5;
+    color: var(--text);
+}
+
+.card-main-section .table .td.left {
+    text-align: left;
+}
+
+.card-main-section .table .td[width="33%"] {
+    width: 33%;
+    min-width: 120px;
+    color: var(--muted);
+    font-weight: 500;
+    font-size: 0.85rem;
+}
+
+/* 分区表类型标题行 */
+.card-main-section .table .tr:has(.td[style*="font-weight: 600"]) {
+    background-color: var(--panel-2);
+    border-bottom: 2px solid var(--border);
+}
+
+/* 卡片中的 h2 标题 */
+.card-main-section .card-main-inner h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+/* 分区表头样式 */
+.card-main-section .table .tr .td[style*="font-size: 0.85rem"] {
+    background-color: transparent;
+    border-bottom: 1px solid var(--border);
+}
+
+/* 暗色主题适配 */
+html[data-theme="dark"] .card-main-section .table .tr:hover {
+    background-color: rgba(148, 163, 184, 0.05);
+}
+
+html[data-theme="dark"] .card-main-section .table .tr:has(.td[style*="font-weight: 600"]) {
+    background-color: rgba(148, 163, 184, 0.08);
+}
+
 /* 响应式设计 - 移动端显示切换按钮 */
 @media (max-width: 768px) {
     .sidebar-toggle {
@@ -1380,6 +1454,27 @@ html[data-theme="dark"] .backup-status {
     .backup-status {
         font-size: 0.75rem;
         padding: 0.6rem 0.8rem;
+    }
+
+    .card-main-section .table {
+        font-size: 0.8rem;
+    }
+
+    .card-main-section .table .td {
+        padding: 0.5rem 0.6rem;
+    }
+
+    .card-main-section .table .td[width="33%"] {
+        width: 40%;
+    }
+
+    .card-main-section .card-main-inner {
+        padding: 0.75rem;
+        overflow-x: auto;
+    }
+
+    .card-main-section .card-main-inner h2 {
+        font-size: 0.9rem;
     }
 }
 
