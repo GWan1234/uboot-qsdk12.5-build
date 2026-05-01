@@ -305,3 +305,22 @@ done:
     output[j] = '\0';
     return j;
 }
+
+bool mmc_part_exists(const char *part_name)
+{
+	int ret;
+	block_dev_desc_t *mmc_dev;
+	disk_partition_t disk_info = {0};
+	detected_flash_device_t *dfd = &detected_flash_device;
+
+	if (!dfd->mmc)
+		return false;
+
+	mmc_dev = mmc_get_dev(mmc_host.dev_num);
+	if (!mmc_dev)
+		return false;
+
+	ret = get_partition_info_efi_by_name(mmc_dev, part_name, &disk_info);
+
+	return ret ? false : true;
+}

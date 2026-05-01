@@ -112,10 +112,6 @@ int boot_from_mem(const ulong data_addr)
  */
 static int check_part_exists(const char *part_name, int flag)
 {
-	int ret;
-	block_dev_desc_t *mmc_dev;
-	disk_partition_t disk_info = {0};
-
 	switch (sfi->flash_type) {
 	case SMEM_BOOT_NAND_FLASH:
 	case SMEM_BOOT_NOR_FLASH:
@@ -124,33 +120,20 @@ static int check_part_exists(const char *part_name, int flag)
 	case SMEM_BOOT_ONENAND_FLASH:
 	case SMEM_BOOT_QSPI_NAND_FLASH:
 	case SMEM_BOOT_SPI_FLASH:
-		ret = smem_part_exists(part_name);
-		if (ret)
-			/* 在 SMEM (Shared Memory) 中找到指定分区 */
+		if (smem_part_exists(part_name))
 			return RET_SUCCESS;
 	case SMEM_BOOT_MMC_FLASH:
 	case SMEM_BOOT_NO_FLASH:
 	case SMEM_BOOT_SDC_FLASH:
 	default:
-		if (!dfd->mmc)
-			break;
-
-		mmc_dev = mmc_get_dev(mmc_host.dev_num);
-		if (!mmc_dev)
-			break;
-
-		ret = get_partition_info_efi_by_name(mmc_dev, part_name, &disk_info);
-		if (!ret)
-			/* 在 eMMC 中找到指定分区 */
+		if (mmc_part_exists(part_name))
 			return RET_SUCCESS;
 	}
 
 	/* 找不到指定分区 */
 	if (flag) {
 		snprintf(info, sizeof(info),
-			"{\"type\":\"part_not_found\","
-			"\"partname\":\"%s\"}", part_name);
-
+			"{\"type\":\"part_not_found\",\"partname\":\"%s\"}", part_name);
 		printf("Error: partition %s not found\n", part_name);
 	}
 
