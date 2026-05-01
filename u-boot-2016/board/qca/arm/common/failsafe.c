@@ -24,6 +24,8 @@
 #include <asm/gpio.h>
 #include <fdtdec.h>
 #include <part.h>
+#include <spi.h>
+#include <spi_flash.h>
 #include <mmc.h>
 #include <sdhci.h>
 #include <asm/arch-qca-common/smem.h>
@@ -480,29 +482,52 @@ static int failsafe_validate_ptable(const void *data_addr, const ulong data_size
 
 static int failsafe_validate_simg(const void *data_addr, const ulong data_size)
 {
+	struct mmc *mmc;
+	struct spi_flash *spi;
+	nand_info_t *nand;
+	unsigned long long flash_device_size;
+
     switch(fw_type) {
     case FW_TYPE_EMMC:
         if (!dfd->mmc) {
 			handle_flash_not_found(fw_type, "EMMC");
 			return RET_FLASH_NOT_FOUND;
 		}
+		mmc = find_mmc_device(mmc_host.dev_num);
+		flash_device_size = mmc->capacity_user;
         break;
     case FW_TYPE_NAND:
         if (!dfd->nand) {
 			handle_flash_not_found(fw_type, "NAND");
 			return RET_FLASH_NOT_FOUND;
 		}
+		nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
+		flash_device_size = nand->size;
         break;
     case FW_TYPE_NOR:
         if (!dfd->spi) {
 			handle_flash_not_found(fw_type, "SPI-NOR");
 			return RET_FLASH_NOT_FOUND;
 		}
+		spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
+					CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
+		flash_device_size = spi->size;
         break;
     default:
         handle_wrong_fw_type("Single Image", fw_type);
         return RET_WRONG_FW_TYPE;
     }
+
+	if ((unsigned long long)data_size > flash_device_size) {
+		snprintf(info, sizeof(info),
+			"{\"type\":\"file_too_big\","
+			"\"filename\":\"Single Image\",\"filesize\":\"%lu\","
+			"\"partname\":\"Whole Chip\",\"partsize\":\"%llu\"}",
+			data_size, flash_device_size);
+		printf("Error: Single Image size (%lu bytes) exceeds Whole Chip size (%llu bytes)\n",
+			data_size, flash_device_size);
+		return RET_FILE_TOO_BIG;
+	}
 
 	return RET_SUCCESS;
 }
