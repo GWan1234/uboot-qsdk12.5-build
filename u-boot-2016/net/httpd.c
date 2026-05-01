@@ -16,6 +16,8 @@
 #include <failsafe/failsafe.h>
 #include <ipq_api.h>
 
+DECLARE_GLOBAL_DATA_PTR;
+
 /* 头部存储结构 */
 #define MAX_HEADER_COUNT    32  /* 最大头部数量 */
 #define MAX_HEADER_NAME_LEN 64  /* 头部名最大长度 */
@@ -109,7 +111,7 @@ static void httpd_std_err_response(struct tcp_cb_data *cbd, u32 code);
 
 void __weak *httpd_get_upload_buffer_ptr(size_t size)
 {
-	return (void *)CONFIG_SYS_LOAD_ADDR;
+	return (void *)(IPQ_TFTP_MIN_ADDR);
 }
 
 static void dummy_urih_cb(enum httpd_uri_handler_status status,
@@ -562,6 +564,10 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 
 		/* calculate new cache address */
 		pdata->upload_ptr = httpd_get_upload_buffer_ptr(pdata->payload_size);
+		if (pdata->upload_ptr == NULL) {
+			tcp_close_conn(cbd->conn, 1);
+			return 1;
+		}
 
 		if (hdr_size + pdata->payload_size < sizeof(pdata->buf)) {
 			pdata->upload_size = pdata->bufsize - hdr_size;

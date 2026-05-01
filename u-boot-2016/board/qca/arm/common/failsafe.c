@@ -72,10 +72,30 @@ extern int config_select(unsigned int addr, char *rcmd, int rcmd_size);
 
 void *httpd_get_upload_buffer_ptr(size_t size)
 {
+	ulong load_addr;
+
 	if (gd->ram_size >= 512 * 1024 * 1024)
-		return (void *)(CONFIG_SYS_SDRAM_BASE + (256 << 20));
+		load_addr = CONFIG_SYS_SDRAM_BASE + (256 << 20);
 	else
-		return (void *)(CONFIG_SYS_SDRAM_BASE + (64 << 20));
+		load_addr = IPQ_TFTP_MIN_ADDR;
+
+	/*
+	 * The file to be loaded should not overwrite the
+	 * code/stack area.
+	 */
+#ifdef CONFIG_IPQ806X
+    if ((load_addr + size) >= IPQ_TFTP_MAX_ADDR)
+#else
+    if (((load_addr + size) >= CONFIG_SYS_SDRAM_END) ||
+        (((load_addr + size) >= CONFIG_IPQ_FDT_HIGH) &&
+            ((load_addr + size) < CONFIG_TZ_END_ADDR)))
+#endif /* CONFIG_IPQ806X */
+    {
+        puts("Error: file size too large\n");
+        return NULL;
+    }
+
+	return (void *)load_addr;
 }
 
 int boot_from_mem(const ulong data_addr)
