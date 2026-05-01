@@ -14,8 +14,9 @@
 /dts-v1/;
 #include "ipq6018-soc.dtsi"
 / {
-	model ="QCA, IPQ6018-CP03-C4";
-	compatible = "qca,ipq6018", "qca,ipq6018-cp03-c4";
+	host_name = "JDCloud ER1";
+	model = "ipq6018-jdcloud_re-cs-07";
+	compatible = "qca,ipq6018-cp03-c4", "qca,ipq6018";
 	machid = <0x8030203>;
 	config_name = "config@cp03-c4", "config-cp03-c4";
 
