@@ -38,6 +38,8 @@ extern qca_mmc mmc_host;
 extern struct sdhci_host mmc_host;
 #endif
 
+DECLARE_GLOBAL_DATA_PTR;
+
 #define GPT_PART_NAME "0:GPT"
 #define GPT_SIZE_IN_BLOCKS 34
 
@@ -349,6 +351,8 @@ void backup_handler(enum httpd_uri_handler_status status,
 	struct httpd_form_value *mode, *target, *start, *end;
 	char target_name[64] = "";
 	char storage_sel[16] = "";
+	char board_model_name[64];
+	const char *board_model = NULL;
 	u64 off_start = 0, off_end = 0;
 	uint32_t offset_in_bytes = 0, size_in_bytes = 0;
 	int ret;
@@ -508,10 +512,15 @@ void backup_handler(enum httpd_uri_handler_status status,
 		st->phase = BACKUP_PHASE_HDR;
 
 		/* filename */
+		board_model = fdt_getprop(gd->fdt_blob, 0, "model", NULL);
+		board_model = board_model ? board_model : "device";
+		strlcpy(board_model_name, board_model, sizeof(board_model_name));
+		str_sanitize_component(board_model_name);
 		str_sanitize_component(target_name);
+
 		snprintf(st->filename, sizeof(st->filename),
-			"backup_%s_%s_0x%llx-0x%llx.bin",
-			storage_sel, target_name,
+			"backup_%s_%s_%s_0x%llx-0x%llx.bin",
+			board_model_name, storage_sel, target_name,
 			(unsigned long long)st->start,
 			(unsigned long long)st->end);
 
