@@ -163,6 +163,8 @@ enum {
 
 u8 smem_enumeration_status = smem_enu_no_init;
 
+bool is_9008_mode;
+
 /**
  * struct smem_ptable_entry - one entry in the @smem_ptable list
  * @offset:	offset, within the main shared memory region, of the partition
@@ -730,9 +732,12 @@ int smem_get_boot_flash(uint32_t *flash_type,
 {
 	int ret;
 
+	is_9008_mode = false;
+
 	ret = smem_read_alloc_entry(SMEM_BOOT_FLASH_TYPE,
 				    flash_type, sizeof(uint32_t));
 	if (ret != 0) {
+		is_9008_mode = true;
 		printf("smem: read flash type failed\n");
 		*flash_type = SMEM_BOOT_NO_FLASH;
 	}
