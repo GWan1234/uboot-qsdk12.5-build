@@ -17,7 +17,6 @@
 #include <common.h>
 #include <command.h>
 #include <linux/ctype.h>
-#include <asm/arch-qca-common/smem.h>
 #include <part.h>
 #include <linux/mtd/mtd.h>
 #include <nand.h>
@@ -44,23 +43,14 @@ DECLARE_GLOBAL_DATA_PTR;
 #define GPT_SIZE_IN_BLOCKS 34
 
 #define SMEM_PTN_NAME_MAX     16
-#define SMEM_PTABLE_PARTS_MAX 32
 
-static detected_flash_device_t *dfd = &detected_flash_device;
-
-struct smem_ptn {
+struct smem_part {
 	char name[SMEM_PTN_NAME_MAX];
 	unsigned start;
 	unsigned size;
-	unsigned attr;
-} __attribute__ ((__packed__));
-
-struct smem_ptable {
-	unsigned magic[2];
-	unsigned version;
-	unsigned len;
-	struct smem_ptn parts[SMEM_PTABLE_PARTS_MAX];
-} __attribute__ ((__packed__));
+	uint32_t flash_type;
+	int which_flash;
+};
 
 enum backup_src {
 	BACKUP_SRC_SMEM = 0,
@@ -70,14 +60,6 @@ enum backup_src {
 enum backup_phase {
 	BACKUP_PHASE_HDR = 0,
 	BACKUP_PHASE_DATA = 1,
-};
-
-struct smem_part {
-	char name[SMEM_PTN_NAME_MAX];
-	unsigned start;
-	unsigned size;
-	uint32_t flash_type;
-	int which_flash;
 };
 
 struct backup_session {
@@ -208,145 +190,11 @@ static int mmc_read_data(struct mmc *mmc, u64 offset, size_t size,
 	return (readblks == num_blocks) ? 0 : 1;
 }
 
-void backupinfo_handler(enum httpd_uri_handler_status status,
-        struct httpd_request *request,
-        struct httpd_response *response)
-{
-	char *buf;
-	int len = 0;
-	int left = 16789;
-	struct mmc *mmc;
-	const struct smem_ptable *spt;
-	block_dev_desc_t *bd = NULL;
-
-	if (status == HTTP_CB_CLOSED) {
-		free(response->session_data);
-		return;
-	}
-
-	if (status != HTTP_CB_NEW)
-		return;
-
-	buf = malloc(left);
-	if (!buf) {
-		response->status = HTTP_RESP_STD;
-		response->data = "{}";
-		response->size = strlen(response->data);
-		response->info.code = 500;
-		response->info.connection_close = 1;
-		response->info.content_type = "application/json";
-		return;
-	}
-
-	len += snprintf(buf + len, left - len, "{");
-
-	/* Flash devices info */
-	len += snprintf(buf + len, left - len, "\"devices\":{");
-
-	/* SPI info */
-	len += snprintf(buf + len, left - len, "\"spi\":{");
-	len += snprintf(buf + len, left - len, "\"present\":%s", dfd->spi ? "true" : "false");
-	if (dfd->spi) {
-		struct spi_flash *spi;
-		spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
-					CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
-		len += snprintf(buf + len, left - len,
-			",\"name\":\"%s\",\"size\":%lu", spi->name, (ulong)spi->size);
-	}
-	len += snprintf(buf + len, left - len, "},");
-
-	/* MMC info */
-	len += snprintf(buf + len, left - len, "\"mmc\":{");
-	len += snprintf(buf + len, left - len, "\"present\":%s", dfd->mmc ? "true" : "false");
-	if (dfd->mmc) {
-		mmc = find_mmc_device(mmc_host.dev_num);
-		bd = mmc_get_dev(mmc_host.dev_num);
-		len += snprintf(buf + len, left - len,
-			",\"vendor\":\"%s\",\"product\":\"%s\",\"size\":%llu",
-			bd->vendor, bd->product, (unsigned long long)mmc->capacity_user);
-	}
-	len += snprintf(buf + len, left - len, "},");
-
-	/* NAND info */
-	len += snprintf(buf + len, left - len, "\"nand\":{");
-	len += snprintf(buf + len, left - len, "\"present\":%s", dfd->nand ? "true" : "false");
-	if (dfd->nand) {
-		nand_info_t *nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
-		len += snprintf(buf + len, left - len,
-			",\"name\":\"%s\",\"size\":%llu", nand->name, (unsigned long long)nand->size);
-	}
-	len += snprintf(buf + len, left - len, "}");
-	len += snprintf(buf + len, left - len, "},");
-
-	/* SMEM partitions */
-	spt = (const struct smem_ptable *)get_smem_ptable_addr();
-
-	len += snprintf(buf + len, left - len, "\"smem\":{");
-	len += snprintf(buf + len, left - len, "\"present\":%s,", spt->len ? "true" : "false");
-	len += snprintf(buf + len, left - len, "\"parts\":[");
-
-	for (int i = 0; i < spt->len; i++) {
-		const struct smem_ptn *p = &spt->parts[i];
-		uint32_t offset_in_bytes = 0, size_in_bytes = 0;
-
-		getpart_offset_size((char *)p->name, &offset_in_bytes, &size_in_bytes);
-
-		len += snprintf(buf + len, left - len,
-			"%s{\"name\":\"%s\",\"size\":%lu}",
-			i ? "," : "", p->name, (ulong)size_in_bytes);
-	}
-
-	len += snprintf(buf + len, left - len, "]");
-	len += snprintf(buf + len, left - len, "},");
-
-	/* MMC partitions */
-	len += snprintf(buf + len, left - len, "\"mmc\":{");
-	len += snprintf(buf + len, left - len, "\"present\":%s,", dfd->mmc ? "true" : "false");
-	len += snprintf(buf + len, left - len, "\"parts\":[");
-
-	if (dfd->mmc) {
-		disk_partition_t dpart = {0};
-		int idx = 1;
-
-		len += snprintf(buf + len, left - len,
-			"{\"name\":\"0:GPT\",\"size\":%lu}", GPT_SIZE_IN_BLOCKS * bd->blksz);
-
-		while (len < left - 128) {
-			if (get_partition_info_efi(bd, idx, &dpart))
-				break;
-
-			if (!dpart.name[0]) {
-				idx++;
-				continue;
-			}
-
-			len += snprintf(buf + len, left - len,
-				",{\"name\":\"%s\",\"size\":%llu}",
-				dpart.name, (unsigned long long)dpart.size * dpart.blksz);
-
-			idx++;
-		}
-	}
-
-	len += snprintf(buf + len, left - len, "]");
-	len += snprintf(buf + len, left - len, "}");
-	len += snprintf(buf + len, left - len, "}");
-
-	response->status = HTTP_RESP_STD;
-	response->data = buf;
-	response->size = strlen(buf);
-	response->info.code = 200;
-	response->info.connection_close = 1;
-	response->info.content_type = "application/json";
-
-	/* response data must stay valid until sent */
-	response->session_data = buf;
-}
-
 void backup_handler(enum httpd_uri_handler_status status,
         struct httpd_request *request,
         struct httpd_response *response)
 {
+	detected_flash_device_t *dfd = &detected_flash_device;
 	struct backup_session *st;
 	struct httpd_form_value *mode, *target, *start, *end;
 	char target_name[64] = "";

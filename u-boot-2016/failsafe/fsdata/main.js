@@ -1740,7 +1740,7 @@ function backupInit() {
 
     // 获取存储设备信息
     ajax({
-        url: "/backup/info",
+        url: "/sysinfo",
         done: function(text) {
             let info;
             try {
@@ -1784,31 +1784,34 @@ function backupInit() {
                     }
                 }
 
-                // 添加SMEM选项
-                if (info.smem && info.smem.present && info.smem.parts && info.smem.parts.length) {
-                    info.smem.parts.forEach(function(part) {
-                        if (part && part.name) {
-                            const opt = document.createElement("option");
-                            opt.value = "smem:" + part.name;
-                            opt.textContent = "[SMEM] " + part.name +
-                                             (part.size ? " (" + bytesToHuman(part.size) + ")" : "");
-                            targetSelect.appendChild(opt);
-                        }
-                    });
-                }
-
-                // 添加MMC选项
-                if (info.mmc && info.mmc.present) {
-                    if (info.mmc.parts && info.mmc.parts.length) {
-                        info.mmc.parts.forEach(function(part) {
+                // 添加分区选项
+                if (info.partitions) {
+                    // 添加SMEM分区选项
+                    if (info.partitions.smem && info.partitions.smem.present && info.partitions.smem.parts && info.partitions.smem.parts.length) {
+                        info.partitions.smem.parts.forEach(function(part) {
                             if (part && part.name) {
                                 const opt = document.createElement("option");
-                                opt.value = "mmc:" + part.name;
-                                opt.textContent = "[MMC] " + part.name +
+                                opt.value = "smem:" + part.name;
+                                opt.textContent = "[SMEM] " + part.name +
                                                  (part.size ? " (" + bytesToHuman(part.size) + ")" : "");
                                 targetSelect.appendChild(opt);
                             }
                         });
+                    }
+
+                    // 添加MMC分区选项
+                    if (info.partitions.mmc && info.partitions.mmc.present) {
+                        if (info.partitions.mmc.parts && info.partitions.mmc.parts.length) {
+                            info.partitions.mmc.parts.forEach(function(part) {
+                                if (part && part.name) {
+                                    const opt = document.createElement("option");
+                                    opt.value = "mmc:" + part.name;
+                                    opt.textContent = "[MMC] " + part.name +
+                                                     (part.size ? " (" + bytesToHuman(part.size) + ")" : "");
+                                    targetSelect.appendChild(opt);
+                                }
+                            });
+                        }
                     }
                 }
 
@@ -1873,7 +1876,7 @@ async function startBackup() {
     setBackupStatus(t("backup.status.starting"));
 
     try {
-        const response = await fetch("/backup/main", { method: "POST", body: formData });
+        const response = await fetch("/backup", { method: "POST", body: formData });
 
         if (!response.ok) {
             setBackupStatus(t("backup.error.http") + " " + response.status);

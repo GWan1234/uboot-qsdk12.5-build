@@ -548,8 +548,7 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/sysinfo", &sysinfo_handler, NULL);
 
 	httpd_register_uri_handler(inst, "/backup.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/backup/info", &backupinfo_handler, NULL);
-	httpd_register_uri_handler(inst, "/backup/main", &backup_handler, NULL);
+	httpd_register_uri_handler(inst, "/backup", &backup_handler, NULL);
 
 	httpd_register_uri_handler(inst, "/env.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/env/list", &env_list_handler, NULL);

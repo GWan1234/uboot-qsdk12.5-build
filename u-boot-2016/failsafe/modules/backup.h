@@ -13,9 +13,6 @@
 #ifndef __FAILSAFE_BACKUP_H__
 #define __FAILSAFE_BACKUP_H__
 
-void backupinfo_handler(enum httpd_uri_handler_status status,
-        struct httpd_request *request,
-        struct httpd_response *response);
 void backup_handler(enum httpd_uri_handler_status status,
         struct httpd_request *request,
         struct httpd_response *response);
