@@ -1502,6 +1502,7 @@ function appInit(pageName) {
             }
             break;
         default:
+            getAndStoreSysinfo();
             break;
     }
 
@@ -2693,6 +2694,23 @@ function renderSysinfoData(sections, data) {
 }
 
 /**
+ * 获取系统信息并将其存储在 APP_STATE 中
+ */
+function getAndStoreSysinfo() {
+    ajax({
+        url: "/sysinfo",
+        timeout: 10000,
+        done: function(responseText) {
+            try {
+                APP_STATE.sysinfo = JSON.parse(responseText);
+            } catch (e) {
+                return;
+            }
+        }
+    });
+}
+
+/**
  * 系统信息页面初始化
  */
 function sysinfoInit() {
@@ -2810,6 +2828,13 @@ function handleInvalidMibibReloadResponse(message, elements) {
  * 处理MIBIB重载
  */
 function mibibReload() {
+    const sysinfo = APP_STATE.sysinfo;
+
+    if (sysinfo && !sysinfo.is_9008_mode) {
+        alert(t("mibib.not_9008"));
+        return;
+    }
+
     const fileInput = document.getElementById("file");
     const file = fileInput.files[0];
 
@@ -3024,6 +3049,7 @@ const I18N = (() => {
             "mibib.title": "MIBIB RELOAD",
             "mibib.hint": "In <strong>9008</strong> mode, reloading <strong>MIBIB</strong> to initialize <strong>SMEM (Shared Memory) Partition Info</strong>. <br>Please choose a file from your local hard drive and click <strong>Reload</strong> button.",
             "mibib.reload": "Reload",
+            "mibib.not_9008": "Not in 9008 mode, MIBIB reload is not allowed!",
             "mibib.success": "MIBIB reloaded successfully. Please open the \"System Info\" page to check if the SMEM information is correct.",
             "mibib.warn.1": "Use only in 9008 emergency download mode.",
             "mibib.warn.2": "After successful reload, please check if the SMEM information is correct.",
@@ -3206,6 +3232,7 @@ const I18N = (() => {
             "mibib.title": "MIBIB 重载",
             "mibib.hint": "在 <strong>9008</strong> 模式下，通过重载 <strong>MIBIB</strong> 来初始化 <strong>SMEM (Shared Memory) 分区信息</strong>。<br>请选择本地文件并点击 <strong>重载</strong> 按钮。",
             "mibib.reload": "重载",
+            "mibib.not_9008": "非 9008 启动模式，无法进行 MIBIB 重载！",
             "mibib.success": "MIBIB 重载成功，请打开 “系统信息” 页面查看 SMEM 相关信息是否正确。",
             "mibib.warn.1": "仅限于 9008 模式下使用。",
             "mibib.warn.2": "重载成功后，请检查 SMEM 相关信息是否正确。",
