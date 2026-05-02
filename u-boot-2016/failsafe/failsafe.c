@@ -26,6 +26,7 @@
 #include "fs.h"
 #include "modules/backup.h"
 #include "modules/env.h"
+#include "modules/mibib.h"
 #include "modules/sysinfo.h"
 
 #if defined(CONFIG_HTTPD_DEBUG)
@@ -543,6 +544,9 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/result", &result_handler, NULL);
 	httpd_register_uri_handler(inst, "/upload", &upload_handler, NULL);
 	httpd_register_uri_handler(inst, "/version", &version_handler, NULL);
+
+	httpd_register_uri_handler(inst, "/mibib.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/mibib/reload", &mibib_reload_handler, NULL);
 
 	httpd_register_uri_handler(inst, "/sysinfo.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/sysinfo", &sysinfo_handler, NULL);

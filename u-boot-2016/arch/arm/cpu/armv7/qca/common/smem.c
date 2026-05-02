@@ -489,7 +489,7 @@ int smem_ptable_init(void)
  *
  * Initialize partition table from MIBIB.
  */
-#ifdef CONFIG_IPQ_MIBIB_RELOAD
+#if defined(CONFIG_HTTPD) || defined(CONFIG_IPQ_MIBIB_RELOAD)
 int mibib_ptable_init(unsigned int* addr)
 {
 	struct smem_ptable* ptable;

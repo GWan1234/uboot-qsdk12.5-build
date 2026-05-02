@@ -386,6 +386,7 @@ extern loff_t board_env_size;
 #define CONFIG_LIB_RAND
 #define CONFIG_HTTPD_DEBUG
 #define CONFIG_ADD_EXTRA_DTB
+#define CONFIG_IPQ_MIBIB_RELOAD
 
 #define CONFIG_LIST_OF_CONFIG_NAMES_SUPPORT
 

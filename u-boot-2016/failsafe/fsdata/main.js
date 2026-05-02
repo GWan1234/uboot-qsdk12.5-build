@@ -60,6 +60,7 @@ class SidebarManager {
             '/backup.html': 'backup',
             '/cdt.html': 'cdt',
             '/env.html': 'env',
+            '/mibib.html': 'mibib',
             '/ptable.html': 'ptable',
             '/simg.html': 'simg',
             '/sysinfo.html': 'sysinfo',
@@ -100,6 +101,7 @@ class SidebarManager {
                     { path: "/sysinfo.html", labelKey: "nav.sysinfo", id: "sysinfo" },
                     { path: "/backup.html", labelKey: "nav.backup", id: "backup" },
                     { path: "/env.html", labelKey: "nav.env", id: "env" },
+                    { path: "/mibib.html", labelKey: "nav.mibib", id: "mibib" },
                     { path: "/reboot.html", labelKey: "nav.reboot", id: "reboot", onClick: () => confirm(t("reboot.confirm")) }
                 ]
             }
@@ -1290,6 +1292,9 @@ function handleUploadError(info, elements) {
         case "wrong_file_type":
             errorMessage = generateWrongFileTypeMessage(info);
             break;
+        case "flash_not_found":
+            errorMessage = generateFlashNotFoundMessage(info);
+            break;
         default:
             errorMessage = JSON.stringify(info) || t("error.unknown_type");
     }
@@ -1410,25 +1415,25 @@ function generateWrongFileTypeMessage(info) {
 /**
  * 生成闪存类型错误信息
  */
-function generateWrongFlashTypeMessage(info) {
+function generateFlashNotFoundMessage(info) {
     const lang = APP_STATE.lang;
 
     if (lang === "zh-cn") {
         return `
-            <div class="error-title">❌ 不支持的闪存类型</div>
+            <div class="error-title">❌ 找不到闪存</div>
             <div class="error-detail">
                 <p>文件类型: ${info.filetype || t("unknown")}</p>
                 <p>闪存类型: ${info.flashtype || t("unknown")}</p>
-                <p>当前设备不支持在此闪存类型上更新该类型的文件。</p>
+                <p>找不到与所选文件类型对应的闪存设备。</p>
             </div>
         `;
     } else {
         return `
-            <div class="error-title">❌ Unsupported flash type</div>
+            <div class="error-title">❌ Flash not found</div>
             <div class="error-detail">
                 <p>File type: ${info.filetype || t("unknown")}</p>
                 <p>Flash type: ${info.flashtype || t("unknown")}</p>
-                <p>Updating this file on the current flash type is not supported.</p>
+                <p>No flash device can be found that corresponds to the selected file type.</p>
             </div>
         `;
     }
@@ -1605,8 +1610,8 @@ function handleResultError(info, elements) {
         case "wrong_file_type":
             errorMessage = generateWrongFileTypeMessage(info);
             break;
-        case "wrong_flash_type":
-            errorMessage = generateWrongFlashTypeMessage(info);
+        case "flash_not_found":
+            errorMessage = generateFlashNotFoundMessage(info);
             break;
         default:
             errorMessage = JSON.stringify(info) || t("error.unknown_type");
@@ -2733,6 +2738,156 @@ function sysinfoInit() {
 window.sysinfoInit = sysinfoInit;
 
 // ==============================
+// MIBIB 重载模块
+// ==============================
+
+/**
+ * 处理MIBIB重载成功
+ */
+function handleMibibReloadSuccess(elements) {
+    const {
+        successInfo,
+        progressCircle
+    } = elements;
+
+    if (progressCircle) progressCircle.style.display = "none";
+    if (successInfo) {
+        successInfo.innerHTML = t("mibib.success");
+        successInfo.style.display = "block";
+    }
+}
+
+/**
+ * 处理MIBIB重载失败
+ */
+function handleMibibReloadError(info, elements) {
+    const {
+        errorInfo,
+        progressCircle
+    } = elements;
+
+    if (progressCircle) progressCircle.style.display = "none";
+
+    // 根据错误类型生成错误信息
+    let errorMessage = "";
+
+    switch (info.type) {
+        case "wrong_file_type":
+            errorMessage = generateWrongFileTypeMessage(info);
+            break;
+        case "flash_not_found":
+            errorMessage = generateFlashNotFoundMessage(info);
+            break;
+        default:
+            errorMessage = JSON.stringify(info) || t("error.unknown_type");
+    }
+
+    // 显示错误信息
+    if (errorInfo) {
+        errorInfo.style.display = "block";
+        errorInfo.innerHTML = errorMessage;
+    }
+}
+
+/**
+ * 处理无效的MIBIB重载响应信息
+ */
+function handleInvalidMibibReloadResponse(message, elements) {
+    const {
+        errorInfo,
+        progressCircle
+    } = elements;
+
+    if (progressCircle) progressCircle.style.display = "none";
+
+    if (errorInfo) {
+        errorInfo.style.display = "block";
+        errorInfo.innerHTML = `<div class="error-detail">${escapeHtml(message)}</div>`;
+    }
+}
+
+/**
+ * 处理MIBIB重载
+ */
+function mibibReload() {
+    const fileInput = document.getElementById("file");
+    const file = fileInput.files[0];
+
+    if (!file) {
+        alert(t("file.select"));
+        return;
+    }
+
+    // 获取页面相关元素
+    const formElement = document.getElementById("form");
+    const successInfo = document.getElementById("success-info");
+    const errorInfo = document.getElementById("error-info");
+    const progressCircle = document.getElementById("bar-circle");
+
+    // 显示圆环进度条，隐藏无关元素
+    if (formElement) formElement.style.display = "none";
+    if (successInfo) successInfo.style.display = "none";
+    if (errorInfo) errorInfo.style.display = "none";
+    if (progressCircle) progressCircle.style.display = "block";
+
+    // 准备表单数据
+    const formData = new FormData();
+    formData.append("mibib", file);
+
+    // 发送上传请求
+    ajax({
+        url: "/mibib/reload",
+        data: formData,
+        done: function(responseText) {
+            let response;
+
+            // 尝试解析JSON响应
+            try {
+                response = JSON.parse(responseText);
+            } catch (e) {
+                // 无效的JSON，显示错误
+                handleInvalidMibibReloadResponse(responseText || t("error.invalid_response"), {
+                    errorInfo,
+                    progressCircle
+                });
+                return;
+            }
+
+            switch (response.status) {
+                case "success":
+                    handleMibibReloadSuccess({
+                        successInfo,
+                        progressCircle
+                    })
+                    break;
+                case "fail":
+                    handleMibibReloadError(response.info, {
+                        errorInfo,
+                        progressCircle
+                    });
+                    break;
+                default:
+                    handleInvalidMibibReloadResponse(responseText || t("error.unknown_status"), {
+                        errorInfo,
+                        progressCircle
+                    });
+            }
+        },
+        progress: function(event) {
+            if (event.lengthComputable && event.total > 0) {
+                const percent = parseInt((event.loaded / event.total) * 100);
+                const progressCircle = document.getElementById("bar-circle");
+
+                if (progressCircle) {
+                    progressCircle.style.display = "block";
+                    progressCircle.style.setProperty("--percent", percent);
+                }
+            }
+        }
+    });
+}
+
+// ==============================
 // 国际化数据
 // ==============================
 
@@ -2767,6 +2922,7 @@ const I18N = (() => {
             "nav.sysinfo": "System Info",
             "nav.backup": "Flash Backup",
             "nav.env": "Environment Management",
+            "nav.mibib": "MIBIB Reload",
             "nav.reboot": "Reboot",
             "control.language": "🌐 Language",
             "control.theme": "🌓 Theme",
@@ -2865,6 +3021,12 @@ const I18N = (() => {
             "env.restore.hint": "Upload a previously saved binary U-Boot environment image (CRC + data) to restore.",
             "env.warn.1": "Modifying environment variables may affect boot behavior.",
             "env.warn.2": "Do not power off during save or restore.",
+            "mibib.title": "MIBIB RELOAD",
+            "mibib.hint": "In <strong>9008</strong> mode, reloading <strong>MIBIB</strong> to initialize <strong>SMEM (Shared Memory) Partition Info</strong>. <br>Please choose a file from your local hard drive and click <strong>Reload</strong> button.",
+            "mibib.reload": "Reload",
+            "mibib.success": "MIBIB reloaded successfully. Please open the \"System Info\" page to check if the SMEM information is correct.",
+            "mibib.warn.1": "Use only in 9008 emergency download mode.",
+            "mibib.warn.2": "After successful reload, please check if the SMEM information is correct.",
             "sysinfo.title": "SYSTEM INFORMATION",
             "sysinfo.title.board_info": "Board Info",
             "sysinfo.title.flash_info": "Flash Info",
@@ -2943,6 +3105,7 @@ const I18N = (() => {
             "nav.sysinfo": "系统信息",
             "nav.backup": "闪存备份",
             "nav.env": "环境变量管理",
+            "nav.mibib": "MIBIB 重载",
             "nav.reboot": "重启",
             "control.language": "🌐 语言",
             "control.theme": "🌓 主题",
@@ -3040,6 +3203,12 @@ const I18N = (() => {
             "env.restore.hint": "上传之前保存的二进制环境变量镜像文件（含 CRC）进行恢复。",
             "env.warn.1": "修改环境变量可能影响系统启动行为。",
             "env.warn.2": "保存或恢复过程中请勿断电。",
+            "mibib.title": "MIBIB 重载",
+            "mibib.hint": "在 <strong>9008</strong> 模式下，通过重载 <strong>MIBIB</strong> 来初始化 <strong>SMEM (Shared Memory) 分区信息</strong>。<br>请选择本地文件并点击 <strong>重载</strong> 按钮。",
+            "mibib.reload": "重载",
+            "mibib.success": "MIBIB 重载成功，请打开 “系统信息” 页面查看 SMEM 相关信息是否正确。",
+            "mibib.warn.1": "仅限于 9008 模式下使用。",
+            "mibib.warn.2": "重载成功后，请检查 SMEM 相关信息是否正确。",
             "sysinfo.title": "系统信息",
             "sysinfo.title.board_info": "设备信息",
             "sysinfo.title.flash_info": "存储信息",
