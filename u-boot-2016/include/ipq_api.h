@@ -41,6 +41,9 @@ extern detected_flash_device_t detected_flash_device;
 #define QSPI_NAND_FLASH_STR  "qspi_nand"
 #define UNKNOWN_FLASH_STR    "unknown"
 
+#if defined(CONFIG_FORCE_NETWORK_ENV)
+void check_network_settings(void);
+#endif
 void check_failsafe_env_exists(void);
 void check_button_is_pressed(void);
 void detect_flash_device(void);

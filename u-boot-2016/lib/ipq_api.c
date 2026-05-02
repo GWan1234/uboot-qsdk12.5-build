@@ -174,6 +174,61 @@ void check_button_is_pressed(void) {
 	}
 }
 
+
+#if defined(CONFIG_FORCE_NETWORK_ENV)
+void check_network_settings(void)
+{
+	if (getenv("custom_network"))
+		return;
+
+	int modified = 0;
+	const char *default_ipaddr, *default_netmask, *default_serverip;
+
+# if defined(CONFIG_IPADDR)
+	default_ipaddr = __stringify(CONFIG_IPADDR);
+# else
+	default_ipaddr = "192.168.1.1";
+# endif /* CONFIG_IPADDR */
+# if defined(CONFIG_NETMASK)
+	default_netmask = __stringify(CONFIG_NETMASK);
+# else
+	default_netmask = "255.255.255.0";
+# endif /* CONFIG_NETMASK */
+# if defined(CONFIG_SERVERIP)
+	default_serverip = __stringify(CONFIG_SERVERIP);
+# else
+	default_serverip = "192.168.1.2";
+# endif /* CONFIG_SERVERIP */
+
+	if (strcmp(getenv("ipaddr"), default_ipaddr)) {
+		setenv("ipaddr", default_ipaddr);
+		net_ip = string_to_ip(default_ipaddr);
+		modified++;
+	}
+
+	if (strcmp(getenv("netmask"), default_netmask)) {
+		setenv("netmask", default_netmask);
+		net_netmask = string_to_ip(default_netmask);
+		modified++;
+	}
+
+	if (strcmp(getenv("serverip"), default_serverip)) {
+		setenv("serverip", default_serverip);
+		net_server_ip = string_to_ip(default_serverip);
+		modified++;
+	}
+
+	if (modified) {
+		printf("\"custom_network\" env variable not defined, "
+			"reset network settings to default values:\n");
+		printf("    ipaddr: %s\n", default_ipaddr);
+		printf("    netmask: %s\n", default_netmask);
+		printf("    serverip: %s\n", default_serverip);
+		saveenv();
+	}
+}
+#endif /* CONFIG_FORCE_NETWORK_ENV */
+
 /**
  * check_failsafe_env_exists - 检测 failsafe 环境变量是否存在
  *
