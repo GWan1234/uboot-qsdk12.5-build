@@ -737,7 +737,7 @@ static int httpd_parse_post_data(struct tcp_cb_data *cbd)
 	static const char name_str[] = "name=";
 	static const char filename_str[] = "filename=";
 
-	if (req->method != HTTP_POST)
+	if (req->method != HTTP_POST || pdata->payload_size <= 0)
 		return 0;
 
 	boundarylen = strlen(pdata->boundary);
@@ -846,12 +846,12 @@ static int httpd_handle_request(struct httpd_instance *inst,
 		return 1;
 	}
 
-	if (req->method == HTTP_POST && pdata->payload_size > 0 && !strcmp(pdata->uri, "/upload"))
+	if (!strcmp(pdata->uri, "/upload"))
 		parse_post_data_later = true;
 	else
 		parse_post_data_later = false;
 
-	if (req->method == HTTP_POST && !parse_post_data_later) {
+	if (!parse_post_data_later) {
 		if (httpd_parse_post_data(cbd)) {
 			tcp_close_conn(cbd->conn, 1);
 			pdata->status = HTTPD_S_CLOSING;
