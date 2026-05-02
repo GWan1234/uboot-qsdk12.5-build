@@ -211,10 +211,11 @@ void check_failsafe_env_exists(void)
 
 void detect_flash_device(void)
 {
-	size_t len = 0;
-	char flash_list[128];
+	int len = 0;
+	char flash_list[25];
 	struct spi_flash *spi;
 	block_dev_desc_t *mmc_dev;
+	nand_info_t *nand;
 	detected_flash_device_t *dfd = &detected_flash_device;
 
 	dfd->spi = false;
@@ -224,24 +225,25 @@ void detect_flash_device(void)
 	spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
 			CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
 	if (spi) {
-		len += strlcpy(flash_list + len, "spi", sizeof(flash_list));
+		len += strlcpy(flash_list + len, "SPI", sizeof(flash_list));
 		dfd->spi = true;
 	}
 
-	if (nand_info[CONFIG_NAND_FLASH_INFO_IDX].name) {
-		len += strlcpy(flash_list + len,
-				len ? ", nand" : "nand", sizeof(flash_list));
+	nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
+	if (nand->name) {
+		len += sprintf(flash_list + len, "%sNAND", len ? ", " : "");
 		dfd->nand = true;
 	}
 
 	mmc_dev = mmc_get_dev(mmc_host.dev_num);
 	if (mmc_dev && mmc_dev->type != DEV_TYPE_UNKNOWN) {
-		len += strlcpy(flash_list + len,
-				len ? ", mmc" : "mmc", sizeof(flash_list));
+		len += sprintf(flash_list + len, "%sMMC", len ? ", " : "");
 		dfd->mmc = true;
 	}
 
-	printf("detected flash device(s): %s\n", len ? flash_list : "none");
+	flash_list[len] = '\0';
+
+	printf("FLASH(S): %s\n", len ? flash_list : "NONE");
 }
 
 /**

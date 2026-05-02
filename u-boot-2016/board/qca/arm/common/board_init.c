@@ -22,6 +22,9 @@
 #include <fdtdec.h>
 #include <mmc.h>
 #include <sdhci.h>
+#if defined(CONFIG_HTTPD)
+#include <ipq_api.h>
+#endif
 
 DECLARE_GLOBAL_DATA_PTR;
 #ifdef CONFIG_ENV_IS_IN_NAND
@@ -467,6 +470,10 @@ int board_late_init(void)
 	char *s = NULL;
 
 	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+
+#if defined(CONFIG_HTTPD)
+	detect_flash_device();
+#endif
 
 	if (sfi->flash_type != SMEM_BOOT_MMC_FLASH) {
 		get_kernel_fs_part_details();

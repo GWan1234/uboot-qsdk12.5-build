@@ -28,6 +28,9 @@
 #include <i2c.h>
 #include <dm.h>
 #include <command.h>
+#if defined(CONFIG_HTTPD)
+#include <ipq_api.h>
+#endif
 
 #define DLOAD_MAGIC_COOKIE	0x10
 #define DLOAD_DISABLED		0x40
@@ -406,19 +409,15 @@ void set_flash_secondary_type(qca_smem_flash_info_t *smem)
 	 * initialized, as there is no smem entry to differentiate between the
 	 * two.
 	 */
-#ifdef CONFIG_QCA_MMC
-	struct mmc *mmc;
+	detected_flash_device_t *dfd = &detected_flash_device;
 
-	mmc = find_mmc_device(mmc_host.dev_num);
-	if (mmc) {
+	if (dfd->mmc)
 		smem->flash_secondary_type = SMEM_BOOT_MMC_FLASH;
-		return;
-	}
-#endif
-	smem->flash_secondary_type = SMEM_BOOT_NAND_FLASH;
-
-	return;
-};
+	else if (dfd->nand)
+		smem->flash_secondary_type = SMEM_BOOT_NAND_FLASH;
+	else
+		smem->flash_secondary_type = SMEM_BOOT_NO_FLASH;
+}
 
 #ifdef CONFIG_USB_XHCI_IPQ
 void board_usb_deinit(int id)
