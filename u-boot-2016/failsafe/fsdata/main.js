@@ -2741,13 +2741,13 @@ const I18N = (() => {
     const t = {
         en: {
             updateHint: (type) => `You are going to update <strong>${type}</strong> on the device.<br>Please choose a file from your local hard drive and click <strong>Upload</strong> button.`,
-            warnChoose: (type) => `You can upload whatever you want, so be sure you choose the proper ${type} for your device!`,
-            warnDanger: (type) => `Updating ${type} is a very dangerous operation and may damage your device!`
+            warnChoose: (type) => `You can upload whatever you want, so be sure you choose the proper ${type} for your device.`,
+            warnDanger: (type) => `Updating ${type} is a very dangerous operation and may damage your device.`
         },
         "zh-cn": {
             updateHint: (type) => `你将要在此设备上更新 <strong>${type}</strong>。<br>请选择本地文件并点击 <strong>上传</strong> 按钮。`,
-            warnChoose: (type) => `你可以上传任意文件，请确保选择了与你的设备匹配的 ${type} 文件！`,
-            warnDanger: (type) => `更新 ${type} 是一个十分危险的操作，可能导致你的路由器无法启动！`
+            warnChoose: (type) => `你可以上传任意文件，请确保选择了与你的设备匹配的 ${type} 文件。`,
+            warnDanger: (type) => `更新 ${type} 是一个十分危险的操作，可能导致你的路由器无法启动。`
         }
     };
 
@@ -2957,8 +2957,8 @@ const I18N = (() => {
             "common.boot": "启动",
             "common.upgrade_hint": "如果以上信息确认无误，请点击 “更新”。",
             "common.warnings": "注意事项",
-            "common.warn.1": "刷写过程中请勿断电！",
-            "common.warn.2": "如果更新成功，设备将自动重启！",
+            "common.warn.1": "刷写过程中请勿断电。",
+            "common.warn.2": "如果更新成功，设备将自动重启。",
             "file.select": "请选择文件！",
             "label.type": "类型: ",
             "label.size": "大小: ",
@@ -2986,7 +2986,7 @@ const I18N = (() => {
             "simg.warn.1": t["zh-cn"].warnChoose("闪存镜像"),
             "simg.warn.2": t["zh-cn"].warnDanger("闪存镜像"),
             "backup.title": "闪存备份",
-            "backup.hint": "从设备存储下载备份为<strong>二进制文件</strong>。<br>备份数据将流式传输到浏览器并保存到您的计算机。",
+            "backup.hint": "从设备存储下载备份为 <strong>二进制文件</strong>。<br>备份数据将流式传输到浏览器并保存到您的计算机。",
             "backup.label.mode": "模式:",
             "backup.label.target": "目标:",
             "backup.label.start": "起始偏移:",
@@ -3000,7 +3000,7 @@ const I18N = (() => {
             "backup.status.done": "备份完成:",
             "backup.error.no_target": "请选择目标",
             "backup.error.bad_range": "无效的范围",
-            "backup.error.http": "HTTP错误:",
+            "backup.error.http": "HTTP 错误:",
             "backup.error.exception": "错误:",
             "backup.range.hint": "起始和结束偏移量支持十进制、0x 十六进制及 KiB / MiB 后缀",
             "backup.target.placeholder": "-- 选择目标 --",
@@ -3084,7 +3084,7 @@ const I18N = (() => {
             "initramfs.title": "启动内存固件",
             "initramfs.hint": "你将要在此设备上启动 <strong>内存固件<\/strong>。<br>请选择本地文件并点击 <strong>上传<\/strong> 按钮。",
             "initramfs.boot_hint": "如果以上信息确认无误，请点击 “启动”。",
-            "initramfs.warn.1": "如果一切顺利，设备将启动至内存固件！",
+            "initramfs.warn.1": "如果一切顺利，设备将启动至内存固件。",
             "initramfs.warn.2": t["zh-cn"].warnChoose("内存固件"),
             "flashing.title.in_progress": "正在刷写",
             "flashing.hint.in_progress": "文件上传成功！正在执行刷写，请等待设备自动重启。<br>刷写时间取决于镜像大小，可能需要几分钟。",
