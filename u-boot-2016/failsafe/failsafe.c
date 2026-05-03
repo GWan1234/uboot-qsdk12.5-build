@@ -27,6 +27,7 @@
 #include "modules/backup.h"
 #include "modules/env.h"
 #include "modules/mibib.h"
+#include "modules/network.h"
 #include "modules/sysinfo.h"
 
 #if defined(CONFIG_HTTPD_DEBUG)
@@ -547,6 +548,11 @@ int start_web_failsafe(void)
 
 	httpd_register_uri_handler(inst, "/mibib.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/mibib/reload", &mibib_reload_handler, NULL);
+
+	httpd_register_uri_handler(inst, "/network.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/network/info", &network_info_handler, NULL);
+	httpd_register_uri_handler(inst, "/network/set", &network_set_handler, NULL);
+	httpd_register_uri_handler(inst, "/network/reset", &network_reset_handler, NULL);
 
 	httpd_register_uri_handler(inst, "/sysinfo.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/sysinfo", &sysinfo_handler, NULL);

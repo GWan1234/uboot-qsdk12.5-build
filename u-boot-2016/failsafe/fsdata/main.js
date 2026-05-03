@@ -61,6 +61,7 @@ class SidebarManager {
             '/cdt.html': 'cdt',
             '/env.html': 'env',
             '/mibib.html': 'mibib',
+            '/network.html': 'network',
             '/ptable.html': 'ptable',
             '/simg.html': 'simg',
             '/sysinfo.html': 'sysinfo',
@@ -99,6 +100,7 @@ class SidebarManager {
                 titleKey: "nav.system",
                 items: [
                     { path: "/sysinfo.html", labelKey: "nav.sysinfo", id: "sysinfo" },
+                    { path: "/network.html", labelKey: "nav.network", id: "network" },
                     { path: "/backup.html", labelKey: "nav.backup", id: "backup" },
                     { path: "/env.html", labelKey: "nav.env", id: "env" },
                     { path: "/mibib.html", labelKey: "nav.mibib", id: "mibib" },
@@ -1496,6 +1498,9 @@ function appInit(pageName) {
                 backupInit();
             }
             break;
+        case "network":
+            networkManager.init();
+            break;
         case "sysinfo":
             if (typeof sysinfoInit === "function") {
                 sysinfoInit();
@@ -2315,6 +2320,379 @@ const envManager = (() => {
 })();
 
 // ==============================
+// 网络参数管理模块
+// ==============================
+
+/**
+ * 网络参数管理器
+ * 负责处理 U-Boot 网络参数（ipaddr、netmask、serverip）的查看、设置、重置操作
+ */
+const networkManager = (() => {
+    // 私有变量
+    let elements = null;
+    let validationState = {
+        ipaddr: true,
+        netmask: true,
+        serverip: true
+    };
+
+    /**
+     * 获取或缓存 DOM 元素
+     */
+    function getElements() {
+        if (elements) return elements;
+
+        elements = {
+            status: document.getElementById("network_status"),
+            ipaddr: document.getElementById("network_ipaddr"),
+            netmask: document.getElementById("network_netmask"),
+            serverip: document.getElementById("network_serverip"),
+            hintIpaddr: document.getElementById("hint_ipaddr"),
+            hintNetmask: document.getElementById("hint_netmask"),
+            hintServerip: document.getElementById("hint_serverip")
+        };
+
+        return elements;
+    }
+
+    /**
+     * 设置状态提示
+     */
+    function setStatus(text, isError) {
+        const el = getElements().status;
+        if (el) {
+            el.textContent = text || "";
+            if (isError) {
+                el.style.color = "var(--danger)";
+            } else {
+                el.style.color = "";
+            }
+        }
+    }
+
+    /**
+     * 验证 IP 地址格式
+     * @param {string} ip - 待验证的 IP 地址
+     * @returns {boolean} 是否为有效 IP 地址
+     */
+    function isValidIP(ip) {
+        if (!ip || typeof ip !== 'string') return false;
+
+        // IP 地址正则表达式（IPv4）
+        const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+        return ipRegex.test(ip.trim());
+    }
+
+    /**
+     * 验证子网掩码格式
+     * @param {string} mask - 待验证的子网掩码
+     * @returns {boolean} 是否为有效子网掩码
+     */
+    function isValidNetmask(mask) {
+        if (!mask || typeof mask !== 'string') return false;
+
+        // 先检查是否为有效 IP 格式
+        if (!isValidIP(mask)) return false;
+
+        // 检查是否为有效的子网掩码（连续的1后跟连续的0）
+        const parts = mask.trim().split('.').map(Number);
+        const binary = parts.reduce((acc, part) => acc + part.toString(2).padStart(8, '0'), '');
+
+        // 检查是否为连续的1后跟连续的0
+        const firstZero = binary.indexOf('0');
+        if (firstZero === -1) return true; // 全1 (255.255.255.255)
+        const lastOne = binary.lastIndexOf('1');
+        return lastOne < firstZero;
+    }
+
+    /**
+     * 更新单个字段的验证提示
+     * @param {string} field - 字段名
+     * @param {string} value - 字段值
+     */
+    function updateFieldValidation(field, value) {
+        const els = getElements();
+        const inputEl = els[field];
+        const hintEl = els[`hint${field.charAt(0).toUpperCase() + field.slice(1)}`];
+
+        if (!hintEl || !inputEl) return;
+
+        // 清除之前的样式
+        inputEl.classList.remove('input-valid', 'input-invalid');
+
+        if (!value || value.trim() === '') {
+            hintEl.textContent = '';
+            hintEl.className = 'field-hint';
+            validationState[field] = true;
+            return;
+        }
+
+        let isValid = false;
+        if (field === 'netmask') {
+            isValid = isValidNetmask(value);
+        } else {
+            isValid = isValidIP(value);
+        }
+
+        validationState[field] = isValid;
+
+        if (isValid) {
+            hintEl.textContent = '✓ ' + t('network.validation.valid');
+            hintEl.className = 'field-hint field-hint-valid';
+            inputEl.classList.add('input-valid');
+        } else {
+            if (field === 'netmask') {
+                hintEl.textContent = '✗ ' + t('network.validation.invalid_netmask');
+            } else {
+                hintEl.textContent = '✗ ' + t('network.validation.invalid_ip');
+            }
+            hintEl.className = 'field-hint field-hint-invalid';
+            inputEl.classList.add('input-invalid');
+        }
+    }
+
+    /**
+     * 表单验证（保存前检查）
+     * @returns {boolean} 是否通过验证
+     */
+    function validateForm() {
+        const els = getElements();
+        const ipaddr = els.ipaddr?.value?.trim() || '';
+        const netmask = els.netmask?.value?.trim() || '';
+        const serverip = els.serverip?.value?.trim() || '';
+
+        // 重新验证所有字段
+        updateFieldValidation('ipaddr', ipaddr);
+        updateFieldValidation('netmask', netmask);
+        updateFieldValidation('serverip', serverip);
+
+        const errors = [];
+
+        // 获取字段标签文本
+        const labelIpaddr = t('network.label.ipaddr').replace(':', '');
+        const labelNetmask = t('network.label.netmask').replace(':', '');
+        const labelServerip = t('network.label.serverip').replace(':', '');
+
+        if (!ipaddr) {
+            errors.push(labelIpaddr + ' ' + t('network.validation.cannot_be_empty'));
+        } else if (!validationState.ipaddr) {
+            errors.push(labelIpaddr + ' ' + t('network.validation.invalid_format'));
+        }
+
+        if (!netmask) {
+            errors.push(labelNetmask + ' ' + t('network.validation.cannot_be_empty'));
+        } else if (!validationState.netmask) {
+            errors.push(labelNetmask + ' ' + t('network.validation.invalid_netmask_format'));
+        }
+
+        if (!serverip) {
+            errors.push(labelServerip + ' ' + t('network.validation.cannot_be_empty'));
+        } else if (!validationState.serverip) {
+            errors.push(labelServerip + ' ' + t('network.validation.invalid_format'));
+        }
+
+        if (errors.length > 0) {
+            setStatus(errors.join('; '), true);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * 刷新网络参数信息
+     */
+    async function refresh() {
+        try {
+            setStatus(t('network.status.loading'));
+
+            const response = await fetch("/network/info", {
+                method: "GET",
+                cache: "no-store",
+                headers: {
+                    "Accept": "application/json"
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`${t('network.status.http')} ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // 更新输入框
+            const els = getElements();
+            if (els.ipaddr) {
+                els.ipaddr.value = data.ipaddr || '';
+                updateFieldValidation('ipaddr', els.ipaddr.value);
+            }
+            if (els.netmask) {
+                els.netmask.value = data.netmask || '';
+                updateFieldValidation('netmask', els.netmask.value);
+            }
+            if (els.serverip) {
+                els.serverip.value = data.serverip || '';
+                updateFieldValidation('serverip', els.serverip.value);
+            }
+
+            setStatus(t('network.status.ready'));
+
+        } catch (error) {
+            setStatus(formatError(error), true);
+            console.error("Network Manager Error:", error);
+        }
+    }
+
+    /**
+     * 格式化错误信息
+     */
+    function formatError(error) {
+        if (!error) return t("error.unknown");
+        if (error.message) return error.message;
+        return String(error);
+    }
+
+    /**
+     * 保存网络参数
+     */
+    async function save() {
+        // 先验证表单
+        if (!validateForm()) {
+            return;
+        }
+
+        const els = getElements();
+        const ipaddr = els.ipaddr.value.trim();
+        const netmask = els.netmask.value.trim();
+        const serverip = els.serverip.value.trim();
+
+        try {
+            setStatus(t('network.status.saving'));
+
+            const formData = new FormData();
+            formData.append("ipaddr", ipaddr);
+            formData.append("netmask", netmask);
+            formData.append("serverip", serverip);
+
+            const response = await fetch("/network/set", {
+                method: "POST",
+                body: formData
+            });
+
+            const result = await response.text();
+
+            if (!response.ok) {
+                throw new Error(`${t('network.status.http')} ${response.status}: ${result}`);
+            }
+
+            if (result !== "ok") {
+                throw new Error(result || t('network.status.error'));
+            }
+
+            setStatus(t('network.status.saved'));
+
+            // 刷新显示
+            await refresh();
+
+        } catch (error) {
+            setStatus(formatError(error), true);
+            console.error("Network Manager Error:", error);
+        }
+    }
+
+    /**
+     * 重置为默认网络参数
+     */
+    async function reset() {
+        if (!confirm(t('network.confirm.reset'))) {
+            return;
+        }
+
+        try {
+            setStatus(t('network.status.saving'));
+
+            const response = await fetch("/network/reset", {
+                method: "POST"
+            });
+
+            const result = await response.text();
+
+            if (!response.ok) {
+                throw new Error(`${t('network.status.http')} ${response.status}: ${result}`);
+            }
+
+            if (result !== "ok") {
+                throw new Error(result || t('network.status.error'));
+            }
+
+            setStatus(t('network.status.reset'));
+
+            // 刷新显示
+            await refresh();
+
+        } catch (error) {
+            setStatus(formatError(error), true);
+            console.error("Network Manager Error:", error);
+        }
+    }
+
+    /**
+     * 绑定输入验证事件
+     */
+    function bindValidationEvents() {
+        const els = getElements();
+
+        // 为每个输入框绑定实时验证
+        const fields = ['ipaddr', 'netmask', 'serverip'];
+
+        fields.forEach(field => {
+            const inputEl = els[field];
+            if (!inputEl) return;
+
+            // 输入事件（实时验证）
+            inputEl.addEventListener('input', () => {
+                updateFieldValidation(field, inputEl.value);
+            });
+
+            // 失焦事件（清理空格）
+            inputEl.addEventListener('blur', () => {
+                inputEl.value = inputEl.value.trim();
+                updateFieldValidation(field, inputEl.value);
+            });
+
+            // 粘贴事件（立即验证）
+            inputEl.addEventListener('paste', () => {
+                setTimeout(() => {
+                    updateFieldValidation(field, inputEl.value);
+                }, 0);
+            });
+        });
+    }
+
+    /**
+     * 初始化网络管理器
+     */
+    function init() {
+        // 获取元素引用
+        getElements();
+
+        // 绑定验证事件
+        bindValidationEvents();
+
+        // 自动刷新一次
+        refresh();
+    }
+
+    // 导出公共 API
+    return {
+        init,
+        refresh,
+        save,
+        reset
+    };
+})();
+
+// ==============================
 // 系统信息模块
 // ==============================
 
@@ -2945,6 +3323,7 @@ const I18N = (() => {
             "nav.initramfs": "Load Initramfs",
             "nav.system": "System",
             "nav.sysinfo": "System Info",
+            "nav.network": "Network Settings",
             "nav.backup": "Flash Backup",
             "nav.env": "Environment Management",
             "nav.mibib": "MIBIB Reload",
@@ -3053,6 +3432,31 @@ const I18N = (() => {
             "mibib.success": "MIBIB reloaded successfully. Please open the \"System Info\" page to check if the SMEM information is correct.",
             "mibib.warn.1": "Use only in 9008 emergency download mode.",
             "mibib.warn.2": "After successful reload, please check if the SMEM information is correct.",
+            "network.title": "NETWORK SETTINGS",
+            "network.hint": "Configure <strong>U-Boot network parameters</strong> (ipaddr, netmask, serverip).<br>Changes will be saved to environment variables and will take effect after a restart.",
+            "network.label.ipaddr": "IP Address:",
+            "network.label.netmask": "Netmask:",
+            "network.label.serverip": "Server IP:",
+            "network.action.refresh": "Refresh",
+            "network.action.save": "Save",
+            "network.action.reset": "Reset to defaults",
+            "network.status.loading": "Loading network settings...",
+            "network.status.ready": "Ready",
+            "network.status.saving": "Saving...",
+            "network.status.saved": "✓ Network settings saved",
+            "network.status.reset": "✓ Reset to defaults",
+            "network.status.http": "HTTP error:",
+            "network.status.error": "Error",
+            "network.confirm.reset": "Reset all network settings to defaults?",
+            "network.validation.valid": "Valid",
+            "network.validation.invalid_ip": "Invalid IP address format",
+            "network.validation.invalid_netmask": "Invalid netmask format",
+            "network.validation.cannot_be_empty": "cannot be empty",
+            "network.validation.invalid_format": "has invalid format",
+            "network.validation.invalid_netmask_format": "has invalid netmask format",
+            "network.warn.1": "Modifying network settings may affect network connectivity.",
+            "network.warn.2": "Do not power off the device during save.",
+            "network.warn.3": "Invalid network settings may prevent network access.",
             "sysinfo.title": "SYSTEM INFORMATION",
             "sysinfo.title.board_info": "Board Info",
             "sysinfo.title.flash_info": "Flash Info",
@@ -3129,6 +3533,7 @@ const I18N = (() => {
             "nav.initramfs": "启动内存固件",
             "nav.system": "系统",
             "nav.sysinfo": "系统信息",
+            "nav.network": "网络设置",
             "nav.backup": "闪存备份",
             "nav.env": "环境变量管理",
             "nav.mibib": "MIBIB 重载",
@@ -3236,6 +3641,31 @@ const I18N = (() => {
             "mibib.success": "MIBIB 重载成功，请打开 “系统信息” 页面查看 SMEM 相关信息是否正确。",
             "mibib.warn.1": "仅限于 9008 模式下使用。",
             "mibib.warn.2": "重载成功后，请检查 SMEM 相关信息是否正确。",
+            "network.title": "网络设置",
+            "network.hint": "配置 <strong>U-Boot 网络参数</strong>（ipaddr、netmask、serverip）。<br>更改将保存到环境变量，重启后生效。",
+            "network.label.ipaddr": "IP 地址:",
+            "network.label.netmask": "子网掩码:",
+            "network.label.serverip": "服务器 IP:",
+            "network.action.refresh": "刷新",
+            "network.action.save": "保存",
+            "network.action.reset": "重置为默认值",
+            "network.status.loading": "正在加载网络设置...",
+            "network.status.ready": "就绪",
+            "network.status.saving": "保存中...",
+            "network.status.saved": "✓ 网络设置已保存",
+            "network.status.reset": "✓ 已重置为默认值",
+            "network.status.http": "HTTP 错误:",
+            "network.status.error": "错误",
+            "network.confirm.reset": "确定将所有网络设置重置为默认值？",
+            "network.validation.valid": "有效",
+            "network.validation.invalid_ip": "无效的 IP 地址格式",
+            "network.validation.invalid_netmask": "无效的子网掩码格式",
+            "network.validation.cannot_be_empty": "不能为空",
+            "network.validation.invalid_format": "格式无效",
+            "network.validation.invalid_netmask_format": "子网掩码格式无效",
+            "network.warn.1": "修改网络设置可能影响网络连接。",
+            "network.warn.2": "保存过程中请勿断电。",
+            "network.warn.3": "无效的网络设置可能导致无法通过网络访问 U-Boot。",
             "sysinfo.title": "系统信息",
             "sysinfo.title.board_info": "设备信息",
             "sysinfo.title.flash_info": "存储信息",

@@ -1,0 +1,109 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title></title>
+	<link rel="stylesheet" href="/style.css">
+	<script src="/main.js"></script>
+</head>
+
+<body onload="appInit('network')" data-page="network">
+	<div class="app">
+		<aside id="sidebar" class="sidebar"></aside>
+		<div class="sidebar-overlay" id="sidebarOverlay"></div>
+		<button class="sidebar-toggle" id="sidebarToggle"></button>
+		<div class="main">
+			<div id="m">
+				<div class="card-title-section">
+					<h1 id="title" data-i18n="network.title"></h1>
+				</div>
+
+				<div class="card-hint-section">
+					<p id="hint" data-i18n-html="network.hint"></p>
+				</div>
+
+				<div class="card-main-section">
+					<div class="card-main-inner">
+                        <div class="network-table-wrapper">
+                            <table class="network-table">
+                                <tr>
+                                    <td colspan="2">
+                                        <div class="env-toolbar">
+                                            <span id="network_status" class="env-status"></span>
+                                        </div>
+                                    </td>
+                                </tr>
+								<tr>
+									<td class="network-label-cell">
+										<label for="network_ipaddr" data-i18n="network.label.ipaddr"></label>
+									</td>
+									<td class="network-input-cell">
+										<input id="network_ipaddr" class="field-control" type="text"
+											   autocomplete="off" autocapitalize="off"
+											   autocorrect="off" spellcheck="false"
+											   placeholder="192.168.1.1">
+									</td>
+									<td class="network-hint-cell">
+										<span class="field-hint" id="hint_ipaddr"></span>
+									</td>
+								</tr>
+								<tr>
+									<td class="network-label-cell">
+										<label for="network_netmask" data-i18n="network.label.netmask"></label>
+									</td>
+									<td class="network-input-cell">
+										<input id="network_netmask" class="field-control" type="text"
+											   autocomplete="off" autocapitalize="off"
+											   autocorrect="off" spellcheck="false"
+											   placeholder="255.255.255.0">
+									</td>
+									<td class="network-hint-cell">
+										<span class="field-hint" id="hint_netmask"></span>
+									</td>
+								</tr>
+								<tr>
+									<td class="network-label-cell">
+										<label for="network_serverip" data-i18n="network.label.serverip"></label>
+									</td>
+									<td class="network-input-cell">
+										<input id="network_serverip" class="field-control" type="text"
+											   autocomplete="off" autocapitalize="off"
+											   autocorrect="off" spellcheck="false"
+											   placeholder="192.168.1.2">
+									</td>
+									<td class="network-hint-cell">
+										<span class="field-hint" id="hint_serverip"></span>
+									</td>
+								</tr>
+							</table>
+						</div>
+
+						<div class="form-actions">
+							<button type="button" class="button" onclick="networkManager.refresh()" data-i18n="network.action.refresh"></button>
+							<button type="button" class="button" onclick="networkManager.save()" data-i18n="network.action.save"></button>
+							<button type="button" class="button button-danger" onclick="networkManager.reset()" data-i18n="network.action.reset"></button>
+						</div>
+					</div>
+				</div>
+
+				<div class="card-foot-section">
+					<div class="card-foot-inner">
+						<div class="i w">
+							<strong data-i18n="common.warnings"></strong>
+							<ul>
+								<li data-i18n="network.warn.1"></li>
+								<li data-i18n="network.warn.2"></li>
+								<li data-i18n="network.warn.3"></li>
+							</ul>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div id="version"></div>
+		</div>
+	</div>
+</body>
+
+</html>

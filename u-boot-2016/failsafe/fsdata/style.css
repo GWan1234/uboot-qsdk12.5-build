@@ -1187,6 +1187,109 @@ html[data-theme="dark"] .field-control {
     background: #1a1f2e;
 }
 
+/* ====== 网络参数管理页面样式 ====== */
+
+/* 表格容器 - 整体居中 */
+.network-table-wrapper {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin-bottom: 0.5rem;
+}
+
+/* 网络参数表格 */
+.network-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: auto;
+    max-width: 600px;
+}
+
+.network-table tr {
+    height: auto;
+}
+
+/* 标签列 - 右对齐 */
+.network-label-cell {
+    text-align: right;
+    padding: 0.5rem 0.75rem;
+    vertical-align: middle;
+    white-space: nowrap;
+    width: 1%;
+}
+
+.network-label-cell label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text);
+    display: inline;
+    margin: 0;
+}
+
+/* 输入框列 - 固定宽度 */
+.network-input-cell {
+    padding: 0.5rem 0.25rem;
+    vertical-align: middle;
+    width: 220px;
+    min-width: 180px;
+}
+
+.network-input-cell .field-control {
+    width: 100%;
+}
+
+/* 提示列 */
+.network-hint-cell {
+    padding: 0.5rem 0.5rem;
+    vertical-align: middle;
+    white-space: nowrap;
+    min-width: 160px;
+}
+
+/* 表格中的字段提示 */
+.network-hint-cell .field-hint {
+    font-size: 0.8rem;
+    margin-top: 0;
+    min-height: auto;
+}
+
+/* 字段提示样式 */
+.field-hint {
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+    display: block;
+    min-height: 1.2em;
+    transition: all 0.3s ease;
+}
+
+.field-hint-valid {
+    color: var(--primary);
+}
+
+.field-hint-invalid {
+    color: var(--danger);
+    font-weight: 500;
+}
+
+/* 输入框验证状态样式 */
+.field-control.input-valid {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 2px rgba(49, 161, 161, 0.1) !important;
+}
+
+.field-control.input-invalid {
+    border-color: var(--danger) !important;
+    box-shadow: 0 0 0 2px rgba(245, 54, 92, 0.1) !important;
+}
+
+html[data-theme="dark"] .field-hint-valid {
+    color: var(--primary-2);
+}
+
+html[data-theme="dark"] .field-hint-invalid {
+    color: var(--danger);
+}
+
 /* ====== 备份页面样式 ====== */
 
 /* 备份表单容器 */
@@ -1475,6 +1578,38 @@ html[data-theme="dark"] .card-main-section .table .tr:has(.td[style*="font-weigh
 
     .card-main-section .card-main-inner h2 {
         font-size: 0.9rem;
+    }
+
+    .network-table {
+        max-width: 100%;
+    }
+
+    .network-label-cell {
+        padding: 0.4rem 0.5rem;
+        font-size: 0.8rem;
+    }
+
+    .network-label-cell label {
+        font-size: 0.8rem;
+    }
+
+    .network-input-cell {
+        width: auto;
+        min-width: 120px;
+        padding: 0.4rem 0.25rem;
+    }
+
+    .network-hint-cell {
+        padding: 0.4rem 0.25rem;
+        min-width: auto;
+    }
+
+    .network-hint-cell .field-hint {
+        font-size: 0.75rem;
+    }
+
+    .field-hint {
+        font-size: 0.75rem;
     }
 }
 
