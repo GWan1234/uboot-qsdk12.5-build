@@ -516,7 +516,8 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 	if (p)
 		*p = 0;
 
-	printf("%s %s\n", pdata->buf, uri_ptr);
+	if (strcmp(uri_ptr, "/console/poll"))
+		printf("%s %s\n", pdata->buf, uri_ptr);
 
 	/* record URI */
 	pdata->uri = uri_ptr;

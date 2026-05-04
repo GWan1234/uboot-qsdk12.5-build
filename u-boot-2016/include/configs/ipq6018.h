@@ -395,4 +395,11 @@ extern loff_t board_env_size;
 #define CONFIG_NAME_MAX_LEN	32
 #endif
 
+/*
+ * Console record support
+ */
+#define CONFIG_CONSOLE_RECORD
+#define CONFIG_CONSOLE_RECORD_IN_SIZE  0x3000
+#define CONFIG_CONSOLE_RECORD_OUT_SIZE 0x6000
+
 #endif /* _IPQ6018_H */

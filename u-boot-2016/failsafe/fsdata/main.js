@@ -59,6 +59,7 @@ class SidebarManager {
             '/art.html': 'art',
             '/backup.html': 'backup',
             '/cdt.html': 'cdt',
+            '/console.html': 'console',
             '/env.html': 'env',
             '/mibib.html': 'mibib',
             '/network.html': 'network',
@@ -102,6 +103,7 @@ class SidebarManager {
                     { path: "/sysinfo.html", labelKey: "nav.sysinfo", id: "sysinfo" },
                     { path: "/network.html", labelKey: "nav.network", id: "network" },
                     { path: "/backup.html", labelKey: "nav.backup", id: "backup" },
+                    { path: "/console.html", labelKey: "nav.console", id: "console" },
                     { path: "/env.html", labelKey: "nav.env", id: "env" },
                     { path: "/mibib.html", labelKey: "nav.mibib", id: "mibib" },
                     { path: "/reboot.html", labelKey: "nav.reboot", id: "reboot", onClick: () => confirm(t("reboot.confirm")) }
@@ -1501,6 +1503,9 @@ function appInit(pageName) {
         case "network":
             networkManager.init();
             break;
+        case "console":
+            consoleManager.init();
+            break;
         case "sysinfo":
             if (typeof sysinfoInit === "function") {
                 sysinfoInit();
@@ -2693,6 +2698,345 @@ const networkManager = (() => {
 })();
 
 // ==============================
+// Web 控制台模块
+// ==============================
+
+/**
+ * 控制台管理器
+ * 负责处理 U-Boot 命令的发送、输出接收和管理
+ */
+const consoleManager = (() => {
+    // 私有变量
+    let elements = null;
+    let state = {
+        running: false,
+        pollTimer: null,
+        history: [],
+        histPos: -1,
+        persistKey: "failsafe_console_output",
+        persistMax: 200000
+    };
+
+    /**
+     * 获取或缓存 DOM 元素
+     */
+    function getElements() {
+        if (elements) return elements;
+
+        elements = {
+            output: document.getElementById("console_out"),
+            cmd: document.getElementById("console_cmd"),
+            status: document.getElementById("console_status"),
+        };
+
+        return elements;
+    }
+
+    /**
+     * 设置状态提示
+     */
+    function setStatus(text, isError) {
+        const el = getElements().status;
+        if (el) {
+            el.textContent = text || "";
+            if (isError) {
+                el.style.color = "var(--danger)";
+            } else {
+                el.style.color = "";
+            }
+        }
+    }
+
+    /**
+     * 加载持久化的输出
+     */
+    function loadPersistedOutput() {
+        const outputEl = getElements().output;
+        if (!outputEl) return;
+
+        try {
+            const saved = sessionStorage.getItem(state.persistKey);
+            if (saved) {
+                outputEl.textContent = saved;
+                // 滚动到底部
+                outputEl.scrollTop = outputEl.scrollHeight;
+            }
+        } catch (e) {
+            console.warn("Failed to load persisted output:", e);
+        }
+    }
+
+    /**
+     * 保存输出到 sessionStorage
+     */
+    function savePersistedOutput() {
+        const outputEl = getElements().output;
+        if (!outputEl) return;
+
+        try {
+            let content = outputEl.textContent || "";
+            if (content.length > state.persistMax) {
+                content = content.slice(content.length - state.persistMax);
+            }
+            sessionStorage.setItem(state.persistKey, content);
+        } catch (e) {
+            console.warn("Failed to persist output:", e);
+        }
+    }
+
+    /**
+     * 追加文本到输出区域
+     */
+    function appendText(text) {
+        const outputEl = getElements().output;
+        if (!outputEl || !text) return;
+
+        outputEl.textContent += text;
+
+        // 限制输出长度
+        if (outputEl.textContent.length > state.persistMax) {
+            outputEl.textContent = outputEl.textContent.slice(
+                outputEl.textContent.length - state.persistMax
+            );
+        }
+
+        savePersistedOutput();
+        outputEl.scrollTop = outputEl.scrollHeight;
+    }
+
+    /**
+     * 格式化错误信息
+     */
+    function formatError(error) {
+        if (!error) return t("error.unknown");
+        if (error.message) return error.message;
+        return String(error);
+    }
+
+    /**
+     * 轮询输出
+     */
+    async function pollOnce() {
+        if (!state.running) return;
+
+        try {
+            const response = await fetch("/console/poll", {
+                method: "GET",
+            });
+
+            if (!response.ok) {
+                setStatus(`${t("console.status.http")} ${response.status}`, true);
+                return;
+            }
+
+            const text = await response.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                setStatus(t("console.status.parse"), true);
+                return;
+            }
+
+            if (data && data.data) {
+                appendText(data.data);
+            }
+        } catch (error) {
+            setStatus(formatError(error), true);
+        }
+    }
+
+    /**
+     * 启动轮询
+     */
+    function schedulePoll() {
+        if (state.pollTimer) {
+            clearTimeout(state.pollTimer);
+        }
+
+        state.pollTimer = setTimeout(async () => {
+            await pollOnce();
+            schedulePoll();
+        }, 300);
+    }
+
+    /**
+     * 停止轮询
+     */
+    function stopPoll() {
+        if (state.pollTimer) {
+            clearTimeout(state.pollTimer);
+            state.pollTimer = null;
+        }
+        state.running = false;
+    }
+
+    /**
+     * 发送命令
+     */
+    async function send() {
+        const cmdEl = getElements().cmd;
+
+        if (!cmdEl || !cmdEl.value.trim()) return;
+
+        const line = cmdEl.value.trim();
+        cmdEl.value = "";
+
+        // 添加到历史记录
+        state.history.unshift(line);
+        if (state.history.length > 50) {
+            state.history.length = 50;
+        }
+        state.histPos = -1;
+
+        try {
+            const formData = new FormData();
+            formData.append("cmd", line);
+
+            setStatus(t("console.status.running"));
+
+            const response = await fetch("/console/exec", {
+                method: "POST",
+                body: formData
+            });
+
+            const result = await response.text();
+
+            if (!response.ok) {
+                setStatus(
+                    `${t("console.status.http")} ${response.status}${result ? ": " + result : ""}`,
+                    true
+                );
+                return;
+            }
+
+            try {
+                const data = JSON.parse(result);
+                setStatus(`${t("console.status.ret")} ${data && typeof data.ret !== "undefined" ? data.ret : "?"}`);
+            } catch (e) {
+                setStatus(t("console.status.done"));
+            }
+        } catch (error) {
+            setStatus(formatError(error), true);
+        }
+    }
+
+    /**
+     * 清空输出
+     */
+    async function clear() {
+        try {
+            const response = await fetch("/console/clear", {
+                method: "GET",
+            });
+
+            if (response.ok) {
+                const outputEl = getElements().output;
+                if (outputEl) {
+                    outputEl.textContent = "";
+                }
+                try {
+                    sessionStorage.removeItem(state.persistKey);
+                } catch (e) {
+                    // 忽略清理错误
+                }
+                setStatus(t("console.status.cleared"));
+            } else {
+                setStatus(`${t("console.status.http")} ${response.status}`, true);
+            }
+        } catch (error) {
+            setStatus(formatError(error), true);
+        }
+    }
+
+    /**
+     * 绑定键盘事件
+     */
+    function bindKeyboardEvents() {
+        const cmdEl = getElements().cmd;
+        if (!cmdEl) return;
+
+        cmdEl.addEventListener("keydown", (e) => {
+            // Enter 发送命令
+            if (e.key === "Enter") {
+                e.preventDefault();
+                send();
+                return;
+            }
+
+            // 上箭头 - 历史记录向前
+            if (e.key === "ArrowUp") {
+                const history = state.history;
+                if (!history || !history.length) return;
+
+                state.histPos = Math.min(history.length - 1, state.histPos + 1);
+                cmdEl.value = history[state.histPos] || "";
+                e.preventDefault();
+                return;
+            }
+
+            // 下箭头 - 历史记录向后
+            if (e.key === "ArrowDown") {
+                const history = state.history;
+                if (!history || !history.length) return;
+
+                state.histPos = Math.max(-1, state.histPos - 1);
+                cmdEl.value = state.histPos >= 0 ? (history[state.histPos] || "") : "";
+                e.preventDefault();
+            }
+        });
+
+        // Ctrl+L 清空输出（类似终端行为）
+        cmdEl.addEventListener("keydown", (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === "l") {
+                e.preventDefault();
+                clear();
+            }
+        });
+    }
+
+    /**
+     * 初始化控制台管理器
+     */
+    function init() {
+        // 获取元素引用
+        getElements();
+
+        // 绑定事件
+        bindKeyboardEvents();
+
+        // 加载持久化数据
+        loadPersistedOutput();
+
+        // 启动轮询
+        state.running = true;
+        setStatus(t("console.status.ready"));
+        schedulePoll();
+
+        // 页面卸载时停止轮询
+        window.addEventListener("beforeunload", () => {
+            stopPoll();
+        });
+    }
+
+    /**
+     * 清理资源
+     */
+    function destroy() {
+        stopPoll();
+        elements = null;
+    }
+
+    // 导出公共 API
+    return {
+        init,
+        send,
+        clear,
+        destroy
+    };
+})();
+
+// ==============================
 // 系统信息模块
 // ==============================
 
@@ -3325,6 +3669,7 @@ const I18N = (() => {
             "nav.sysinfo": "System Info",
             "nav.network": "Network Settings",
             "nav.backup": "Flash Backup",
+            "nav.console": "Web Console",
             "nav.env": "Environment Management",
             "nav.mibib": "MIBIB Reload",
             "nav.reboot": "Reboot",
@@ -3393,6 +3738,21 @@ const I18N = (() => {
             "backup.warn.1": "Do not power off the device during backup.",
             "backup.warn.2": "Custom range reads raw bytes; be careful with offsets.",
             "backup.warn.3": "Large backups may take a long time depending on storage speed.",
+            "console.title": "WEB CONSOLE",
+            "console.hint": "Run <strong>U-Boot commands</strong> directly in your browser.<br>Output is streamed by polling (no WebSocket). Treat this as <strong>root access</strong>.",
+            "console.send": "Send",
+            "console.clear": "Clear",
+            "console.placeholder.cmd": "help; printenv",
+            "console.status.ready": "Ready",
+            "console.status.running": "Running...",
+            "console.status.done": "Done",
+            "console.status.cleared": "Cleared",
+            "console.status.ret": "Return:",
+            "console.status.http": "HTTP error:",
+            "console.status.parse": "Parse error",
+            "console.status.error": "Error:",
+            "console.warn.1": "This console can execute arbitrary U-Boot commands.",
+            "console.warn.2": "Do not expose this page on untrusted networks.",
             "env.title": "U-BOOT ENV",
             "env.hint": "Manage <strong>U-Boot environment variables</strong>. Changes will be saved to storage.",
             "env.count": "Variables:",
@@ -3535,6 +3895,7 @@ const I18N = (() => {
             "nav.sysinfo": "系统信息",
             "nav.network": "网络设置",
             "nav.backup": "闪存备份",
+            "nav.console": "网页终端",
             "nav.env": "环境变量管理",
             "nav.mibib": "MIBIB 重载",
             "nav.reboot": "重启",
@@ -3602,6 +3963,21 @@ const I18N = (() => {
             "backup.warn.1": "备份过程中请勿断电！",
             "backup.warn.2": "自定义范围读取原始字节，请谨慎设置偏移量！",
             "backup.warn.3": "大容量备份可能需要较长时间，取决于存储速度！",
+            "console.title": "网页终端",
+            "console.hint": "在浏览器中直接执行 <strong>U-Boot 命令</strong>。<br>输出通过轮询方式获取（非 WebSocket），相当于 <strong>root 权限</strong>。",
+            "console.send": "发送",
+            "console.clear": "清空",
+            "console.placeholder.cmd": "help; printenv",
+            "console.status.ready": "就绪",
+            "console.status.running": "执行中...",
+            "console.status.done": "完成",
+            "console.status.cleared": "已清空",
+            "console.status.ret": "返回值：",
+            "console.status.http": "HTTP 错误：",
+            "console.status.parse": "解析失败",
+            "console.status.error": "错误：",
+            "console.warn.1": "该终端可执行任意 U-Boot 命令。",
+            "console.warn.2": "不要在不可信网络中暴露此页面。",
             "env.title": "U-Boot 环境变量",
             "env.hint": "管理 <strong>U-Boot 环境变量</strong>。更改将保存到存储设备。",
             "env.count": "变量数:",

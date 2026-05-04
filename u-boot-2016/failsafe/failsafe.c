@@ -29,6 +29,7 @@
 #include "modules/mibib.h"
 #include "modules/network.h"
 #include "modules/sysinfo.h"
+#include "modules/webconsole.h"
 
 #if defined(CONFIG_HTTPD_DEBUG)
 int httpd_debug_state;
@@ -566,6 +567,13 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/env/unset", &env_unset_handler, NULL);
 	httpd_register_uri_handler(inst, "/env/reset", &env_reset_handler, NULL);
 	httpd_register_uri_handler(inst, "/env/restore", &env_restore_handler, NULL);
+
+	/* Enable recording early so we can stream output to the browser */
+	failsafe_webconsole_ensure_recording();
+	httpd_register_uri_handler(inst, "/console.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/console/poll", &webconsole_poll_handler, NULL);
+	httpd_register_uri_handler(inst, "/console/exec", &webconsole_exec_handler, NULL);
+	httpd_register_uri_handler(inst, "/console/clear", &webconsole_clear_handler, NULL);
 
 	httpd_register_uri_handler(inst, "", &not_found_handler, NULL);
 

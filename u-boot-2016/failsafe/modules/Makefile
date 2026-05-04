@@ -5,3 +5,4 @@ obj-y += env.o
 obj-y += mibib.o
 obj-y += network.o
 obj-y += sysinfo.o
+obj-y += webconsole.o
