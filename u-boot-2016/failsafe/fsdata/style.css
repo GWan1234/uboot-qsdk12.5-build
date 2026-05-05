@@ -946,7 +946,7 @@ button.button:disabled {
     color: var(--muted);
     font-size: 11px;
     width: 100%;
-    margin: 2rem auto 1rem;
+    margin: 2rem auto 2.5rem;
     padding: 0.75rem 0.75rem;
     border-top: 1px solid var(--border);
     box-sizing: border-box;
