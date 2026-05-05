@@ -14,8 +14,8 @@
  * Modified by: chenxin527
  */
 
-#ifndef _FAILSAFE_CONSOLE_H_
-#define _FAILSAFE_CONSOLE_H_
+#ifndef _FAILSAFE_WEBCONSOLE_H_
+#define _FAILSAFE_WEBCONSOLE_H_
 
 int failsafe_webconsole_ensure_recording(void);
 void webconsole_poll_handler(enum httpd_uri_handler_status status,
@@ -27,5 +27,8 @@ void webconsole_exec_handler(enum httpd_uri_handler_status status,
 void webconsole_clear_handler(enum httpd_uri_handler_status status,
 		struct httpd_request *request,
 		struct httpd_response *response);
+void webconsole_upload_handler(enum httpd_uri_handler_status status,
+	struct httpd_request *request,
+	struct httpd_response *response);
 
-#endif /* _FAILSAFE_CONSOLE_H_ */
+#endif /* _FAILSAFE_WEBCONSOLE_H_ */

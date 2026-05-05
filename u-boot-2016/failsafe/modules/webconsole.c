@@ -22,8 +22,17 @@
 #include <errno.h>
 #include <net/httpd.h>
 #include <ipq_api.h>
+#include <mmc.h>
+#include <sdhci.h>
+#include <part.h>
 
 #include "webconsole.h"
+
+#ifndef CONFIG_SDHCI_SUPPORT
+extern qca_mmc mmc_host;
+#else
+extern struct sdhci_host mmc_host;
+#endif
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -303,4 +312,44 @@ void webconsole_clear_handler(enum httpd_uri_handler_status status,
 	response->data = json;
 	response->size = strlen(json);
 	response->session_data = json;
+}
+
+void webconsole_upload_handler(enum httpd_uri_handler_status status,
+	struct httpd_request *request,
+	struct httpd_response *response)
+{
+	struct httpd_form_value *file;
+	block_dev_desc_t *mmc_dev;
+	detected_flash_device_t *dfd = &detected_flash_device;
+	ulong size_blocks;
+
+	if (status != HTTP_CB_NEW)
+		return;
+
+	response->status = HTTP_RESP_STD;
+	response->info.connection_close = 1;
+	response->info.content_type = "text/plain";
+
+	file = httpd_request_find_value(request, "file");
+	if (!file || !file->data) {
+		response->data = "no file";
+		response->size = strlen(response->data);
+		response->info.code = 400;
+		return;
+	}
+
+	setenv_hex("fileaddr", (ulong)file->data);
+    setenv_hex("filesize", (ulong)file->size);
+    if (dfd->mmc) {
+        mmc_dev = mmc_get_dev(mmc_host.dev_num);
+        if (mmc_dev && mmc_dev->blksz) {
+            size_blocks = file->size / mmc_dev->blksz +
+                            (file->size % mmc_dev->blksz != 0);
+            setenv_hex("filesize_blks", size_blocks);
+        }
+    }
+
+	response->data = "ok";
+	response->size = strlen(response->data);
+	response->info.code = 200;
 }

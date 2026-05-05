@@ -100,9 +100,6 @@ static ulong last_led_toggle;
 
 u32 upload_id = (u32) -1;
 
-static ulong transfer_start_time;
-static ulong last_progress;
-
 static int is_uploading;
 static LIST_HEAD(inst_head);
 
@@ -405,14 +402,10 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 	enum httpd_request_method method;
 	u32 size_rcvd, hdr_size, err_code = 400;
 	int ret = 0;
-	ulong progress;
-	ulong transfer_duration;
 
 	static const char content_length_str[] = "Content-Length:";
 	static const char content_type_str[] = "Content-Type:";
 	static const char boundary_str[] = "boundary=";
-
-	transfer_start_time = get_timer(0);
 
 	reset_headers();
 
@@ -563,17 +556,21 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 			debug("    Content-Type: boundary=\"%s\"\n", b_ptr);
 		}
 
-		/* calculate new cache address */
-		pdata->upload_ptr = httpd_get_upload_buffer_ptr(pdata->payload_size);
-		if (pdata->upload_ptr == NULL) {
-			tcp_close_conn(cbd->conn, 1);
-			return 1;
-		}
-
 		if (hdr_size + pdata->payload_size < sizeof(pdata->buf)) {
 			pdata->upload_size = pdata->bufsize - hdr_size;
-			/* copy received parts to new cache */
-			memcpy(pdata->upload_ptr, pdata->buf + hdr_size, pdata->upload_size);
+			if (!strcmp(pdata->uri, "/upload") ||
+				!strcmp(pdata->uri, "/console/upload")) {
+				/* 需要保存到空闲内存区域的数据 */
+				pdata->upload_ptr = httpd_get_upload_buffer_ptr(pdata->payload_size);
+				if (pdata->upload_ptr == NULL) {
+					tcp_close_conn(cbd->conn, 1);
+					return 1;
+				}
+				memcpy(pdata->upload_ptr, pdata->buf + hdr_size, pdata->upload_size);
+			} else {
+				/* 其他数据，直接保存在当前缓冲区中 */
+				pdata->upload_ptr = pdata->buf + hdr_size;
+			}
 		} else {
 			/* upload payload must be put into unused ram region */
 			if (is_uploading) {
@@ -585,6 +582,13 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 			/* generate new upload identifier */
 			upload_id = rand();
 
+			/* calculate new cache address */
+			pdata->upload_ptr = httpd_get_upload_buffer_ptr(pdata->payload_size);
+			if (pdata->upload_ptr == NULL) {
+				tcp_close_conn(cbd->conn, 1);
+				return 1;
+			}
+
 			pdata->upload_size = cbd->datalen - hdr_size;
 			/* copy received parts to new cache */
 			memcpy(pdata->upload_ptr, cbd->data + hdr_size, pdata->upload_size);
@@ -593,22 +597,8 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 		httpd_debug("[DEBUG] %s(): pdata->upload_ptr = 0x%p\n",
 			__func__, (void *)pdata->upload_ptr);
 
-		if (pdata->payload_size)
-			progress = pdata->upload_size * 100 / pdata->payload_size;
-		else
-			progress = 100;
-
-		last_progress = progress;
-		printf("    Progress: %2lu%% ", progress);
-
 		if (pdata->upload_size == pdata->payload_size) {
 			/* upload completed */
-			transfer_duration = get_timer(transfer_start_time);
-			if (transfer_duration > 0) {
-				printf("\n    Speed: ");
-				print_size(pdata->upload_size / transfer_duration * 1000, "/s");
-			}
-			printf("\n");
 			pdata->upload_ptr[pdata->payload_size] = 0;
 			pdata->status = HTTPD_S_FULL_RCVD;
 		} else {
@@ -641,19 +631,11 @@ static int httpd_recv_payload(struct httpd_instance *inst,
 {
 	struct httpd_tcp_pdata *pdata = cbd->pdata;
 	u32 size_recv;
-	ulong progress;
 	ulong now;
 
 	size_recv = min(pdata->payload_size - pdata->upload_size, cbd->datalen);
 	memcpy(pdata->upload_ptr + pdata->upload_size, cbd->data, size_recv);
 	pdata->upload_size += size_recv;
-
-	progress = (unsigned long long)pdata->upload_size * 100 /
-		(unsigned long long)pdata->payload_size;
-	if (progress != last_progress) {
-		last_progress = progress;
-		printf("\b\b\b\b%2lu%% ", progress);
-	}
 
 	now = get_timer(0);
 	if (now - last_led_toggle >= LED_BLINK_FREQ_MS) {
@@ -662,12 +644,6 @@ static int httpd_recv_payload(struct httpd_instance *inst,
 	}
 
 	if (pdata->upload_size == pdata->payload_size) {
-		ulong transfer_duration = get_timer(transfer_start_time);
-		if (transfer_duration > 0) {
-			printf("\n    Speed: ");
-			print_size(pdata->upload_size / transfer_duration * 1000, "/s");
-		}
-		printf("\n");
 		led_on("blink_led");
 		pdata->upload_ptr[pdata->payload_size] = 0;
 		pdata->status = HTTPD_S_FULL_RCVD;

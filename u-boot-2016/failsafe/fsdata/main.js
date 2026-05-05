@@ -2703,7 +2703,7 @@ const networkManager = (() => {
 
 /**
  * 控制台管理器
- * 负责处理 U-Boot 命令的发送、输出接收和管理
+ * 负责处理 U-Boot 命令的发送、输出接收和管理，以及文件上传功能
  */
 const consoleManager = (() => {
     // 私有变量
@@ -2727,6 +2727,9 @@ const consoleManager = (() => {
             output: document.getElementById("console_out"),
             cmd: document.getElementById("console_cmd"),
             status: document.getElementById("console_status"),
+            fileInfo: document.getElementById("console_file_info"),
+            fileProgress: document.getElementById("console_file_progress"),
+            progressCircle: document.getElementById("bar-circle-mini")
         };
 
         return elements;
@@ -2744,6 +2747,45 @@ const consoleManager = (() => {
             } else {
                 el.style.color = "";
             }
+        }
+    }
+
+    /**
+     * 显示文件信息
+     */
+    function showFileInfo(text, isSuccess) {
+        const el = getElements().fileInfo;
+        if (el) {
+            el.textContent = text || "";
+            el.style.display = text ? "block" : "none";
+            if (isSuccess) {
+                el.style.color = "var(--primary)";
+            } else if (isSuccess === false) {
+                el.style.color = "var(--danger)";
+            } else {
+                el.style.color = "";
+            }
+        }
+    }
+
+    /**
+     * 显示/隐藏文件上传进度
+     */
+    function showFileProgress(show) {
+        const el = getElements().fileProgress;
+        if (el) {
+            el.style.display = show ? "flex" : "none";
+        }
+    }
+
+    /**
+     * 设置文件上传进度
+     */
+    function setFileProgress(percent) {
+        const el = getElements().progressCircle;
+        if (el) {
+            const p = Math.max(0, Math.min(100, parseInt(percent || 0)));
+            el.style.setProperty("--percent", p);
         }
     }
 
@@ -2950,6 +2992,95 @@ const consoleManager = (() => {
     }
 
     /**
+     * 文件上传功能
+     */
+    function uploadFile() {
+        // 创建一个隐藏的文件选择器
+        const fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.style.display = "none";
+        fileInput.accept = "*/*";
+
+        fileInput.onchange = async function() {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            // 显示文件名
+            showFileInfo(`${t("console.uploading")} ${file.name}`);
+
+            // 显示进度条
+            showFileProgress(true);
+            setFileProgress(0);
+
+            // 准备表单数据
+            const formData = new FormData();
+            formData.append("file", file);
+
+            try {
+                // 使用 XMLHttpRequest 以支持上传进度
+                const xhr = new XMLHttpRequest();
+
+                // 上传进度
+                xhr.upload.addEventListener("progress", function(event) {
+                    if (event.lengthComputable && event.total > 0) {
+                        const percent = parseInt((event.loaded / event.total) * 100);
+                        setFileProgress(percent);
+                    }
+                });
+
+                // 请求完成
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === 4) {
+                        // 隐藏进度条
+                        showFileProgress(false);
+
+                        if (xhr.status === 200) {
+                            const responseText = xhr.responseText.trim();
+                            if (responseText === "ok") {
+                                // 上传成功
+                                showFileInfo(`✓ ${t("console.upload.success")}`, true);
+                                setStatus(t("console.upload.success"), false);
+                            } else {
+                                // 上传失败
+                                showFileInfo(`✗ ${t("console.upload.failed")}: ${responseText}`, false);
+                                setStatus(`${t("console.upload.failed")}: ${responseText}`, true);
+                            }
+                        } else {
+                            // HTTP 错误
+                            showFileInfo(`✗ ${t("console.status.http")} ${xhr.status}`, false);
+                            setStatus(`${t("console.status.http")} ${xhr.status}`, true);
+                        }
+
+                        // 5秒后自动清除文件信息
+                        setTimeout(() => {
+                            showFileInfo("");
+                        }, 5000);
+                    }
+                };
+
+                xhr.open("POST", "/console/upload");
+                xhr.send(formData);
+
+            } catch (error) {
+                // 隐藏进度条
+                showFileProgress(false);
+                showFileInfo(`✗ ${formatError(error)}`, false);
+                setStatus(formatError(error), true);
+
+                // 5秒后自动清除文件信息
+                setTimeout(() => {
+                    showFileInfo("");
+                }, 5000);
+            }
+        };
+
+        // 触发文件选择
+        document.body.appendChild(fileInput);
+        fileInput.click();
+        document.body.removeChild(fileInput);
+    }
+
+    /**
      * 绑定键盘事件
      */
     function bindKeyboardEvents() {
@@ -3032,6 +3163,7 @@ const consoleManager = (() => {
         init,
         send,
         clear,
+        uploadFile,
         destroy
     };
 })();
@@ -3751,6 +3883,10 @@ const I18N = (() => {
             "console.status.http": "HTTP error:",
             "console.status.parse": "Parse error",
             "console.status.error": "Error:",
+            "console.upload": "Upload",
+            "console.uploading": "Uploading:",
+            "console.upload.success": "Upload successful",
+            "console.upload.failed": "Upload failed",
             "console.warn.1": "This console can execute arbitrary U-Boot commands.",
             "console.warn.2": "Do not expose this page on untrusted networks.",
             "env.title": "U-BOOT ENV",
@@ -3976,6 +4112,10 @@ const I18N = (() => {
             "console.status.http": "HTTP 错误：",
             "console.status.parse": "解析失败",
             "console.status.error": "错误：",
+            "console.upload": "上传",
+            "console.uploading": "正在上传：",
+            "console.upload.success": "上传成功",
+            "console.upload.failed": "上传失败",
             "console.warn.1": "该终端可执行任意 U-Boot 命令。",
             "console.warn.2": "不要在不可信网络中暴露此页面。",
             "env.title": "U-Boot 环境变量",
