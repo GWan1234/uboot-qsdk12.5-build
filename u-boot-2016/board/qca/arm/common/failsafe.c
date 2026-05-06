@@ -66,7 +66,6 @@ static struct {
 static char info[666];
 static char resp[888];
 static int fw_type;
-static qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
 static detected_flash_device_t *dfd = &detected_flash_device;
 
 /* Implemented in: u-boot-2016/board/qca/arm/common/cmd_bootqca.c */
@@ -134,25 +133,9 @@ int boot_from_mem(const ulong data_addr)
  */
 static int check_part_exists(const char *part_name, int flag)
 {
-	switch (sfi->flash_type) {
-	case SMEM_BOOT_NAND_FLASH:
-	case SMEM_BOOT_NOR_FLASH:
-	case SMEM_BOOT_NORPLUSEMMC:
-	case SMEM_BOOT_NORPLUSNAND:
-	case SMEM_BOOT_ONENAND_FLASH:
-	case SMEM_BOOT_QSPI_NAND_FLASH:
-	case SMEM_BOOT_SPI_FLASH:
-		if (smem_part_exists(part_name))
-			return RET_SUCCESS;
-	case SMEM_BOOT_MMC_FLASH:
-	case SMEM_BOOT_NO_FLASH:
-	case SMEM_BOOT_SDC_FLASH:
-	default:
-		if (mmc_part_exists(part_name))
-			return RET_SUCCESS;
-	}
+	if (smem_part_exists(part_name) || mmc_part_exists(part_name))
+		return RET_SUCCESS;
 
-	/* 找不到指定分区 */
 	if (flag) {
 		snprintf(info, sizeof(info),
 			"{\"type\":\"part_not_found\",\"partname\":\"%s\"}", part_name);
@@ -183,46 +166,36 @@ static int check_file_size_is_valid(char *file_name, char *part_name,
     ulong file_size_in_blocks = 0;
 	uint32_t offset_bytes, size_bytes;
 
-	switch (sfi->flash_type) {
-	case SMEM_BOOT_NAND_FLASH:
-	case SMEM_BOOT_NOR_FLASH:
-	case SMEM_BOOT_NORPLUSEMMC:
-	case SMEM_BOOT_NORPLUSNAND:
-	case SMEM_BOOT_ONENAND_FLASH:
-	case SMEM_BOOT_QSPI_NAND_FLASH:
-	case SMEM_BOOT_SPI_FLASH:
+	if (dfd->spi || dfd->nand) {
 		ret = getpart_offset_size(part_name, &offset_bytes, &size_bytes);
 		if (!ret) {
 			part_size_in_bytes = (ulong)size_bytes;
 			if (file_size_in_bytes > part_size_in_bytes)
 				goto file_too_big;
-			break;
+			return RET_SUCCESS;
 		}
-	case SMEM_BOOT_MMC_FLASH:
-	case SMEM_BOOT_NO_FLASH:
-	case SMEM_BOOT_SDC_FLASH:
-	default:
-		if (!dfd->mmc)
-			goto part_not_found;
-
-		mmc_dev = mmc_get_dev(mmc_host.dev_num);
-		if (mmc_dev == NULL)
-			goto part_not_found;
-
-		ret = get_partition_info_efi_by_name(mmc_dev, part_name, &disk_info);
-		if (ret)
-			goto part_not_found;
-
-		part_size_in_blocks = (ulong)disk_info.size;
-		part_size_in_bytes = part_size_in_blocks * disk_info.blksz;
-
-		if (disk_info.blksz)
-			file_size_in_blocks = file_size_in_bytes / disk_info.blksz
-								 + (file_size_in_bytes % disk_info.blksz != 0);
-
-		if (file_size_in_blocks > part_size_in_blocks)
-			goto file_too_big;
 	}
+
+	if (!dfd->mmc)
+		goto part_not_found;
+
+	mmc_dev = mmc_get_dev(mmc_host.dev_num);
+	if (!mmc_dev)
+		goto part_not_found;
+
+	ret = get_partition_info_efi_by_name(mmc_dev, part_name, &disk_info);
+	if (ret)
+		goto part_not_found;
+
+	part_size_in_blocks = (ulong)disk_info.size;
+	part_size_in_bytes = part_size_in_blocks * disk_info.blksz;
+
+	if (disk_info.blksz)
+		file_size_in_blocks = file_size_in_bytes / disk_info.blksz
+								+ (file_size_in_bytes % disk_info.blksz != 0);
+
+	if (file_size_in_blocks > part_size_in_blocks)
+		goto file_too_big;
 
 	return RET_SUCCESS;
 
