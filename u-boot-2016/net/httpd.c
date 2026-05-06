@@ -797,7 +797,7 @@ static int httpd_parse_post_data(struct tcp_cb_data *cbd)
 
 		httpd_debug("[DEBUG] %s(): numformdata = %u, val->name = %s, "
 			"val->filename = %s, val->data = 0x%p, val->size = %lu (0x%lx)\n",
-			__func__, numformdata, val->name,
+			__func__, i + 1, val->name,
 			val->filename, val->data, (ulong)val->size, (ulong)val->size);
 	}
 
