@@ -1958,6 +1958,9 @@ window.backupInit = backupInit;
 const envManager = (() => {
     // 私有变量
     let elements = null;
+    let envData = []; // 存储解析后的环境变量数据
+    let editMode = null; // 'add' | 'edit' | null
+    let editingKey = null; // 正在编辑的变量名
 
     /**
      * 获取或缓存 DOM 元素
@@ -1966,12 +1969,17 @@ const envManager = (() => {
         if (elements) return elements;
 
         elements = {
-            list: document.getElementById("env_list"),
-            name: document.getElementById("env_name"),
-            value: document.getElementById("env_value"),
+            tableBody: document.getElementById("env_table_body"),
+            tableContainer: document.getElementById("env_table_container"),
+            envTable: document.getElementById("env_table"),
+            emptyHint: document.getElementById("env_empty"),
             status: document.getElementById("env_status"),
             count: document.getElementById("env_count"),
-            file: document.getElementById("env_file")
+            editPanel: document.getElementById("env_edit_panel"),
+            editTitle: document.getElementById("env_edit_title"),
+            editName: document.getElementById("env_edit_name"),
+            editValue: document.getElementById("env_edit_value"),
+            restoreFile: document.getElementById("env_restore_file"),
         };
 
         return elements;
@@ -1980,27 +1988,12 @@ const envManager = (() => {
     /**
      * 设置状态提示
      */
-    function setStatus(text) {
+    function setStatus(text, isError) {
         const el = getElements().status;
-        if (el) el.textContent = text || "";
-    }
-
-    /**
-     * 统计变量数量
-     */
-    function countVariables(text) {
-        if (!text) return 0;
-
-        const lines = text.split("\n");
-        let count = 0;
-
-        for (const line of lines) {
-            if (line && line.includes("=")) {
-                count++;
-            }
+        if (el) {
+            el.textContent = text || "";
+            el.style.color = isError ? "var(--danger)" : "";
         }
-
-        return count;
     }
 
     /**
@@ -2008,35 +2001,87 @@ const envManager = (() => {
      */
     function formatError(error) {
         if (!error) return t("error.unknown");
-
-        if (error.message) {
-            return error.message;
-        }
-
+        if (error.message) return error.message;
         return String(error);
     }
 
     /**
-     * 显示错误提示
+     * 渲染环境变量表格
      */
-    function showError(error) {
-        const errorMsg = formatError(error);
-        setStatus(`❌ ${errorMsg}`);
-        console.error("Environment Manager Error:", error);
+    function renderTable(data) {
+        const els = getElements();
+
+        if (!els.tableBody || !els.envTable || !els.emptyHint) return;
+
+        // 清空表格
+        els.tableBody.innerHTML = '';
+
+        if (!data || data.length === 0) {
+            els.emptyHint.style.display = 'flex';
+            els.envTable.style.display = 'none';
+            return;
+        }
+
+        // 显示表格，隐藏空提示
+        els.emptyHint.style.display = 'none';
+        els.envTable.style.display = 'table';
+
+        // 渲染每一行
+        data.forEach((item) => {
+            const row = document.createElement('tr');
+            row.className = 'env-row';
+            row.dataset.key = item.key;
+
+            // 名称列
+            const tdName = document.createElement('td');
+            tdName.className = 'env-col-name';
+            tdName.textContent = item.key;
+            tdName.title = item.key;
+
+            // 值列
+            const tdValue = document.createElement('td');
+            tdValue.className = 'env-col-value';
+            tdValue.textContent = item.value;
+            tdValue.title = item.value;
+
+            // 操作列
+            const tdActions = document.createElement('td');
+            tdActions.className = 'env-col-actions';
+
+            // 编辑按钮
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'button button-sm env-action-btn';
+            editBtn.textContent = '✎';
+            editBtn.title = t('env.action.edit') || 'Edit';
+            editBtn.addEventListener('click', () => showEditPanel(item.key, item.value));
+
+            // 删除按钮
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'button button-sm button-danger env-action-btn';
+            deleteBtn.textContent = '✕';
+            deleteBtn.title = t('env.action.delete') || 'Delete';
+            deleteBtn.addEventListener('click', () => deleteSingle(item.key));
+
+            tdActions.appendChild(editBtn);
+            tdActions.appendChild(deleteBtn);
+
+            row.appendChild(tdName);
+            row.appendChild(tdValue);
+            row.appendChild(tdActions);
+            els.tableBody.appendChild(row);
+        });
     }
 
     /**
      * 刷新环境变量列表
      */
     async function refresh() {
+        const els = getElements();
+
         try {
             setStatus(t("env.status.loading"));
-
-            // 清空当前列表显示
-            const el = getElements().list;
-            if (el) {
-                el.textContent = t("env.status.loading");
-            }
 
             const response = await fetch("/env/list", {
                 method: "GET",
@@ -2052,46 +2097,112 @@ const envManager = (() => {
 
             const text = await response.text();
 
-            // 更新列表
-            if (el) {
-                el.textContent = text || "";
+            // 解析纯文本：每行 key=value
+            envData = [];
+            const lines = text.split('\n');
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+
+                const equalPos = trimmed.indexOf('=');
+                if (equalPos > 0) {
+                    const key = trimmed.substring(0, equalPos).trim();
+                    const value = trimmed.substring(equalPos + 1);
+                    if (key) {
+                        envData.push({ key, value });
+                    }
+                } else if (equalPos === -1 && trimmed) {
+                    envData.push({ key: trimmed, value: '' });
+                }
             }
 
-            // 更新计数
-            const countEl = getElements().count;
-            if (countEl) {
-                const count = countVariables(text);
-                countEl.textContent = `${t("env.count")} ${count}`;
+            envData.sort((a, b) => a.key.localeCompare(b.key));
+            renderTable(envData);
+
+            if (els.count) {
+                els.count.textContent = `${t("env.count")} ${envData.length}`;
             }
 
             setStatus(t("env.status.ready"));
 
         } catch (error) {
-            showError(error);
-
-            // 在列表中显示错误
-            const el = getElements().list;
-            if (el) {
-                el.textContent = t("env.status.error");
-            }
+            console.error("[envManager] Error:", error);
+            setStatus(formatError(error), true);
         }
     }
 
     /**
-     * 设置/更新环境变量
+     * 显示编辑面板
      */
-    async function set() {
-        const nameEl = getElements().name;
-        const valueEl = getElements().value;
+    function showEditPanel(key, value) {
+        const els = getElements();
 
-        if (!nameEl || !nameEl.value) {
-            alert(t("env.error.no_name"));
-            nameEl?.focus();
-            return;
+        editMode = 'edit';
+        editingKey = key;
+
+        if (els.editPanel) els.editPanel.style.display = 'block';
+        if (els.editTitle) els.editTitle.textContent = t('env.edit.title') || 'Edit Variable';
+
+        if (els.editName) {
+            els.editName.value = key || '';
+            els.editName.disabled = true; // 编辑模式下名称不可修改
         }
 
-        const name = nameEl.value.trim();
-        const value = valueEl ? valueEl.value : "";
+        if (els.editValue) {
+            els.editValue.value = value || '';
+            els.editValue.focus();
+        }
+    }
+
+    /**
+     * 显示添加面板
+     */
+    function showAddPanel() {
+        const els = getElements();
+
+        editMode = 'add';
+        editingKey = null;
+
+        if (els.editPanel) els.editPanel.style.display = 'block';
+        if (els.editTitle) els.editTitle.textContent = t('env.add.title') || 'Add Variable';
+
+        if (els.editName) {
+            els.editName.value = '';
+            els.editName.disabled = false;
+            els.editName.focus();
+        }
+
+        if (els.editValue) els.editValue.value = '';
+    }
+
+    /**
+     * 取消编辑
+     */
+    function cancelEdit() {
+        const els = getElements();
+
+        editMode = null;
+        editingKey = null;
+
+        if (els.editPanel) els.editPanel.style.display = 'none';
+        if (els.editName) els.editName.value = '';
+        if (els.editValue) els.editValue.value = '';
+    }
+
+    /**
+     * 保存编辑（新增或修改）
+     */
+    async function saveEdit() {
+        const els = getElements();
+        const name = els.editName ? els.editName.value.trim() : '';
+        const value = els.editValue ? els.editValue.value : '';
+
+        if (!name) {
+            alert(t("env.error.no_name"));
+            els.editName?.focus();
+            return;
+        }
 
         try {
             setStatus(t("env.status.saving"));
@@ -2116,36 +2227,67 @@ const envManager = (() => {
             }
 
             setStatus(t("env.status.saved"));
-
-            // 清空输入
-            nameEl.value = "";
-            if (valueEl) valueEl.value = "";
-
-            // 刷新列表
+            cancelEdit();
             await refresh();
-
         } catch (error) {
-            showError(error);
+            setStatus(formatError(error), true);
         }
     }
 
     /**
-     * 删除环境变量
+     * 重置单个环境变量为默认值
      */
-    async function unset() {
-        const nameEl = getElements().name;
+    async function resetSingle() {
+        const els = getElements();
+        const name = els.editName ? els.editName.value.trim() : '';
 
-        if (!nameEl || !nameEl.value) {
+        if (!name) {
             alert(t("env.error.no_name"));
-            nameEl?.focus();
             return;
         }
 
-        const name = nameEl.value.trim();
+        if (!confirm(`${name}: ${t("env.confirm.reset_single")}`)) return;
 
-        if (!confirm(`${t("env.confirm.delete")} "${name}" ?`)) {
+        try {
+            setStatus(t("env.status.saving"));
+
+            const formData = new FormData();
+            formData.append("name", name);
+
+            const response = await fetch("/env/reset/single", {
+                method: "POST",
+                body: formData
+            });
+
+            const result = await response.text();
+
+            if (!response.ok) {
+                throw new Error(`${t("env.status.http")} ${response.status}: ${result}`);
+            }
+
+            if (result !== "ok") {
+                throw new Error(result || t("env.status.error"));
+            }
+
+            setStatus(t("env.status.reset_single"));
+            cancelEdit();
+            await refresh();
+        } catch (error) {
+            setStatus(formatError(error), true);
+        }
+    }
+
+    /**
+     * 删除单个环境变量
+     */
+    async function deleteSingle(name) {
+        const excludeList = ['baudrate', 'stderr', 'stdin', 'stdout'];
+        if (excludeList.includes(name)) {
+            alert(name + ": " + t("env.delete.forbid"));
             return;
         }
+
+        if (!confirm(`${t("env.confirm.delete")} "${name}" ?`)) return;
 
         try {
             setStatus(t("env.status.saving"));
@@ -2169,33 +2311,21 @@ const envManager = (() => {
             }
 
             setStatus(t("env.status.deleted"));
-
-            // 清空输入
-            nameEl.value = "";
-
-            // 刷新列表
             await refresh();
-
         } catch (error) {
-            showError(error);
+            setStatus(formatError(error), true);
         }
     }
 
     /**
-     * 重置为默认环境变量
+     * 重置所有环境变量为默认值
      */
-    async function reset() {
-        if (!confirm(t("env.confirm.reset"))) {
-            return;
-        }
+    async function resetAll() {
+        if (!confirm(t("env.confirm.reset"))) return;
 
         try {
             setStatus(t("env.status.saving"));
-
-            const response = await fetch("/env/reset", {
-                method: "POST"
-            });
-
+            const response = await fetch("/env/reset/all", { method: "POST" });
             const result = await response.text();
 
             if (!response.ok) {
@@ -2207,38 +2337,37 @@ const envManager = (() => {
             }
 
             setStatus(t("env.status.reset"));
-
-            // 刷新列表
+            cancelEdit();
             await refresh();
-
         } catch (error) {
-            showError(error);
+            setStatus(formatError(error), true);
         }
     }
 
     /**
      * 从文件恢复环境变量
+     * 点击恢复按钮后弹出文件选择框
      */
-    async function restore() {
-        const fileEl = getElements().file;
+    function restore() {
+        const els = getElements();
 
-        if (!fileEl || !fileEl.files || !fileEl.files.length) {
-            alert(t("env.error.no_file"));
-            return;
-        }
+        if (!els.restoreFile) return;
 
-        if (!confirm(t("env.confirm.restore"))) {
-            return;
-        }
+        // 清除之前的选择，确保 change 事件能触发
+        els.restoreFile.value = '';
 
-        const file = fileEl.files[0];
+        // 触发文件选择
+        els.restoreFile.click();
+    }
 
-        // 文件大小检查（可选，根据实际需求调整）
-        const maxSize = 64 * 1024; // 64KB
-        if (file.size > maxSize) {
-            alert(t("env.error.file_too_big"));
-            return;
-        }
+    /**
+     * 处理恢复文件选择
+     * @param {File} file - 用户选择的文件
+     */
+    async function handleRestoreFile(file) {
+        if (!file) return;
+
+        if (!confirm(t("env.confirm.restore"))) return;
 
         try {
             setStatus(t("env.status.saving"));
@@ -2262,15 +2391,9 @@ const envManager = (() => {
             }
 
             setStatus(t("env.status.restored"));
-
-            // 清空文件选择
-            fileEl.value = "";
-
-            // 刷新列表
             await refresh();
-
         } catch (error) {
-            showError(error);
+            setStatus(formatError(error), true);
         }
     }
 
@@ -2278,38 +2401,16 @@ const envManager = (() => {
      * 初始化环境变量管理器
      */
     function init() {
-        // 获取元素引用
-        getElements();
+        const els = getElements();
 
-        // 设置列表占位符
-        const listEl = elements.list;
-        if (listEl) {
-            listEl.setAttribute("data-placeholder", t("env.placeholder"));
-        }
-
-        // 添加键盘事件支持
-        const nameEl = elements.name;
-        const valueEl = elements.value;
-
-        if (nameEl && valueEl) {
-            // Ctrl+Enter 提交
-            valueEl.addEventListener("keydown", (e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                    e.preventDefault();
-                    set();
-                }
-            });
-
-            // Tab 键在输入框间切换
-            nameEl.addEventListener("keydown", (e) => {
-                if (e.key === "Enter") {
-                    e.preventDefault();
-                    valueEl.focus();
-                }
+        // 绑定恢复文件选择事件
+        if (els.restoreFile) {
+            els.restoreFile.addEventListener('change', function() {
+                const file = this.files[0];
+                if (file) handleRestoreFile(file);
             });
         }
 
-        // 自动刷新一次
         refresh();
     }
 
@@ -2317,9 +2418,13 @@ const envManager = (() => {
     return {
         init,
         refresh,
-        set,
-        unset,
-        reset,
+        showAddPanel,
+        showEditPanel,
+        cancelEdit,
+        saveEdit,
+        resetSingle,
+        deleteSingle,
+        resetAll,
         restore,
     };
 })();
@@ -3898,29 +4003,38 @@ const I18N = (() => {
             "env.status.saved": "✓ Saved",
             "env.status.deleted": "✓ Deleted",
             "env.status.reset": "✓ Reset to defaults",
+            "env.status.reset_single": "✓ Variable reset to default",
             "env.status.restored": "✓ Restored",
-            "env.status.exporting": "Exporting...",
-            "env.status.exported": "✓ Exported",
             "env.status.http": "HTTP error:",
             "env.status.error": "Error",
+            "env.thead.name": "Name",
+            "env.thead.value": "Value",
+            "env.thead.actions": "Actions",
             "env.label.name": "Name:",
             "env.label.value": "Value:",
-            "env.label.file": "Env file:",
-            "env.action.set": "Add / Update",
             "env.action.unset": "Delete",
             "env.action.refresh": "Refresh",
             "env.action.reset": "Reset to defaults",
             "env.action.restore": "Restore",
+            "env.action.add": "Add",
+            "env.action.edit": "Edit",
+            "env.action.save": "Save",
+            "env.action.delete": "Delete",
+            "env.action.cancel": "Cancel",
+            "env.action.reset_single": "Reset to Default",
+            "env.edit.title": "Edit Variable",
+            "env.add.title": "Add Variable",
+            "env.delete.forbid": "the variable cannot be deleted!",
+            "env.confirm.reset_single": "reset this variable to default value?",
             "env.confirm.delete": "Delete variable",
             "env.confirm.reset": "Reset all environment variables to defaults?",
             "env.confirm.restore": "Restore environment from file? This will overwrite all current variables.",
             "env.error.no_name": "Please enter variable name",
             "env.error.no_file": "Please select a file",
-            "env.error.file_too_big": "File too large (max 64KB)",
             "env.placeholder": "No environment variables loaded",
-            "env.restore.hint": "Upload a previously saved binary U-Boot environment image (CRC + data) to restore.",
             "env.warn.1": "Modifying environment variables may affect boot behavior.",
             "env.warn.2": "Do not power off during save or restore.",
+            "env.warn.3": "The RESTORE function supports uploading a previously saved binary U-Boot environment image (CRC + data) to restore.",
             "mibib.title": "MIBIB RELOAD",
             "mibib.hint": "In <strong>9008</strong> mode, reloading <strong>MIBIB</strong> to initialize <strong>SMEM (Shared Memory) Partition Info</strong>. <br>Please choose a file from your local hard drive and click <strong>Reload</strong> button.",
             "mibib.reload": "Reload",
@@ -4128,28 +4242,37 @@ const I18N = (() => {
             "env.status.deleted": "✓ 已删除",
             "env.status.reset": "✓ 已重置为默认值",
             "env.status.restored": "✓ 已恢复",
-            "env.status.exporting": "导出中...",
-            "env.status.exported": "✓ 已导出",
             "env.status.http": "HTTP 错误:",
             "env.status.error": "错误",
+            "env.status.reset_single": "✓ 变量已重置为默认值",
+            "env.thead.name": "名称",
+            "env.thead.value": "值",
+            "env.thead.actions": "操作",
             "env.label.name": "名称:",
             "env.label.value": "值:",
-            "env.label.file": "环境变量文件:",
-            "env.action.set": "添加/更新",
             "env.action.unset": "删除",
             "env.action.refresh": "刷新",
             "env.action.reset": "重置为默认值",
             "env.action.restore": "恢复",
+            "env.action.add": "添加",
+            "env.action.edit": "编辑",
+            "env.action.save": "保存",
+            "env.action.delete": "删除",
+            "env.action.cancel": "取消",
+            "env.action.reset_single": "重置为默认值",
+            "env.edit.title": "编辑变量",
+            "env.add.title": "添加变量",
+            "env.delete.forbid": "该变量不能删除！",
+            "env.confirm.reset_single": "确定将此变量重置为默认值？",
             "env.confirm.delete": "删除变量",
             "env.confirm.reset": "确定将所有环境变量重置为默认值？",
             "env.confirm.restore": "确定从文件恢复环境变量？这将覆盖所有当前变量。",
             "env.error.no_name": "请输入变量名称",
             "env.error.no_file": "请选择文件",
-            "env.error.file_too_big": "文件过大（最大 64KB）",
             "env.placeholder": "暂无环境变量",
-            "env.restore.hint": "上传之前保存的二进制环境变量镜像文件（含 CRC）进行恢复。",
             "env.warn.1": "修改环境变量可能影响系统启动行为。",
             "env.warn.2": "保存或恢复过程中请勿断电。",
+            "env.warn.3": "恢复功能支持上传你之前保存的二进制环境变量镜像文件（含 CRC）进行恢复。",
             "mibib.title": "MIBIB 重载",
             "mibib.hint": "在 <strong>9008</strong> 模式下，通过重载 <strong>MIBIB</strong> 来初始化 <strong>SMEM (Shared Memory) 分区信息</strong>。<br>请选择本地文件并点击 <strong>重载</strong> 按钮。",
             "mibib.reload": "重载",

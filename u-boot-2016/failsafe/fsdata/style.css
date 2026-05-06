@@ -1166,17 +1166,6 @@ html[data-theme="dark"] .separator {
     background-color: #dc2626 !important;
 }
 
-/* 恢复提示 */
-.env-restore-hint {
-    font-size: 0.8rem;
-    color: var(--muted);
-    margin-top: 0.5rem;
-    padding: 0.5rem;
-    background: var(--panel-2);
-    border-radius: var(--radius-sm);
-    border-left: 3px solid var(--primary);
-}
-
 /* 暗色主题适配 */
 html[data-theme="dark"] .env-output {
     background: #1a1f2e;
@@ -1288,6 +1277,247 @@ html[data-theme="dark"] .field-hint-valid {
 
 html[data-theme="dark"] .field-hint-invalid {
     color: var(--danger);
+}
+
+/* ====== 环境变量表格样式 ====== */
+
+/* 表格外层容器 - 固定高度可滚动 */
+.env-table-container {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+/* 表格滚动容器 - 固定高度，内部滚动 */
+.env-table-scroll {
+    max-height: 450px;  /* 表格区域最大高度 */
+    min-height: 200px;  /* 表格区域最小高度 */
+    overflow-y: auto;   /* 垂直方向出现滚动条 */
+    overflow-x: auto;   /* 水平方向出现滚动条（防止内容过宽） */
+    -webkit-overflow-scrolling: touch; /* iOS 平滑滚动 */
+    scroll-behavior: smooth;
+}
+
+/* 自定义滚动条样式 */
+.env-table-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.env-table-scroll::-webkit-scrollbar-track {
+    background: var(--panel-2);
+    border-radius: 4px;
+}
+
+.env-table-scroll::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+    transition: background 0.2s ease;
+}
+
+.env-table-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+}
+
+.env-table-scroll::-webkit-scrollbar-corner {
+    background: var(--panel-2);
+}
+
+/* 表格样式 */
+.env-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    display: none; /* 默认隐藏，有数据时显示 */
+    table-layout: auto; /* 自动调整列宽 */
+}
+
+/* 表头 - 固定在滚动容器顶部 */
+.env-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.env-table thead tr {
+    background: var(--panel-2);
+}
+
+.env-table th {
+    background: var(--panel-2);
+    color: var(--text);
+    font-weight: 600;
+    padding: 0.65rem 0.75rem;
+    text-align: left;
+    border-bottom: 2px solid var(--primary);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    /* 添加阴影效果，增强表头与内容的视觉分离 */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* 表格行 */
+.env-table tbody tr {
+    transition: background-color 0.15s ease;
+    border-bottom: 1px solid var(--border);
+}
+
+.env-table tbody tr:hover {
+    background-color: var(--panel-2);
+}
+
+.env-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.env-table tbody tr:nth-child(even) {
+    background-color: rgba(var(--panel-rgb), 0.5);
+}
+
+.env-table tbody tr:nth-child(even):hover {
+    background-color: var(--panel-2);
+}
+
+/* 表格单元格 */
+.env-table td {
+    padding: 0.2rem 0.75rem;
+    color: var(--text);
+    vertical-align: middle;
+}
+
+/* 列宽定义 */
+.env-col-name {
+    width: 25%;
+    min-width: 120px;
+    max-width: 250px;
+    word-break: break-all;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-weight: 500;
+}
+
+.env-col-value {
+    width: 55%;
+    min-width: 150px;
+    max-width: 400px;
+    word-break: break-all;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    overflow-wrap: break-word;
+}
+
+.env-col-actions {
+    width: 20%;
+    min-width: 140px;
+    white-space: nowrap;
+    text-align: left;
+}
+
+/* 操作按钮容器 - 确保按钮不换行 */
+.env-col-actions .env-action-btn {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+/* 操作按钮样式 */
+.env-action-btn {
+    padding: 0.3rem 0.55rem !important;
+    min-width: 2rem !important;
+    min-height: 1.75rem !important;
+    font-size: 0.85rem !important;
+    margin: 0 0.15rem;
+    line-height: 1;
+    border-radius: 0.25rem !important;
+}
+
+/* 空状态提示 */
+.env-empty {
+    padding: 3rem 2rem;
+    text-align: center;
+    color: var(--muted);
+    opacity: 0.6;
+    font-size: 0.95rem;
+    display: none;
+    min-height: 200px;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 编辑面板样式 */
+.env-edit-panel {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    transition: all 0.3s ease;
+}
+
+.env-edit-panel .env-edit-title {
+    font-weight: 600;
+    color: var(--primary);
+    margin-bottom: 0.75rem;
+    font-size: 0.95rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+/* 主操作按钮栏 */
+.env-main-actions {
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+    margin-top: 0.5rem;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* 输入框样式增强 */
+.env-edit-panel .field-control {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.85rem;
+}
+
+/* 暗色主题适配 */
+html[data-theme="dark"] .env-table thead {
+    background: #1a1f2e;
+}
+
+html[data-theme="dark"] .env-table th {
+    background: #1a1f2e;
+    border-bottom-color: var(--primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+html[data-theme="dark"] .env-table tbody tr:nth-child(even) {
+    background-color: rgba(30, 41, 59, 0.5);
+}
+
+html[data-theme="dark"] .env-table tbody tr:hover {
+    background-color: rgba(30, 41, 59, 0.8);
+}
+
+html[data-theme="dark"] .env-table-scroll::-webkit-scrollbar-track {
+    background: #1a1f2e;
+}
+
+html[data-theme="dark"] .env-table-scroll::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.3);
+    border-radius: 4px;
+}
+
+html[data-theme="dark"] .env-table-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.5);
+}
+
+html[data-theme="dark"] .env-table-scroll::-webkit-scrollbar-corner {
+    background: #1a1f2e;
+}
+
+html[data-theme="dark"] .env-edit-panel {
+    background: rgba(17, 28, 51, 0.8);
 }
 
 /* ====== Web 控制台样式 ====== */
@@ -1730,6 +1960,49 @@ html[data-theme="dark"] .card-main-section .table .tr:has(.td[style*="font-weigh
         font-size: 0.8rem;
     }
 
+    .env-table-scroll {
+        max-height: 350px;
+        min-height: 150px;
+    }
+
+    .env-table {
+        font-size: 0.75rem;
+    }
+
+    .env-table th,
+    .env-table td {
+        padding: 0.4rem 0.5rem;
+    }
+
+    .env-col-name {
+        min-width: 80px;
+        max-width: 150px;
+    }
+
+    .env-col-value {
+        min-width: 100px;
+        max-width: 200px;
+    }
+
+    .env-col-actions {
+        min-width: 110px;
+    }
+
+    .env-action-btn {
+        padding: 0.2rem 0.4rem !important;
+        min-width: 1.5rem !important;
+        min-height: 1.5rem !important;
+        font-size: 0.75rem !important;
+    }
+
+    .env-edit-panel {
+        padding: 0.75rem;
+    }
+
+    .env-main-actions {
+        gap: 0.5rem;
+    }
+
     .backup-range-hint {
         font-size: 0.7rem;
         padding: 0.4rem 0.6rem;
@@ -1856,6 +2129,10 @@ html[data-theme="dark"] .card-main-section .table .tr:has(.td[style*="font-weigh
         top: 0.9rem;
         left: 0.9rem;
     }
+
+    .env-table-scroll {
+        max-height: 400px;
+    }
 }
 
 /* 桌面端不显示切换按钮 */
@@ -1877,5 +2154,9 @@ html[data-theme="dark"] .card-main-section .table .tr:has(.td[style*="font-weigh
     /* 桌面端主内容区域不需要移动 */
     .main {
         transform: translateX(0) !important;
+    }
+
+    .env-table-scroll {
+        max-height: 550px;
     }
 }

@@ -565,7 +565,8 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/env/list", &env_list_handler, NULL);
 	httpd_register_uri_handler(inst, "/env/set", &env_set_handler, NULL);
 	httpd_register_uri_handler(inst, "/env/unset", &env_unset_handler, NULL);
-	httpd_register_uri_handler(inst, "/env/reset", &env_reset_handler, NULL);
+	httpd_register_uri_handler(inst, "/env/reset/all", &env_reset_all_handler, NULL);
+	httpd_register_uri_handler(inst, "/env/reset/single", &env_reset_single_handler, NULL);
 	httpd_register_uri_handler(inst, "/env/restore", &env_restore_handler, NULL);
 
 	/* Enable recording early so we can stream output to the browser */

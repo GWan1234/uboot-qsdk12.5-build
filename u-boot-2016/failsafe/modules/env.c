@@ -111,16 +111,17 @@ static char *failsafe_env_export_text(size_t *out_len)
 	}
 
 	n = 0;
-	for (i = 0; i < ENV_SIZE - 1; i++) {
-		if (!envbuf->data[i] && !envbuf->data[i + 1])
+	for (i = 0; i < ENV_SIZE - 1 && n < out_sz - 1; i++) {
+		if (envbuf->data[i] == '\0' && envbuf->data[i + 1] == '\0')
 			break;
 
-		out[n++] = envbuf->data[i] ? envbuf->data[i] : '\n';
-		if (n + 1 >= out_sz)
-			break;
+		if (envbuf->data[i] == '\0')
+			out[n++] = '\n';
+		else
+			out[n++] = envbuf->data[i];
 	}
 
-	if (n && out[n - 1] != '\n')
+	if (n > 0 && out[n - 1] != '\n' && n < out_sz - 1)
 		out[n++] = '\n';
 
 	out[n] = '\0';
@@ -170,7 +171,8 @@ void env_set_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response)
 {
-	char *name = NULL, *value = NULL;
+	char *name = NULL, *value = NULL, *current_value = NULL;
+	bool changed = false;
 	int ret;
 
 	if (status != HTTP_CB_NEW)
@@ -196,19 +198,23 @@ void env_set_handler(enum httpd_uri_handler_status status,
 		return;
 	}
 
-	ret = setenv(name, value);
-	if (!ret)
+	current_value = getenv(name);
+	if (!current_value || strcmp(current_value, value))
+		if (!setenv(name, value))
+			changed = true;
+
+	if (changed)
 		ret = saveenv();
+	else
+		ret = 0;
 
 	free(name);
 	free(value);
 
-	if (ret) {
+	if (!ret)
+		failsafe_http_reply_text(response, 200, "ok");
+	else
 		failsafe_http_reply_text(response, 500, "save failed");
-		return;
-	}
-
-	failsafe_http_reply_text(response, 200, "ok");
 }
 
 void env_unset_handler(enum httpd_uri_handler_status status,
@@ -247,7 +253,7 @@ void env_unset_handler(enum httpd_uri_handler_status status,
 	failsafe_http_reply_text(response, 200, "ok");
 }
 
-void env_reset_handler(enum httpd_uri_handler_status status,
+void env_reset_all_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response)
 {
@@ -264,19 +270,18 @@ void env_reset_handler(enum httpd_uri_handler_status status,
 	set_default_env(NULL);
 	ret = saveenv();
 
-	if (ret) {
+	if (!ret)
+		failsafe_http_reply_text(response, 200, "ok");
+	else
 		failsafe_http_reply_text(response, 500, "save failed");
-		return;
-	}
-
-	failsafe_http_reply_text(response, 200, "ok");
 }
 
-void env_restore_handler(enum httpd_uri_handler_status status,
+void env_reset_single_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response)
 {
-	struct httpd_form_value *fw;
+    char *name, *current_value, *default_value;
+    bool changed = false;
 	int ret;
 
 	if (status != HTTP_CB_NEW)
@@ -287,20 +292,74 @@ void env_restore_handler(enum httpd_uri_handler_status status,
 		return;
 	}
 
-	fw = httpd_request_find_value(request, "envfile");
-	if (!fw || !fw->data || fw->size < sizeof(env_t)) {
+	ret = failsafe_env_get_form_value(request, "name", &name,
+		ENV_NAME_MAX_LEN, false);
+	if (ret) {
+		failsafe_http_reply_text(response, 400, "bad name");
+		return;
+	}
+
+	default_value = getenv_default(name);
+	if (!default_value) {
+		failsafe_http_reply_text(response, 406, "no default value");
+		free(name);
+		return;
+	}
+
+	current_value = getenv(name);
+	if (!current_value || strcmp(current_value, default_value))
+		if (!setenv(name, default_value))
+			changed = true;
+
+    if (changed)
+        ret = saveenv();
+	else
+		ret = 0;
+
+	free(name);
+
+	if (!ret)
+        failsafe_http_reply_text(response, 200, "ok");
+    else
+		failsafe_http_reply_text(response, 500, "save failed");
+}
+
+void env_restore_handler(enum httpd_uri_handler_status status,
+	struct httpd_request *request,
+	struct httpd_response *response)
+{
+	struct httpd_form_value *envfile;
+    uint32_t crc;
+    env_t *envptr;
+	bool success = false;
+
+	if (status != HTTP_CB_NEW)
+		return;
+
+	if (!request || request->method != HTTP_POST) {
+		failsafe_http_reply_text(response, 405, "method");
+		return;
+	}
+
+	envfile = httpd_request_find_value(request, "envfile");
+	if (!envfile || !envfile->data) {
 		failsafe_http_reply_text(response, 400, "bad file");
 		return;
 	}
 
-	ret = env_import((const char *)fw->data, 1);
-	if (!ret)
-		ret = saveenv();
+    envptr = (env_t *)envfile->data;
+    memcpy(&crc, &envptr->crc, sizeof(crc));
+    if (crc32(0, envptr->data, ENV_SIZE) != crc) {
+        failsafe_http_reply_text(response, 400, "bad crc");
+        return;
+    }
 
-	if (ret) {
+	if (env_import(envfile->data, 0))
+		if (!saveenv())
+			success = true;
+
+	if (success)
+		failsafe_http_reply_text(response, 200, "ok");
+	else
 		failsafe_http_reply_text(response, 500, "restore failed");
-		return;
-	}
-
-	failsafe_http_reply_text(response, 200, "ok");
 }

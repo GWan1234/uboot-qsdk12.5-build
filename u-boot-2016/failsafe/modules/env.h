@@ -22,7 +22,10 @@ void env_set_handler(enum httpd_uri_handler_status status,
 void env_unset_handler(enum httpd_uri_handler_status status,
 	    struct httpd_request *request,
 	    struct httpd_response *response);
-void env_reset_handler(enum httpd_uri_handler_status status,
+void env_reset_all_handler(enum httpd_uri_handler_status status,
+	    struct httpd_request *request,
+	    struct httpd_response *response);
+void env_reset_single_handler(enum httpd_uri_handler_status status,
 	    struct httpd_request *request,
 	    struct httpd_response *response);
 void env_restore_handler(enum httpd_uri_handler_status status,
