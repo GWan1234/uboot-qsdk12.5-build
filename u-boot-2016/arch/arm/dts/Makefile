@@ -148,11 +148,9 @@ dtb-$(CONFIG_TARGET_IPQ6018_SY_Y6010)          += ipq6018-y6010.dtb
 dtb-$(CONFIG_TARGET_IPQ6018_ZN_M2)             += ipq6018-m2.dtb
 
 ifdef CONFIG_ADD_EXTRA_DTB
-dtb-$(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_02)  += ipq6018-re-cs-07.dtb \
-												  ipq6018-re-ss-01.dtb \
+dtb-$(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_02)  += ipq6018-re-ss-01.dtb \
 												  ipq6018-ax5-jdcloud.dtb
-dtb-$(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_07)  += ipq6018-re-cs-02.dtb \
-												  ipq6018-re-ss-01.dtb \
+dtb-$(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_07)  += ipq6018-re-ss-01.dtb \
 												  ipq6018-ax5-jdcloud.dtb
 dtb-$(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_SS_01)  += ipq6018-re-cs-02.dtb \
 												  ipq6018-re-cs-07.dtb \
@@ -161,14 +159,12 @@ dtb-$(CONFIG_TARGET_IPQ6018_LINK_NN6000)       += ipq6018-re-cs-02.dtb \
 												  ipq6018-re-cs-07.dtb \
 												  ipq6018-re-ss-01.dtb
 dtb-$(CONFIG_TARGET_IPQ6018_PHILIPS_LY1800)    += ipq6018-re-cs-02.dtb \
-												  ipq6018-re-cs-07.dtb \
-												  ipq6018-re-ss-01.dtb
+												  ipq6018-re-cs-07.dtb
 dtb-$(CONFIG_TARGET_IPQ6018_REDMI_AX5_JDCLOUD) += ipq6018-re-cs-02.dtb \
 												  ipq6018-re-cs-07.dtb \
 												  ipq6018-re-ss-01.dtb
 dtb-$(CONFIG_TARGET_IPQ6018_SY_Y6010)          += ipq6018-re-cs-02.dtb \
-												  ipq6018-re-cs-07.dtb \
-												  ipq6018-re-ss-01.dtb
+												  ipq6018-re-cs-07.dtb
 endif
 
 dtb-$(CONFIG_ARCH_IPQ9574) += ipq9574-al01-c1.dtb \
