@@ -182,6 +182,7 @@ void check_network_settings(void)
 		return;
 
 	int modified = 0;
+	const char *current_ipaddr, *current_netmask, *current_serverip;
 	const char *default_ipaddr, *default_netmask, *default_serverip;
 
 # if defined(CONFIG_IPADDR)
@@ -200,19 +201,23 @@ void check_network_settings(void)
 	default_serverip = "192.168.1.2";
 # endif /* CONFIG_SERVERIP */
 
-	if (strcmp(getenv("ipaddr"), default_ipaddr)) {
+	current_ipaddr = getenv("ipaddr");
+	current_netmask = getenv("netmask");
+	current_serverip = getenv("serverip");
+
+	if (!current_ipaddr || strcmp(current_ipaddr, default_ipaddr)) {
 		setenv("ipaddr", default_ipaddr);
 		net_ip = string_to_ip(default_ipaddr);
 		modified++;
 	}
 
-	if (strcmp(getenv("netmask"), default_netmask)) {
+	if (!current_netmask || strcmp(current_netmask, default_netmask)) {
 		setenv("netmask", default_netmask);
 		net_netmask = string_to_ip(default_netmask);
 		modified++;
 	}
 
-	if (strcmp(getenv("serverip"), default_serverip)) {
+	if (!current_serverip || strcmp(current_serverip, default_serverip)) {
 		setenv("serverip", default_serverip);
 		net_server_ip = string_to_ip(default_serverip);
 		modified++;
