@@ -29,14 +29,13 @@
 
 #include "mibib.h"
 
-static qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-static detected_flash_device_t *dfd = &detected_flash_device;
-
 void mibib_reload_handler(enum httpd_uri_handler_status status,
         struct httpd_request *request,
         struct httpd_response *response)
 {
     static char resp[256];
+    qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+    detected_flash_device_t *dfd = &detected_flash_device;
     struct spi_flash *spi;
     nand_info_t *nand;
     struct httpd_form_value *mibib;
@@ -104,7 +103,7 @@ void mibib_reload_handler(enum httpd_uri_handler_status status,
         return;
     }
 
-    ret = mibib_ptable_init((unsigned int*)(mibib->data + page_size));
+    ret = mibib_ptable_init((unsigned int *)(mibib->data + page_size));
     if (ret) {
         handle_fail_led_state();
         response->data = "{\"status\":\"fail\","
