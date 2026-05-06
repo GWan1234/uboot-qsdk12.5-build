@@ -53,9 +53,15 @@ static void handle_response_message(struct httpd_response *response,
 static void network_set_env(struct httpd_response *response, bool custom,
 		const char *ipaddr, const char *netmask, const char *serverip)
 {
-	int modified = 0;
+	int ret = 0, modified = 0;
 	bool custom_state_changed = false;
-	const char *custom_state = getenv("custom_network");
+	const char *custom_state;
+	const char *current_ipaddr, *current_netmask, *current_serverip;
+
+	custom_state = getenv("custom_network");
+	current_ipaddr = getenv("ipaddr");
+	current_netmask = getenv("netmask");
+	current_serverip = getenv("serverip");
 
 	if ((custom && !custom_state) || (!custom && custom_state))
 		custom_state_changed = true;
@@ -64,23 +70,25 @@ static void network_set_env(struct httpd_response *response, bool custom,
 		if(!setenv("custom_network", custom ? "1" : NULL))
 			modified++;
 
-	if (strcmp(getenv("ipaddr"), ipaddr))
+	if (!current_ipaddr || strcmp(current_ipaddr, ipaddr))
 		if(!setenv("ipaddr", ipaddr))
 			modified++;
 
-	if (strcmp(getenv("netmask"), netmask))
+	if (!current_netmask || strcmp(current_netmask, netmask))
 		if(!setenv("netmask", netmask))
 			modified++;
 
-	if (strcmp(getenv("serverip"), serverip))
+	if (!current_serverip || strcmp(current_serverip, serverip))
 		if(!setenv("serverip", serverip))
 			modified++;
 
 	if (modified)
-		if(saveenv())
-			handle_response_message(response, 500, "save failed", NULL);
+		ret = saveenv();
 
-	handle_response_message(response, 200, "ok", NULL);
+	if (!ret)
+		handle_response_message(response, 200, "ok", NULL);
+	else
+		handle_response_message(response, 500, "save failed", NULL);
 }
 
 void network_info_handler(enum httpd_uri_handler_status status,
