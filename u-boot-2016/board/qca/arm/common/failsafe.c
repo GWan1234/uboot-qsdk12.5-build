@@ -37,7 +37,8 @@
 #include <ipq_api.h>
 #include <u-boot/md5.h>
 #include <net/httpd.h>
-#include <runcmd_capture.h>
+#include <console.h>
+#include <membuff.h>
 
 #include "untar.h"
 
@@ -48,6 +49,8 @@ extern struct sdhci_host mmc_host;
 #endif
 
 DECLARE_GLOBAL_DATA_PTR;
+
+#define FAILSAFE_CAPTURE_RECORD_OUT_SIZE 0x400
 
 #define MAX_CMD_COUNT  10
 #define MAX_CMD_LEN    256
@@ -238,22 +241,6 @@ static inline void handle_flash_not_found(const int fw_type, const char *flash_t
 		fw_type_str, flash_type_str);
 	printf("Error: upload file is %s, but no %s FLASH found\n",
 		fw_type_str, flash_type_str);
-}
-
-static inline void handle_runcmd_failed(const char *runcmd, const char *output)
-{
-	char escaped_runcmd[MAX_CMD_LEN * 2];
-	char escaped_output[CAPTURE_BUFFER_SIZE * 2];
-
-	json_escape(runcmd, escaped_runcmd, sizeof(escaped_runcmd));
-	json_escape(output, escaped_output, sizeof(escaped_output));
-
-	snprintf(info, sizeof(info),
-		"{\"type\":\"runcmd_failed\","
-		"\"runcmd\":\"%s\",\"output\":\"%s\"}",
-		escaped_runcmd, escaped_output[0] ? escaped_output : "none");
-
-	printf("Error: failed to run command: %s\n", runcmd);
 }
 
 static inline void handle_invalid_jdc_fw(const char *node_prefix)
@@ -587,10 +574,69 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 	return ret;
 }
 
+static void handle_run_command_failed(const char *cmd, const char *output)
+{
+	char escaped_cmd[MAX_CMD_LEN * 2];
+	char *escaped_output, *buf;
+	size_t buf_size = 2 * strlen(output);
+
+	printf("Failed to run: %s\n", cmd);
+
+	json_escape(cmd, escaped_cmd, sizeof(escaped_cmd));
+
+	buf = malloc(buf_size);
+	if (buf) {
+		json_escape(output, buf, buf_size);
+		escaped_output = buf[0] ? buf : "none";
+	} else {
+		escaped_output = "[ERROR] malloc failed, cannot escape output.";
+	}
+
+	snprintf(info, sizeof(info),
+		"{\"type\":\"run_cmd_failed\",\"cmd\":\"%s\",\"output\":\"%s\"}",
+		escaped_cmd, escaped_output);
+
+	if (buf)
+		free(buf);
+}
+
+static int run_command_capture(const char *cmd)
+{
+	bool capture_on;
+	int ret, avail, want, got;
+	char output[FAILSAFE_CAPTURE_RECORD_OUT_SIZE];
+
+	printf("\n### Executing: %s\n", cmd);
+
+	ret = membuff_new((struct membuff *)&gd->failsafe_capture_out,
+				FAILSAFE_CAPTURE_RECORD_OUT_SIZE);
+
+	capture_on = ret ? false : true;
+
+	if (capture_on)
+		membuff_purge((struct membuff *)&gd->failsafe_capture_out);
+
+	ret = run_command(cmd, 0);
+
+	if (ret && capture_on) {
+		avail = membuff_avail((struct membuff *)&gd->failsafe_capture_out);
+		want = min(avail, (int)FAILSAFE_CAPTURE_RECORD_OUT_SIZE);
+		got = membuff_get((struct membuff *)&gd->failsafe_capture_out, output, want);
+		output[got] = '\0';
+	}
+
+	if (ret)
+		handle_run_command_failed(cmd,
+			capture_on ? output : "[ERROR] Failed to capture output.");
+
+	if (capture_on)
+		membuff_dispose((struct membuff *)&gd->failsafe_capture_out);
+
+	return ret;
+}
+
 static int failsafe_run_command_list(struct cmdlist runcmd)
 {
-    int ret;
-	const char *output;
     struct cmdlist *p = &runcmd;
 
     if (p->count > MAX_CMD_COUNT) {
@@ -599,16 +645,9 @@ static int failsafe_run_command_list(struct cmdlist runcmd)
         return RET_FAILURE;
     }
 
-    for (int i = 0; i < p->count; i++) {
-        printf("\n### Executing: %s\n", p->list[i]);
-        ret = run_command_capture(p->list[i], &output);
-		if (*output)
-			puts(output);
-        if (ret) {
-            handle_runcmd_failed(p->list[i], output);
+    for (int i = 0; i < p->count; i++)
+        if (run_command_capture(p->list[i]))
             return RET_FAILURE;
-        }
-    }
 
     return RET_SUCCESS;
 }

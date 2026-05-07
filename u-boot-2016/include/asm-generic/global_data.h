@@ -122,6 +122,9 @@ typedef struct global_data {
 	struct membuff console_out;	/* console output */
 	struct membuff console_in;	/* console input */
 #endif
+#ifdef CONFIG_HTTPD
+	struct membuff failsafe_capture_out;	/* failsafe capture output */
+#endif
 } gd_t;
 #endif
 

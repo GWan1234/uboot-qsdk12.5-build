@@ -385,6 +385,6 @@ void membuff_uninit(struct membuff *mb)
 
 void membuff_dispose(struct membuff *mb)
 {
-	free(&mb->start);
+	free(mb->start);
 	membuff_uninit(mb);
 }
