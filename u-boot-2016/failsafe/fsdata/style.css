@@ -902,6 +902,183 @@ button.button:disabled {
     margin-bottom: 1rem;
 }
 
+/* ====== 信息表格样式 ====== */
+
+/* 成功/错误信息表格 */
+.info-table {
+    width: 100%;
+    max-width: 600px;
+    margin: 0.5rem auto;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--panel-2);
+}
+
+.info-table tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background-color 0.15s ease;
+}
+
+.info-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.info-table tbody tr:hover {
+    background-color: rgba(var(--panel-rgb), 0.5);
+}
+
+/* 标签列 */
+.info-label {
+    padding: 0.65rem 0.75rem;
+    width: 30%;
+    min-width: 100px;
+    font-weight: 600;
+    color: var(--primary);
+    font-size: 0.85rem;
+    vertical-align: middle;
+    border-right: 1px solid var(--border);
+    background: rgba(var(--panel-rgb), 0.3);
+    white-space: nowrap;
+}
+
+/* 值列 */
+.info-value {
+    padding: 0.65rem 0.75rem;
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.85rem;
+    vertical-align: middle;
+    word-break: break-all;
+}
+
+/* MD5 值特殊样式 */
+.upload-md5-value {
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+}
+
+/* 错误表格变体 */
+.error-table {
+    border-color: var(--err-border);
+    background: var(--err-bg);
+}
+
+.error-table .info-label {
+    color: var(--danger);
+    border-right-color: var(--err-border);
+}
+
+.error-table .info-value {
+    color: var(--text);
+}
+
+/* 错误建议文本 */
+.error-suggestion {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0.75rem 0 0;
+    padding: 0.5rem;
+    line-height: 1.5;
+}
+
+/* 错误信息容器内的错误标题调整 */
+.error-message .error-title {
+    text-align: center;
+    margin-bottom: 0.75rem;
+    font-size: 1.05rem;
+}
+
+/* ====== 命令执行失败样式 ====== */
+
+/* 命令值特殊样式 */
+.cmd-value {
+    font-size: 0.82rem;
+    letter-spacing: 0.3px;
+    color: var(--danger);
+    font-weight: 500;
+}
+
+/* 命令输出区域 */
+.error-output-section {
+    margin-top: 0.75rem;
+    border: 1px solid var(--err-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--err-bg);
+}
+
+/* 命令输出标题 */
+.error-output-title {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--danger);
+    background: rgba(var(--panel-rgb), 0.3);
+    border-bottom: 1px solid var(--err-border);
+}
+
+/* 命令输出内容 - 使用 <pre> 保留空白字符 */
+.error-output-content {
+    margin: 0;
+    padding: 0.75rem 1rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--text);
+    background: rgba(var(--panel-rgb), 0.5);
+    white-space: pre-wrap;       /* 保留空白字符并自动换行 */
+    word-break: break-all;       /* 防止长字符串溢出 */
+    overflow-wrap: break-word;
+    overflow-x: auto;            /* 内容过宽时出现水平滚动条 */
+    max-height: 300px;           /* 限制最大高度 */
+    overflow-y: auto;            /* 内容过高时出现垂直滚动条 */
+    border: none;
+    tab-size: 4;                 /* 制表符显示宽度 */
+    -moz-tab-size: 4;
+}
+
+/* 暗色主题适配 */
+html[data-theme="dark"] .info-table {
+    background: rgba(17, 28, 51, 0.6);
+}
+
+html[data-theme="dark"] .info-label {
+    background: rgba(15, 23, 42, 0.5);
+}
+
+html[data-theme="dark"] .error-table {
+    background: rgba(248, 113, 113, 0.06);
+}
+
+html[data-theme="dark"] .error-table .info-label {
+    background: rgba(248, 113, 113, 0.1);
+}
+
+html[data-theme="dark"] .info-table tbody tr:hover {
+    background-color: rgba(148, 163, 184, 0.05);
+}
+
+html[data-theme="dark"] .error-output-section {
+    background: rgba(248, 113, 113, 0.06);
+}
+
+html[data-theme="dark"] .error-output-content {
+    background: rgba(15, 23, 42, 0.6);
+    color: #e5e7eb;
+}
+
+html[data-theme="dark"] .error-output-title {
+    background: rgba(15, 23, 42, 0.5);
+}
+
+html[data-theme="dark"] .cmd-value {
+    color: #f87171;
+}
+
 /* ========== 警告区域 - 独立卡片 ========== */
 .card-foot-section {
     border: 1px solid var(--border);
@@ -2032,6 +2209,46 @@ html[data-theme="dark"] .card-main-section .table .tr:has(.td[style*="font-weigh
 
     .card-main-section .card-main-inner h2 {
         font-size: 0.9rem;
+    }
+
+    .info-table {
+        max-width: 100%;
+        font-size: 0.8rem;
+    }
+
+    .info-label {
+        padding: 0.5rem 0.6rem;
+        width: 35%;
+        min-width: 80px;
+        font-size: 0.75rem;
+    }
+
+    .info-value {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.75rem;
+    }
+
+    .error-message .error-title {
+        font-size: 0.95rem;
+    }
+
+    .error-suggestion {
+        font-size: 0.8rem;
+    }
+
+    .error-output-content {
+        font-size: 0.75rem;
+        padding: 0.6rem 0.75rem;
+        max-height: 250px;
+    }
+
+    .error-output-title {
+        font-size: 0.78rem;
+        padding: 0.4rem 0.6rem;
+    }
+
+    .cmd-value {
+        font-size: 0.75rem;
     }
 
     .network-table {

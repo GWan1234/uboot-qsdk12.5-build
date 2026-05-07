@@ -1235,9 +1235,6 @@ function upload(formDataKey) {
 function handleUploadSuccess(info, elements) {
     const {
         successInfo,
-        fileTypeElement,
-        sizeElement,
-        md5Element,
         upgradeElement,
         progressCircle
     } = elements;
@@ -1245,26 +1242,33 @@ function handleUploadSuccess(info, elements) {
     // 隐藏进度条
     if (progressCircle) progressCircle.style.display = "none";
 
-    // 显示文件类型信息（如果有）
-    if (info.type && fileTypeElement) {
-        fileTypeElement.style.display = "block";
-        fileTypeElement.innerHTML = `<strong>${t("label.type")}</strong> ${info.type}`;
+    // 动态生成成功信息表格
+    if (successInfo) {
+        successInfo.style.display = "block";
+        successInfo.innerHTML = `
+            <table class="info-table">
+                <tbody>
+                    ${info.type ? `
+                    <tr>
+                        <td class="info-label" data-i18n="label.type">${t("label.type")}</td>
+                        <td class="info-value">${escapeHtml(info.type)}</td>
+                    </tr>` : ''}
+                    ${info.size ? `
+                    <tr>
+                        <td class="info-label" data-i18n="label.size">${t("label.size")}</td>
+                        <td class="info-value">${bytesToHuman(info.size)} (${info.size} Bytes)</td>
+                    </tr>` : ''}
+                    ${info.md5 ? `
+                    <tr>
+                        <td class="info-label" data-i18n="label.md5">${t("label.md5")}</td>
+                        <td class="info-value upload-md5-value">${info.md5}</td>
+                    </tr>` : ''}
+                </tbody>
+            </table>
+        `;
     }
 
-    // 显示文件大小
-    if (info.size && sizeElement) {
-        sizeElement.style.display = "block";
-        sizeElement.innerHTML = `<strong>${t("label.size")}</strong> ${bytesToHuman(info.size)} (${info.size} Bytes)`;
-    }
-
-    // 显示 MD5
-    if (info.md5 && md5Element) {
-        md5Element.style.display = "block";
-        md5Element.innerHTML = `<strong>${t("label.md5")}</strong> ${info.md5}`;
-    }
-
-    // 显示成功信息区域和升级按钮
-    if (successInfo) successInfo.style.display = "block";
+    // 显示升级按钮
     if (upgradeElement) upgradeElement.style.display = "block";
 }
 
@@ -1300,7 +1304,7 @@ function handleUploadError(info, elements) {
             errorMessage = generateFlashNotFoundMessage(info);
             break;
         default:
-            errorMessage = JSON.stringify(info) || t("error.unknown_type");
+            errorMessage = generateUnknownErrorMessage(info);
     }
 
     // 显示错误信息
@@ -1327,7 +1331,17 @@ function handleInvalidUploadResponse(message, elements) {
 
     if (errorInfo) {
         errorInfo.style.display = "block";
-        errorInfo.innerHTML = `<div class="error-detail">${escapeHtml(message)}</div>`;
+        errorInfo.innerHTML = `
+            <div class="error-title">❌ ${t("error.invalid_response")}</div>
+            <table class="info-table error-table">
+                <tbody>
+                    <tr>
+                        <td class="info-label">${t("error.title")}</td>
+                        <td class="info-value">${escapeHtml(message)}</td>
+                    </tr>
+                </tbody>
+            </table>
+        `;
     }
 }
 
@@ -1335,112 +1349,142 @@ function handleInvalidUploadResponse(message, elements) {
  * 生成文件过大错误信息
  */
 function generateFileTooBigMessage(info) {
-    const lang = APP_STATE.lang;
+    const labels = [
+        { label: "error.label.file_type", value: info.filename },
+        { label: "error.label.file_size", value: `${bytesToHuman(info.filesize)} (${info.filesize} ${t("error.unit.bytes")})` },
+        { label: "error.label.part_name", value: info.partname },
+        { label: "error.label.part_size", value: `${bytesToHuman(info.partsize)} (${info.partsize} ${t("error.unit.bytes")})` }
+    ];
 
-    if (lang === "zh-cn") {
-        return `
-            <div class="error-title">❌ 文件过大</div>
-            <div class="error-detail">
-                <p>文件类型: ${info.filename || t("unknown")}</p>
-                <p>文件大小: ${bytesToHuman(info.filesize)} (${info.filesize} 字节)</p>
-                <p>分区名称: ${info.partname || t("unknown")}</p>
-                <p>分区大小: ${bytesToHuman(info.partsize)} (${info.partsize} 字节)</p>
-                <p>请选择小于分区大小的文件或扩容分区。</p>
-            </div>
-        `;
-    } else {
-        return `
-            <div class="error-title">❌ File too large</div>
-            <div class="error-detail">
-                <p>File type: ${info.filename || t("unknown")}</p>
-                <p>File size: ${bytesToHuman(info.filesize)} (${info.filesize} Bytes)</p>
-                <p>Partition name: ${info.partname || t("unknown")}</p>
-                <p>Partition size: ${bytesToHuman(info.partsize)} (${info.partsize} Bytes)</p>
-                <p>Please choose a file smaller than the partition size or expand the partition.</p>
-            </div>
-        `;
-    }
+    return `
+        <div class="error-title">❌ ${t("error.file_too_big")}</div>
+        <table class="info-table error-table">
+            <tbody>
+                ${labels.filter(item => item.value != null).map(item => `
+                <tr>
+                    <td class="info-label">${t(item.label)}</td>
+                    <td class="info-value">${escapeHtml(item.value)}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+        <p class="error-suggestion">${t("error.suggestion.file_too_big")}</p>
+    `;
 }
 
 /**
  * 生成分区未找到错误信息
  */
 function generatePartNotFoundMessage(info) {
-    const lang = APP_STATE.lang;
+    const labels = [
+        { label: "error.label.part_name", value: info.partname }
+    ];
 
-    if (lang === "zh-cn") {
-        return `
-            <div class="error-title">❌ 找不到分区 </div>
-            <div class="error-detail">
-                <p>分区名：${info.partname || t("unknown")}</p>
-                <p>目标分区不存在或不可用。</p>
-                <p>请检查设备分区表或联系技术支持。</p>
-            </div>
-        `;
-    } else {
-        return `
-            <div class="error-title">❌ Partition not found</div>
-            <div class="error-detail">
-                <p>Partition name: ${info.partname || t("unknown")}</p>
-                <p>The target partition does not exist or is not available.</p>
-                <p>Please check your device partition table or contact support.</p>
-            </div>
-        `;
-    }
+    return `
+        <div class="error-title">❌ ${t("error.part_not_found")}</div>
+        <table class="info-table error-table">
+            <tbody>
+                ${labels.filter(item => item.value != null).map(item => `
+                <tr>
+                    <td class="info-label">${t(item.label)}</td>
+                    <td class="info-value">${escapeHtml(item.value)}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+        <p class="error-suggestion">${t("error.suggestion.part_not_found")}</p>
+    `;
 }
 
 /**
  * 生成文件类型错误信息
  */
 function generateWrongFileTypeMessage(info) {
-    const lang = APP_STATE.lang;
+    const labels = [
+        { label: "error.label.expected_type", value: info.expected },
+        { label: "error.label.actual_type", value: info.actual }
+    ];
 
-    if (lang === "zh-cn") {
-        return `
-            <div class="error-title">❌ 文件类型错误</div>
-            <div class="error-detail">
-                <p>期望类型: ${info.expected || t("unknown")}</p>
-                <p>实际类型: ${info.actual || t("unknown")}</p>
-                <p>请选择正确的文件类型。</p>
-            </div>
-        `;
-    } else {
-        return `
-            <div class="error-title">❌ Wrong file type</div>
-            <div class="error-detail">
-                <p>Expected: ${info.expected || t("unknown")}</p>
-                <p>Actual: ${info.actual || t("unknown")}</p>
-                <p>Please choose the correct file type.</p>
-            </div>
-        `;
-    }
+    return `
+        <div class="error-title">❌ ${t("error.wrong_file_type")}</div>
+        <table class="info-table error-table">
+            <tbody>
+                ${labels.filter(item => item.value != null).map(item => `
+                <tr>
+                    <td class="info-label">${t(item.label)}</td>
+                    <td class="info-value">${escapeHtml(item.value)}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+        <p class="error-suggestion">${t("error.suggestion.wrong_file_type")}</p>
+    `;
 }
 
 /**
  * 生成闪存类型错误信息
  */
 function generateFlashNotFoundMessage(info) {
-    const lang = APP_STATE.lang;
+    const labels = [
+        { label: "error.label.file_type", value: info.filetype },
+        { label: "error.label.flash_type", value: info.flashtype }
+    ];
 
-    if (lang === "zh-cn") {
-        return `
-            <div class="error-title">❌ 找不到闪存</div>
-            <div class="error-detail">
-                <p>文件类型: ${info.filetype || t("unknown")}</p>
-                <p>闪存类型: ${info.flashtype || t("unknown")}</p>
-                <p>找不到与所选文件类型对应的闪存设备。</p>
-            </div>
-        `;
-    } else {
-        return `
-            <div class="error-title">❌ Flash not found</div>
-            <div class="error-detail">
-                <p>File type: ${info.filetype || t("unknown")}</p>
-                <p>Flash type: ${info.flashtype || t("unknown")}</p>
-                <p>No flash device can be found that corresponds to the selected file type.</p>
-            </div>
-        `;
+    return `
+        <div class="error-title">❌ ${t("error.flash_not_found")}</div>
+        <table class="info-table error-table">
+            <tbody>
+                ${labels.filter(item => item.value != null).map(item => `
+                <tr>
+                    <td class="info-label">${t(item.label)}</td>
+                    <td class="info-value">${escapeHtml(item.value)}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+        <p class="error-suggestion">${t("error.suggestion.flash_not_found")}</p>
+    `;
+}
+
+/**
+ * 生成命令执行失败错误信息
+ */
+function generateRunCmdFailedMessage(info) {
+    return `
+        <div class="error-title">❌ ${t("error.run_cmd_failed")}</div>
+        <table class="info-table error-table">
+            <tbody>
+                <tr>
+                    <td class="info-label">${t("error.label.cmd")}</td>
+                    <td class="info-value cmd-value">${escapeHtml(info.cmd || t("unknown"))}</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="error-output-section">
+            <div class="error-output-title">${t("error.label.cmd_output")}</div>
+            <pre class="error-output-content">${escapeHtml(info.output || t("error.no_output"))}</pre>
+        </div>
+    `;
+}
+
+/**
+ * 生成未知类型错误信息
+ */
+function generateUnknownErrorMessage(info) {
+    let message;
+    try {
+        message = JSON.stringify(info, null, 2);
+    } catch (e) {
+        message = String(info || t("error.unknown_type"));
     }
+
+    return `
+        <div class="error-title">❌ ${t("fail.title")}</div>
+        <table class="info-table error-table">
+            <tbody>
+                <tr>
+                    <td class="info-label">${t("error.title")}</td>
+                    <td class="info-value">${escapeHtml(message)}</td>
+                </tr>
+            </tbody>
+        </table>
+    `;
 }
 
 /**
@@ -1624,8 +1668,11 @@ function handleResultError(info, elements) {
         case "flash_not_found":
             errorMessage = generateFlashNotFoundMessage(info);
             break;
+        case "run_cmd_failed":
+            errorMessage = generateRunCmdFailedMessage(info);
+            break;
         default:
-            errorMessage = JSON.stringify(info) || t("error.unknown_type");
+            errorMessage = generateUnknownErrorMessage(info);
     }
 
     if (errorInfo) {
@@ -1651,7 +1698,17 @@ function handleInvalidResultResponse(message, elements) {
 
     if (errorInfo) {
         errorInfo.style.display = 'block';
-        errorInfo.innerHTML = `<div class="error-detail">${escapeHtml(message)}</div>`;
+        errorInfo.innerHTML = `
+            <div class="error-title">❌ ${t("error.invalid_response")}</div>
+            <table class="info-table error-table">
+                <tbody>
+                    <tr>
+                        <td class="info-label">${t("error.title")}</td>
+                        <td class="info-value">${escapeHtml(message)}</td>
+                    </tr>
+                </tbody>
+            </table>
+        `;
     }
 }
 
@@ -1961,6 +2018,7 @@ const envManager = (() => {
     let envData = []; // 存储解析后的环境变量数据
     let editMode = null; // 'add' | 'edit' | null
     let editingKey = null; // 正在编辑的变量名
+    let refreshTimer = null; // 延迟刷新定时器
 
     /**
      * 获取或缓存 DOM 元素
@@ -2075,9 +2133,11 @@ const envManager = (() => {
     }
 
     /**
-     * 刷新环境变量列表
+     * 刷新环境变量列表（立即执行）
      */
     async function refresh() {
+        cancelDelayedRefresh();
+
         const els = getElements();
 
         try {
@@ -2130,6 +2190,32 @@ const envManager = (() => {
             console.error("[envManager] Error:", error);
             setStatus(formatError(error), true);
         }
+    }
+
+    /**
+     * 取消之前的延迟刷新定时器
+     */
+    function cancelDelayedRefresh() {
+        if (refreshTimer) {
+            clearTimeout(refreshTimer);
+            refreshTimer = null;
+        }
+    }
+
+    /**
+     * 延迟刷新环境变量列表
+     * 先显示成功状态，延迟一段时间后再刷新
+     * @param {number} delay - 延迟时间（毫秒），默认 1500ms
+     */
+    function delayedRefresh(delay) {
+        cancelDelayedRefresh();
+
+        delay = delay || 1500; // 默认 1.5 秒
+
+        refreshTimer = setTimeout(async () => {
+            refreshTimer = null;
+            await refresh();
+        }, delay);
     }
 
     /**
@@ -2228,7 +2314,7 @@ const envManager = (() => {
 
             setStatus(t("env.status.saved"));
             cancelEdit();
-            await refresh();
+            delayedRefresh();
         } catch (error) {
             setStatus(formatError(error), true);
         }
@@ -2271,7 +2357,7 @@ const envManager = (() => {
 
             setStatus(t("env.status.reset_single"));
             cancelEdit();
-            await refresh();
+            delayedRefresh();
         } catch (error) {
             setStatus(formatError(error), true);
         }
@@ -2311,7 +2397,7 @@ const envManager = (() => {
             }
 
             setStatus(t("env.status.deleted"));
-            await refresh();
+            delayedRefresh();
         } catch (error) {
             setStatus(formatError(error), true);
         }
@@ -2338,7 +2424,7 @@ const envManager = (() => {
 
             setStatus(t("env.status.reset"));
             cancelEdit();
-            await refresh();
+            delayedRefresh();
         } catch (error) {
             setStatus(formatError(error), true);
         }
@@ -2391,7 +2477,7 @@ const envManager = (() => {
             }
 
             setStatus(t("env.status.restored"));
-            await refresh();
+            delayedRefresh();
         } catch (error) {
             setStatus(formatError(error), true);
         }
@@ -2445,6 +2531,7 @@ const networkManager = (() => {
         netmask: true,
         serverip: true
     };
+    let refreshTimer = null; // 延迟刷新定时器
 
     /**
      * 获取或缓存 DOM 元素
@@ -2613,6 +2700,8 @@ const networkManager = (() => {
      * 刷新网络参数信息
      */
     async function refresh() {
+        cancelDelayedRefresh();
+
         try {
             setStatus(t('network.status.loading'));
 
@@ -2663,6 +2752,32 @@ const networkManager = (() => {
     }
 
     /**
+     * 取消之前的延迟刷新定时器
+     */
+    function cancelDelayedRefresh() {
+        if (refreshTimer) {
+            clearTimeout(refreshTimer);
+            refreshTimer = null;
+        }
+    }
+
+    /**
+     * 延迟刷新环境变量列表
+     * 先显示成功状态，延迟一段时间后再刷新
+     * @param {number} delay - 延迟时间（毫秒），默认 1500ms
+     */
+    function delayedRefresh(delay) {
+        cancelDelayedRefresh();
+
+        delay = delay || 1500; // 默认 1.5 秒
+
+        refreshTimer = setTimeout(async () => {
+            refreshTimer = null;
+            await refresh();
+        }, delay);
+    }
+
+    /**
      * 保存网络参数
      */
     async function save() {
@@ -2702,8 +2817,7 @@ const networkManager = (() => {
             setStatus(t('network.status.saved'));
 
             // 刷新显示
-            await refresh();
-
+            delayedRefresh();
         } catch (error) {
             setStatus(formatError(error), true);
             console.error("Network Manager Error:", error);
@@ -2738,7 +2852,7 @@ const networkManager = (() => {
             setStatus(t('network.status.reset'));
 
             // 刷新显示
-            await refresh();
+            delayedRefresh();
 
         } catch (error) {
             setStatus(formatError(error), true);
@@ -3926,9 +4040,9 @@ const I18N = (() => {
             "common.warn.1": "Do not power off the device during update.",
             "common.warn.2": "If everything goes well, the device will restart.",
             "file.select": "Please select a file first!",
-            "label.type": "Type: ",
-            "label.size": "Size: ",
-            "label.md5": "MD5: ",
+            "label.type": "Type",
+            "label.size": "Size",
+            "label.md5": "MD5",
             "index.title": "FIRMWARE UPDATE",
             "index.hint": t.en.updateHint("firmware"),
             "index.warn.1": t.en.warnChoose("firmware image"),
@@ -4125,9 +4239,29 @@ const I18N = (() => {
             "404.hint": "The page you were looking for doesn't exist!",
             "fail.title": "UPDATE FAILED",
             "fail.hint": "Something went wrong during update. Probably you have chosen wrong file.<p>Please, try again or contact with the author of this modification. You can also get more information during update in U-Boot console.",
-            "error.invalid_response": "Invalid server response",
-            "error.unknown_status": "Unknown response status",
-            "error.unknown_type": "Unknown error type",
+            "error.title": "Error",
+            "error.label.file_type": "File Type",
+            "error.label.file_size": "File Size",
+            "error.label.part_name": "Partition Name",
+            "error.label.part_size": "Partition Size",
+            "error.label.expected_type": "Expected Type",
+            "error.label.actual_type": "Actual Type",
+            "error.label.flash_type": "Flash Type",
+            "error.label.filename": "Filename",
+            "error.label.cmd": "Command",
+            "error.label.cmd_output": "Command Output",
+            "error.no_output": "No output",
+            "error.unit.bytes": "Bytes",
+            "error.file_too_big": "File Too Large",
+            "error.part_not_found": "Partition Not Found",
+            "error.wrong_file_type": "Wrong File Type",
+            "error.flash_not_found": "Flash Not Found",
+            "error.run_cmd_failed": "Command Execution Failed",
+            "error.invalid_response": "Invalid Server Response",
+            "error.suggestion.file_too_big": "Please choose a file smaller than the partition size or expand the partition.",
+            "error.suggestion.part_not_found": "The target partition does not exist or is not available.<br>Please check your device partition table or contact support.",
+            "error.suggestion.wrong_file_type": "Please choose the correct file type.",
+            "error.suggestion.flash_not_found": "No flash device can be found that corresponds to the selected file type.",
             "unknown": "Unknown"
         },
         "zh-cn": {
@@ -4165,9 +4299,9 @@ const I18N = (() => {
             "common.warn.1": "刷写过程中请勿断电。",
             "common.warn.2": "如果更新成功，设备将自动重启。",
             "file.select": "请选择文件！",
-            "label.type": "类型: ",
-            "label.size": "大小: ",
-            "label.md5": "MD5: ",
+            "label.type": "类型",
+            "label.size": "大小",
+            "label.md5": "MD5",
             "index.title": "固件更新",
             "index.hint": t["zh-cn"].updateHint("固件"),
             "index.warn.1": t["zh-cn"].warnChoose("固件"),
@@ -4365,9 +4499,29 @@ const I18N = (() => {
             "upload.title.done": "上传完成",
             "fail.title": "更新失败",
             "fail.hint": "更新过程中出现错误。可能选择了错误的文件。<p>请重试或联系此修改的作者。你也可以在 U-Boot 控制台查看更多刷写过程信息。",
+            "error.title": "错误",
+            "error.label.file_type": "文件类型",
+            "error.label.file_size": "文件大小",
+            "error.label.part_name": "分区名称",
+            "error.label.part_size": "分区大小",
+            "error.label.expected_type": "期望类型",
+            "error.label.actual_type": "实际类型",
+            "error.label.flash_type": "闪存类型",
+            "error.label.filename": "文件名",
+            "error.label.cmd": "命令",
+            "error.label.cmd_output": "命令输出",
+            "error.no_output": "无输出",
+            "error.unit.bytes": "字节",
+            "error.file_too_big": "文件过大",
+            "error.part_not_found": "找不到分区",
+            "error.wrong_file_type": "文件类型错误",
+            "error.flash_not_found": "找不到闪存",
+            "error.run_cmd_failed": "命令执行失败",
             "error.invalid_response": "无效的服务器响应",
-            "error.unknown_status": "未知的响应状态",
-            "error.unknown_type": "未知的错误类型",
+            "error.suggestion.file_too_big": "请选择小于分区大小的文件或扩容分区。",
+            "error.suggestion.part_not_found": "目标分区不存在或不可用。<br>请检查设备分区表或联系技术支持。",
+            "error.suggestion.wrong_file_type": "请选择正确的文件类型。",
+            "error.suggestion.flash_not_found": "找不到与所选文件类型对应的闪存设备。",
             "unknown": "未知"
         }
     };
