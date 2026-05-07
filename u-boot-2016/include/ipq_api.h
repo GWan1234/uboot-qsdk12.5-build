@@ -44,8 +44,7 @@ extern detected_flash_device_t detected_flash_device;
 #if defined(CONFIG_FORCE_NETWORK_ENV)
 void check_network_settings(void);
 #endif
-void check_failsafe_env_exists(void);
-void check_button_is_pressed(void);
+void do_httpd_check(void);
 void detect_flash_device(void);
 void led_on(const char *gpio_name);
 void led_off(const char *gpio_name);

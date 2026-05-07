@@ -23,7 +23,8 @@ detected_flash_device_t detected_flash_device;
 
 DECLARE_GLOBAL_DATA_PTR;
 
-unsigned int fdt_get_gpio_by_name(const char *gpio_name, const int debug_state) {
+unsigned int fdt_get_gpio_by_name(const char *gpio_name, const int debug_state)
+{
 	int node;
 	unsigned int gpio;
 
@@ -44,7 +45,8 @@ unsigned int fdt_get_gpio_by_name(const char *gpio_name, const int debug_state) 
 	return gpio;
 }
 
-void led_toggle(const char *gpio_name) {
+void led_toggle(const char *gpio_name)
+{
 	int value;
 	unsigned int gpio;
 
@@ -59,7 +61,8 @@ void led_toggle(const char *gpio_name) {
 	return;
 }
 
-void led_on(const char *gpio_name) {
+void led_on(const char *gpio_name)
+{
 	unsigned int gpio;
 
 	gpio = fdt_get_gpio_by_name(gpio_name, 1);
@@ -71,7 +74,8 @@ void led_on(const char *gpio_name) {
 	return;
 }
 
-void led_off(const char *gpio_name) {
+void led_off(const char *gpio_name)
+{
 	unsigned int gpio;
 
 	gpio = fdt_get_gpio_by_name(gpio_name, 1);
@@ -83,13 +87,8 @@ void led_off(const char *gpio_name) {
 	return;
 }
 
-/**
- * check_button_is_pressed - 检测特定按键是否被按下
- *
- * @gpio_name: 按键名称（在 DTS 的 aliases 中定义）
- * @value: 代表按键被按下的电平值
- */
-bool button_is_pressed(const char *gpio_name, int value) {
+bool button_is_pressed(const char *gpio_name, int value)
+{
 	unsigned int gpio;
 
 	if (strcmp(gpio_name, "RESET") == 0)
@@ -111,27 +110,28 @@ bool button_is_pressed(const char *gpio_name, int value) {
 	}
 }
 
-/**
- * check_button_is_pressed - 检测是否有按键被按下
- *
- * 检测是否有按键被按下，若某个按键被按下一定时间，则启动 httpd。
- */
-void check_button_is_pressed(void) {
+static bool button_is_pressed_for_enough_time(void)
+{
 	int counter = 3;
 	char *button_name = NULL;
 
-	// 检测哪个按键被按下
     if (button_is_pressed("reset_key", RESET_BUTTON_IS_PRESSED))
         button_name = "RESET";
     else if (button_is_pressed("wps_key", WPS_BUTTON_IS_PRESSED))
         button_name = "WPS";
     else if (button_is_pressed("screen_key", SCREEN_BUTTON_IS_PRESSED))
         button_name = "SCREEN";
+	else
+		return false;
 
-	// 如果任一按键被按下
+#if defined(CONFIG_IPQ_ETH_INIT_DEFER)
+	puts("Net: ");
+	eth_initialize();
+#endif
+	printf("\n%s button pressed, enter web failsafe mode after: %-2d", button_name, counter);
+
 	while (button_name != NULL) {
-		// 重新检测按键状态
-        int still_pressed = 0;
+        bool still_pressed = false;
 
         if (strcmp(button_name, "RESET") == 0)
             still_pressed = button_is_pressed("reset_key", RESET_BUTTON_IS_PRESSED);
@@ -142,18 +142,9 @@ void check_button_is_pressed(void) {
 
         if (!still_pressed) {
 			putc('\n');
-            break;
+            return false;
 		}
 
-		if (counter == 3) {
-#if defined(CONFIG_IPQ_ETH_INIT_DEFER)
-			puts("Net: ");
-			eth_initialize();
-#endif
-			printf("\n%s button pressed, enter web failsae mode after: %-2d", button_name, counter);
-		}
-
-		// LED 闪烁
 		led_off("power_led");
 		mdelay(500);
 		led_on("power_led");
@@ -164,16 +155,64 @@ void check_button_is_pressed(void) {
 		printf("\b\b%-2d", counter);
 
 		if (counter <= 0) {
-			led_off("power_led");
-			led_on("blink_led");
-			printf("\n");
-			run_command("httpd", 0);
-			cli_loop();
-			break;
+			putc('\n');
+			return true;
 		}
 	}
+
+	return false;
 }
 
+static bool failsafe_env_exists(void)
+{
+	const char *failsafe_start_mode = getenv("failsafe");
+
+	if (!failsafe_start_mode)
+		return false;
+
+	if (strcmp(failsafe_start_mode, "always")) {
+		/* 非 always 模式，删除 failsafe 环境变量，防止重启后再次启动 httpd */
+		setenv("failsafe", NULL);
+		saveenv();
+	}
+
+	return true;
+}
+
+void do_httpd_check(void)
+{
+	bool start_httpd = false;
+
+	if (is_9008_mode || failsafe_env_exists()) {
+#if defined(CONFIG_IPQ_ETH_INIT_DEFER)
+		puts("Net: ");
+		eth_initialize();
+
+		printf("%s, enter web failsafe mode after: 3 ",
+			is_9008_mode ? "currently in 9008 mode" : "failsafe env variable detected");
+		/* Wait 3s for link to settle down */
+		for (int i = 3; i > 0; i--) {
+			led_off("power_led");
+			mdelay(500);
+			led_on("power_led");
+			mdelay(500);
+			printf("\b\b%-2d", i - 1);
+		}
+		putc('\n');
+#else
+		printf("%s, auto enter web failsafe mode\n",
+			is_9008_mode ? "currently in 9008 mode" : "failsafe env variable detected");
+#endif /* CONFIG_IPQ_ETH_INIT_DEFER */
+		start_httpd = true;
+	} else if (button_is_pressed_for_enough_time()) {
+		start_httpd = true;
+	}
+
+	if (start_httpd) {
+		run_command("httpd", 0);
+		cli_loop();
+	}
+}
 
 #if defined(CONFIG_FORCE_NETWORK_ENV)
 void check_network_settings(void)
@@ -233,41 +272,6 @@ void check_network_settings(void)
 	}
 }
 #endif /* CONFIG_FORCE_NETWORK_ENV */
-
-/**
- * check_failsafe_env_exists - 检测 failsafe 环境变量是否存在
- *
- * 若 failsafe 环境变量存在，则删除该环境变量，然后启动 httpd。
- */
-void check_failsafe_env_exists(void)
-{
-	if (getenv("failsafe") == NULL)
-		return;
-
-	setenv("failsafe", NULL);
-	saveenv();
-
-#if defined(CONFIG_IPQ_ETH_INIT_DEFER)
-	puts("Net: ");
-	eth_initialize();
-	/* Wait 3s for link to settle down */
-	for (int i = 3; i > 0; i--) {
-		led_off("power_led");
-		mdelay(500);
-		led_on("power_led");
-		mdelay(500);
-	}
-#endif
-
-	led_off("power_led");
-	led_on("blink_led");
-
-	printf("\n\"failsafe\" env variable detected, enter web failsae mode\n");
-	run_command("httpd", 0);
-	cli_loop();
-
-	return;
-}
 
 void detect_flash_device(void)
 {

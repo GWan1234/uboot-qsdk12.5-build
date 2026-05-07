@@ -94,8 +94,7 @@ void main_loop(void)
 #endif
 
 #if defined(CONFIG_HTTPD)
-	check_failsafe_env_exists();
-	check_button_is_pressed();
+	do_httpd_check();
 #endif
 
 	s = bootdelay_process();
