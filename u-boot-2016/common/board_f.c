@@ -817,6 +817,8 @@ static int initf_console_record(void)
 	 * 在 IPQ 平台上，此时内存系统尚未完全初始化（DRAM 在 dram_init 中才配置）。
 	 * console_record_init 中 membuff_new 调用 malloc 时失败，导致启动序列中止在 hang()。
 	 * 这里选择不进行 console_record_init。
+	 *
+	 * 注：尝试将 initf_console_record 移到 init_sequence_f[] 的末尾，console_record_init 依然失败。
 	 */
 	return 0;
 

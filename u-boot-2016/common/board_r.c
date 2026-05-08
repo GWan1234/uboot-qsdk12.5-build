@@ -299,10 +299,10 @@ static int initr_malloc(void)
 static int initr_console_record(void)
 {
 #if defined(CONFIG_CONSOLE_RECORD)
-	return console_record_init();
-#else
-	return 0;
+	if (!console_record_init())
+		console_record_reset_enable();
 #endif
+	return 0;
 }
 
 #ifdef CONFIG_SYS_NONCACHED_MEMORY
