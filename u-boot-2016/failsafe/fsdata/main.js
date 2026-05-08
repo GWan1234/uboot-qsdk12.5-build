@@ -1014,18 +1014,40 @@ function updateDocumentTitle() {
     }
 
     // 处理特殊页面
-    if (APP_STATE.page === "flashing") {
-        document.title = t("flashing.title.in_progress");
-    } else if (APP_STATE.page === "booting") {
-        document.title = t("booting.title.in_progress");
-    } else if (APP_STATE.page === "reboot") {
-        document.title = t("reboot.title.in_progress");
+    switch (APP_STATE.page) {
+        case "flashing":
+            document.title = t("flashing.title.in_progress");
+            break;
+        case "booting":
+            document.title = t("booting.title.in_progress");
+            break;
+        case "reboot":
+            document.title = t("reboot.title.in_progress");
+            break;
+        default:
+            break;
     }
 }
 
-// ==============================
-// AJAX 相关
-// ==============================
+/**
+ * 将字节转换为可读格式
+ */
+function bytesToHuman(bytes) {
+    if (bytes === null || bytes === undefined) return "";
+
+    const numBytes = Number(bytes);
+    if (!isFinite(numBytes) || numBytes < 0) return "";
+
+    if (numBytes >= 1024 * 1024 * 1024) {
+        return (numBytes / (1024 * 1024 * 1024)).toFixed(2) + " GiB";
+    } else if (numBytes >= 1024 * 1024) {
+        return (numBytes / (1024 * 1024)).toFixed(2) + " MiB";
+    } else if (numBytes >= 1024) {
+        return (numBytes / 1024).toFixed(2) + " KiB";
+    } else {
+        return String(Math.floor(numBytes)) + " B";
+    }
+}
 
 /**
  * 封装 AJAX 请求
@@ -1059,37 +1081,14 @@ function ajax(options) {
 }
 
 // ==============================
-// 系统信息相关
+// 版本信息模块
 // ==============================
 
 /**
- * 将字节转换为可读格式
+ * 版本信息渲染器
+ * 负责获取 U-Boot 版本信息并渲染到页脚
  */
-function bytesToHuman(bytes) {
-    if (bytes === null || bytes === undefined) return "";
-
-    const numBytes = Number(bytes);
-    if (!isFinite(numBytes) || numBytes < 0) return "";
-
-    if (numBytes >= 1024 * 1024 * 1024) {
-        return (numBytes / (1024 * 1024 * 1024)).toFixed(2) + " GiB";
-    } else if (numBytes >= 1024 * 1024) {
-        return (numBytes / (1024 * 1024)).toFixed(2) + " MiB";
-    } else if (numBytes >= 1024) {
-        return (numBytes / 1024).toFixed(2) + " KiB";
-    } else {
-        return String(Math.floor(numBytes)) + " B";
-    }
-}
-
-// ==============================
-// 版本信息
-// ==============================
-
-/**
- * 获取版本信息
- */
-function getVersion() {
+function loadAndRenderVersionInfo() {
     const versionContainer = document.getElementById("version");
 
     if (!versionContainer) return;
@@ -1127,381 +1126,7 @@ function getVersion() {
 }
 
 // ==============================
-// 文件上传相关
-// ==============================
-
-/**
- * 处理文件上传
- * 支持 JSON 响应和详细的错误提示
- */
-function upload(formDataKey) {
-    const fileInput = document.getElementById("file");
-    const file = fileInput.files[0];
-
-    if (!file) {
-        alert(t("file.select"));
-        return;
-    }
-
-    // 获取页面相关元素
-    const titleElement = document.getElementById("title");
-    const hintElement = document.getElementById("hint");
-    const formElement = document.getElementById("form");
-    const progressCircle = document.getElementById("bar-circle");
-    const successInfo = document.getElementById("success-info");
-    const fileTypeElement = document.getElementById("file-type");
-    const sizeElement = document.getElementById("size");
-    const md5Element = document.getElementById("md5");
-    const errorInfo = document.getElementById("error-info");
-    const upgradeElement = document.getElementById("upgrade");
-
-    // 显示圆环进度条，隐藏无关元素
-    if (formElement) formElement.style.display = "none";
-    if (successInfo) successInfo.style.display = "none";
-    if (errorInfo) errorInfo.style.display = "none";
-    if (upgradeElement) upgradeElement.style.display = "none";
-    if (progressCircle) progressCircle.style.display = "block";
-
-    // 准备表单数据
-    const formData = new FormData();
-    formData.append(formDataKey, file);
-
-    // 发送上传请求
-    ajax({
-        url: "/upload",
-        data: formData,
-        done: function(responseText) {
-            let response;
-
-            // 尝试解析JSON响应
-            try {
-                response = JSON.parse(responseText);
-            } catch (e) {
-                // 无效的JSON，显示错误
-                handleInvalidUploadResponse(responseText || t("error.invalid_response"), {
-                    titleElement,
-                    hintElement,
-                    errorInfo,
-                    progressCircle
-                });
-                return;
-            }
-
-            switch (response.status) {
-                case "success":
-                    handleUploadSuccess(response.info, {
-                        successInfo,
-                        fileTypeElement,
-                        sizeElement,
-                        md5Element,
-                        upgradeElement,
-                        progressCircle
-                    });
-                    break;
-                case "fail":
-                    handleUploadError(response.info, {
-                        titleElement,
-                        hintElement,
-                        errorInfo,
-                        progressCircle
-                    });
-                    break;
-                default:
-                    handleInvalidUploadResponse(responseText || t("error.unknown_status"), {
-                        titleElement,
-                        hintElement,
-                        errorInfo,
-                        progressCircle
-                    });
-            }
-        },
-        progress: function(event) {
-            if (event.lengthComputable && event.total > 0) {
-                const percent = parseInt((event.loaded / event.total) * 100);
-                const progressCircle = document.getElementById("bar-circle");
-
-                if (progressCircle) {
-                    progressCircle.style.display = "block";
-                    progressCircle.style.setProperty("--percent", percent);
-                }
-            }
-        }
-    });
-}
-
-/**
- * 处理上传成功
- */
-function handleUploadSuccess(info, elements) {
-    const {
-        successInfo,
-        upgradeElement,
-        progressCircle
-    } = elements;
-
-    // 隐藏进度条
-    if (progressCircle) progressCircle.style.display = "none";
-
-    // 动态生成成功信息表格
-    if (successInfo) {
-        successInfo.style.display = "block";
-        successInfo.innerHTML = `
-            <table class="info-table">
-                <tbody>
-                    ${info.type ? `
-                    <tr>
-                        <td class="info-label" data-i18n="label.type">${t("label.type")}</td>
-                        <td class="info-value">${escapeHtml(info.type)}</td>
-                    </tr>` : ''}
-                    ${info.size ? `
-                    <tr>
-                        <td class="info-label" data-i18n="label.size">${t("label.size")}</td>
-                        <td class="info-value">${bytesToHuman(info.size)} (${info.size} Bytes)</td>
-                    </tr>` : ''}
-                    ${info.md5 ? `
-                    <tr>
-                        <td class="info-label" data-i18n="label.md5">${t("label.md5")}</td>
-                        <td class="info-value upload-md5-value">${info.md5}</td>
-                    </tr>` : ''}
-                </tbody>
-            </table>
-        `;
-    }
-
-    // 显示升级按钮
-    if (upgradeElement) upgradeElement.style.display = "block";
-}
-
-/**
- * 处理上传失败
- */
-function handleUploadError(info, elements) {
-    const {
-        titleElement,
-        hintElement,
-        errorInfo,
-        progressCircle
-    } = elements;
-
-    if (titleElement) titleElement.innerHTML = t('fail.title');
-    if (hintElement) hintElement.innerHTML = t('fail.hint');
-    if (progressCircle) progressCircle.style.display = "none";
-
-    // 根据错误类型生成错误信息
-    let errorMessage = "";
-
-    switch (info.type) {
-        case "file_too_big":
-            errorMessage = generateFileTooBigMessage(info);
-            break;
-        case "part_not_found":
-            errorMessage = generatePartNotFoundMessage(info);
-            break;
-        case "wrong_file_type":
-            errorMessage = generateWrongFileTypeMessage(info);
-            break;
-        case "flash_not_found":
-            errorMessage = generateFlashNotFoundMessage(info);
-            break;
-        default:
-            errorMessage = generateUnknownErrorMessage(info);
-    }
-
-    // 显示错误信息
-    if (errorInfo) {
-        errorInfo.style.display = "block";
-        errorInfo.innerHTML = errorMessage;
-    }
-}
-
-/**
- * 处理无效的上传响应信息
- */
-function handleInvalidUploadResponse(message, elements) {
-    const {
-        titleElement,
-        hintElement,
-        errorInfo,
-        progressCircle
-    } = elements;
-
-    if (titleElement) titleElement.innerHTML = t('fail.title');
-    if (hintElement) hintElement.innerHTML = t('fail.hint');
-    if (progressCircle) progressCircle.style.display = "none";
-
-    if (errorInfo) {
-        errorInfo.style.display = "block";
-        errorInfo.innerHTML = `
-            <div class="error-title">❌ ${t("error.invalid_response")}</div>
-            <table class="info-table error-table">
-                <tbody>
-                    <tr>
-                        <td class="info-label">${t("error.title")}</td>
-                        <td class="info-value">${escapeHtml(message)}</td>
-                    </tr>
-                </tbody>
-            </table>
-        `;
-    }
-}
-
-/**
- * 生成文件过大错误信息
- */
-function generateFileTooBigMessage(info) {
-    const labels = [
-        { label: "error.label.file_type", value: info.filename },
-        { label: "error.label.file_size", value: `${bytesToHuman(info.filesize)} (${info.filesize} ${t("error.unit.bytes")})` },
-        { label: "error.label.part_name", value: info.partname },
-        { label: "error.label.part_size", value: `${bytesToHuman(info.partsize)} (${info.partsize} ${t("error.unit.bytes")})` }
-    ];
-
-    return `
-        <div class="error-title">❌ ${t("error.file_too_big")}</div>
-        <table class="info-table error-table">
-            <tbody>
-                ${labels.filter(item => item.value != null).map(item => `
-                <tr>
-                    <td class="info-label">${t(item.label)}</td>
-                    <td class="info-value">${escapeHtml(item.value)}</td>
-                </tr>`).join('')}
-            </tbody>
-        </table>
-        <p class="error-suggestion">${t("error.suggestion.file_too_big")}</p>
-    `;
-}
-
-/**
- * 生成分区未找到错误信息
- */
-function generatePartNotFoundMessage(info) {
-    const labels = [
-        { label: "error.label.part_name", value: info.partname }
-    ];
-
-    return `
-        <div class="error-title">❌ ${t("error.part_not_found")}</div>
-        <table class="info-table error-table">
-            <tbody>
-                ${labels.filter(item => item.value != null).map(item => `
-                <tr>
-                    <td class="info-label">${t(item.label)}</td>
-                    <td class="info-value">${escapeHtml(item.value)}</td>
-                </tr>`).join('')}
-            </tbody>
-        </table>
-        <p class="error-suggestion">${t("error.suggestion.part_not_found")}</p>
-    `;
-}
-
-/**
- * 生成文件类型错误信息
- */
-function generateWrongFileTypeMessage(info) {
-    const labels = [
-        { label: "error.label.expected_type", value: info.expected },
-        { label: "error.label.actual_type", value: info.actual }
-    ];
-
-    return `
-        <div class="error-title">❌ ${t("error.wrong_file_type")}</div>
-        <table class="info-table error-table">
-            <tbody>
-                ${labels.filter(item => item.value != null).map(item => `
-                <tr>
-                    <td class="info-label">${t(item.label)}</td>
-                    <td class="info-value">${escapeHtml(item.value)}</td>
-                </tr>`).join('')}
-            </tbody>
-        </table>
-        <p class="error-suggestion">${t("error.suggestion.wrong_file_type")}</p>
-    `;
-}
-
-/**
- * 生成闪存类型错误信息
- */
-function generateFlashNotFoundMessage(info) {
-    const labels = [
-        { label: "error.label.file_type", value: info.filetype },
-        { label: "error.label.flash_type", value: info.flashtype }
-    ];
-
-    return `
-        <div class="error-title">❌ ${t("error.flash_not_found")}</div>
-        <table class="info-table error-table">
-            <tbody>
-                ${labels.filter(item => item.value != null).map(item => `
-                <tr>
-                    <td class="info-label">${t(item.label)}</td>
-                    <td class="info-value">${escapeHtml(item.value)}</td>
-                </tr>`).join('')}
-            </tbody>
-        </table>
-        <p class="error-suggestion">${t("error.suggestion.flash_not_found")}</p>
-    `;
-}
-
-/**
- * 生成命令执行失败错误信息
- */
-function generateRunCmdFailedMessage(info) {
-    return `
-        <div class="error-title">❌ ${t("error.run_cmd_failed")}</div>
-        <table class="info-table error-table">
-            <tbody>
-                <tr>
-                    <td class="info-label">${t("error.label.cmd")}</td>
-                    <td class="info-value cmd-value">${escapeHtml(info.cmd || t("unknown"))}</td>
-                </tr>
-            </tbody>
-        </table>
-        <div class="error-output-section">
-            <div class="error-output-title">${t("error.label.cmd_output")}</div>
-            <pre class="error-output-content">${escapeHtml(info.output || t("error.no_output"))}</pre>
-        </div>
-    `;
-}
-
-/**
- * 生成未知类型错误信息
- */
-function generateUnknownErrorMessage(info) {
-    let message;
-    try {
-        message = JSON.stringify(info, null, 2);
-    } catch (e) {
-        message = String(info || t("error.unknown_type"));
-    }
-
-    return `
-        <div class="error-title">❌ ${t("fail.title")}</div>
-        <table class="info-table error-table">
-            <tbody>
-                <tr>
-                    <td class="info-label">${t("error.title")}</td>
-                    <td class="info-value">${escapeHtml(message)}</td>
-                </tr>
-            </tbody>
-        </table>
-    `;
-}
-
-/**
- * HTML转义（防止XSS）
- */
-function escapeHtml(unsafe) {
-    if (!unsafe) return "";
-    return String(unsafe)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
-// ==============================
-// 应用初始化
+// 应用初始化模块
 // ==============================
 
 /**
@@ -1540,9 +1165,7 @@ function appInit(pageName) {
             envManager.init();
             break;
         case "backup":
-            if (typeof backupInit === "function") {
-                backupInit();
-            }
+            backupManager.init();
             break;
         case "network":
             networkManager.init();
@@ -1551,226 +1174,1053 @@ function appInit(pageName) {
             consoleManager.init();
             break;
         case "sysinfo":
-            if (typeof sysinfoInit === "function") {
-                sysinfoInit();
-            }
+            sysinfoManager.init();
+            break;
+        case "mibib":
+            mibibManager.init();
             break;
         default:
-            getAndStoreSysinfo();
+            uploadManager.init();
             break;
     }
 
-    // 获取版本信息
-    getVersion();
+    // 获取并渲染版本信息
+    loadAndRenderVersionInfo();
 }
 
 // ==============================
-// 结果处理相关
+// 错误信息生成工具模块
 // ==============================
 
 /**
- * 初始化 result 页面
- * 包括 flashing.html 和 booting.html
+ * 错误信息构建器
+ * 提供各种错误类型的结构化 HTML 生成函数
+ * 被 uploadManager、resultManager、mibibManager 等模块共享使用
  */
-function initResultPage(pageName, timeOut) {
-    appInit(pageName);
+const errorMessageBuilder = (() => {
 
-    // 获取页面元素
-    const titleElement = document.getElementById("title");
-    const hintElement = document.getElementById("hint");
-    const loadingElement = document.getElementById('l');
-    const errorInfo = document.getElementById('error-info');
-
-    ajax({
-        url: '/result',
-        done: function (responseText) {
-            let response;
-
-            // 尝试解析JSON响应
-            try {
-                response = JSON.parse(responseText);
-            } catch (e) {
-                // 无效的JSON，显示错误
-                handleInvalidResultResponse(responseText || t("error.invalid_response"), {
-                    titleElement,
-                    hintElement,
-                    loadingElement,
-                    errorInfo
-                });
-                return;
-            }
-
-            switch (response.status) {
-                case "success":
-                    handleResultSuccess(pageName, {
-                        titleElement,
-                        hintElement,
-                        errorInfo
-                    });
-                    break;
-                case "fail":
-                    handleResultError(response.info, {
-                        titleElement,
-                        hintElement,
-                        loadingElement,
-                        errorInfo
-                    });
-                    break;
-                default:
-                    handleInvalidResultResponse(responseText || t("error.unknown_status"), {
-                        titleElement,
-                        hintElement,
-                        loadingElement,
-                        errorInfo
-                    });
-            }
-        },
-        timeout: timeOut
-    });
-}
-
-/**
- * 处理结果成功
- */
-function handleResultSuccess(pageName, elements) {
-    const {
-        titleElement,
-        hintElement,
-        errorInfo
-    } = elements;
-
-    if (errorInfo) errorInfo.style.display = 'none';
-    if (titleElement) titleElement.innerHTML = t(pageName + '.title.done');
-    if (hintElement) hintElement.innerHTML = t(pageName + '.hint.done');
-}
-
-/**
- * 处理结果失败
- */
-function handleResultError(info, elements) {
-    const {
-        titleElement,
-        hintElement,
-        loadingElement,
-        errorInfo
-    } = elements;
-
-    if (titleElement) titleElement.innerHTML = t('fail.title');
-    if (hintElement) hintElement.innerHTML = t('fail.hint');
-    if (loadingElement) loadingElement.style.display = 'none';
-
-    let errorMessage = "";
-
-    switch (info.type) {
-        case "wrong_file_type":
-            errorMessage = generateWrongFileTypeMessage(info);
-            break;
-        case "flash_not_found":
-            errorMessage = generateFlashNotFoundMessage(info);
-            break;
-        case "run_cmd_failed":
-            errorMessage = generateRunCmdFailedMessage(info);
-            break;
-        default:
-            errorMessage = generateUnknownErrorMessage(info);
+    /**
+     * HTML转义（防止XSS）
+     */
+    function escapeHtml(unsafe) {
+        if (!unsafe) return "";
+        return String(unsafe)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 
-    if (errorInfo) {
-        errorInfo.style.display = 'block';
-        errorInfo.innerHTML = errorMessage;
+    /**
+     * 生成标准错误表格
+     * @param {string} title - 错误标题（国际化 key）
+     * @param {Array<{label: string, value: any}>} rows - 标签和值的数组
+     * @param {string} [suggestion] - 错误建议（国际化 key）
+     * @returns {string} HTML字符串
+     */
+    function buildErrorTable(title, rows, suggestion) {
+        const titleText = t(title) || title;
+        const filteredRows = rows.filter(item => item.value != null && item.value !== undefined);
+
+        let html = `
+            <div class="error-title">❌ ${titleText}</div>
+            <table class="info-table error-table">
+                <tbody>
+                    ${filteredRows.map(item => `
+                    <tr>
+                        <td class="info-label">${t(item.label)}</td>
+                        <td class="info-value">${escapeHtml(String(item.value))}</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+
+        if (suggestion) {
+            html += `
+            <p class="error-suggestion">${t(suggestion)}</p>`;
+        }
+
+        return html;
     }
-}
 
-/**
- * 处理无效的结果响应信息
- */
-function handleInvalidResultResponse(message, elements) {
-    const {
-        titleElement,
-        hintElement,
-        loadingElement,
-        errorInfo
-    } = elements;
+    /**
+     * 生成文件过大错误信息
+     * @param {object} info - 错误信息对象
+     * @param {string} info.filename - 文件名
+     * @param {number} info.filesize - 文件大小
+     * @param {string} info.partname - 分区名称
+     * @param {number} info.partsize - 分区大小
+     * @returns {string} HTML字符串
+     */
+    function buildFileTooBigMessage(info) {
+        return buildErrorTable(
+            "error.file_too_big",
+            [
+                { label: "error.label.file_type", value: info.filename },
+                { label: "error.label.file_size", value: bytesToHuman(info.filesize) + " (" + info.filesize + " " + t("error.unit.bytes") + ")" },
+                { label: "error.label.part_name", value: info.partname },
+                { label: "error.label.part_size", value: bytesToHuman(info.partsize) + " (" + info.partsize + " " + t("error.unit.bytes") + ")" }
+            ],
+            "error.suggestion.file_too_big"
+        );
+    }
 
-    if (loadingElement) loadingElement.style.display = 'none';
-    if (titleElement) titleElement.innerHTML = t('fail.title');
-    if (hintElement) hintElement.innerHTML = t('fail.hint');
+    /**
+     * 生成分区未找到错误信息
+     * @param {object} info - 错误信息对象
+     * @param {string} info.partname - 分区名称
+     * @returns {string} HTML字符串
+     */
+    function buildPartNotFoundMessage(info) {
+        return buildErrorTable(
+            "error.part_not_found",
+            [
+                { label: "error.label.part_name", value: info.partname }
+            ],
+            "error.suggestion.part_not_found"
+        );
+    }
 
-    if (errorInfo) {
-        errorInfo.style.display = 'block';
-        errorInfo.innerHTML = `
+    /**
+     * 生成文件类型错误信息
+     * @param {object} info - 错误信息对象
+     * @param {string} info.expected - 期望类型
+     * @param {string} info.actual - 实际类型
+     * @returns {string} HTML字符串
+     */
+    function buildWrongFileTypeMessage(info) {
+        return buildErrorTable(
+            "error.wrong_file_type",
+            [
+                { label: "error.label.expected_type", value: info.expected },
+                { label: "error.label.actual_type", value: info.actual }
+            ],
+            "error.suggestion.wrong_file_type"
+        );
+    }
+
+    /**
+     * 生成闪存类型错误信息
+     * @param {object} info - 错误信息对象
+     * @param {string} info.filetype - 文件类型
+     * @param {string} info.flashtype - 闪存类型
+     * @returns {string} HTML字符串
+     */
+    function buildFlashNotFoundMessage(info) {
+        return buildErrorTable(
+            "error.flash_not_found",
+            [
+                { label: "error.label.file_type", value: info.filetype },
+                { label: "error.label.flash_type", value: info.flashtype }
+            ],
+            "error.suggestion.flash_not_found"
+        );
+    }
+
+    /**
+     * 生成命令执行失败错误信息
+     * @param {object} info - 错误信息对象
+     * @param {string} info.cmd - 执行的命令
+     * @param {string} info.output - 命令输出
+     * @returns {string} HTML字符串
+     */
+    function buildRunCmdFailedMessage(info) {
+        let html = `
+            <div class="error-title">❌ ${t("error.run_cmd_failed")}</div>
+            <table class="info-table error-table">
+                <tbody>
+                    <tr>
+                        <td class="info-label">${t("error.label.cmd")}</td>
+                        <td class="info-value cmd-value">${escapeHtml(info.cmd || t("unknown"))}</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="error-output-section">
+                <div class="error-output-title">${t("error.label.cmd_output")}</div>
+                <pre class="error-output-content">${escapeHtml(info.output || t("error.no_output"))}</pre>
+            </div>`;
+
+        return html;
+    }
+
+    /**
+     * 生成未知类型错误信息
+     * @param {*} info - 错误信息（任意类型）
+     * @returns {string} HTML字符串
+     */
+    function buildUnknownErrorMessage(info) {
+        let message;
+        try {
+            message = JSON.stringify(info, null, 2);
+        } catch (e) {
+            message = String(info || t("error.unknown_type"));
+        }
+
+        return buildErrorTable(
+            "fail.title",
+            [
+                { label: "error.title", value: message }
+            ]
+        );
+    }
+
+    /**
+     * 生成无效响应错误信息
+     * @param {string} rawResponse - 原始响应文本
+     * @returns {string} HTML字符串
+     */
+    function buildInvalidResponseMessage(rawResponse) {
+        return `
             <div class="error-title">❌ ${t("error.invalid_response")}</div>
             <table class="info-table error-table">
                 <tbody>
                     <tr>
                         <td class="info-label">${t("error.title")}</td>
-                        <td class="info-value">${escapeHtml(message)}</td>
+                        <td class="info-value">${escapeHtml(rawResponse || "")}</td>
                     </tr>
                 </tbody>
-            </table>
-        `;
+            </table>`;
     }
-}
+
+    /**
+     * 构建成功信息表格
+     * @param {object} info - 成功信息对象
+     * @param {string} info.type - 文件类型
+     * @param {number} info.size - 文件大小
+     * @param {string} info.md5 - MD5哈希值
+     * @returns {string} HTML字符串
+     */
+    function buildSuccessTable(info) {
+        let html = `
+            <table class="info-table">
+                <tbody>`;
+
+        if (info.type) {
+            html += `
+                    <tr>
+                        <td class="info-label" data-i18n="label.type">${t("label.type")}</td>
+                        <td class="info-value">${escapeHtml(info.type)}</td>
+                    </tr>`;
+        }
+
+        if (info.size) {
+            html += `
+                    <tr>
+                        <td class="info-label" data-i18n="label.size">${t("label.size")}</td>
+                        <td class="info-value">${bytesToHuman(info.size)} (${info.size} Bytes)</td>
+                    </tr>`;
+        }
+
+        if (info.md5) {
+            html += `
+                    <tr>
+                        <td class="info-label" data-i18n="label.md5">${t("label.md5")}</td>
+                        <td class="info-value upload-md5-value">${info.md5}</td>
+                    </tr>`;
+        }
+
+        html += `
+                </tbody>
+            </table>`;
+
+        return html;
+    }
+
+    // 导出公共 API
+    return {
+        escapeHtml,
+        buildErrorTable,
+        buildFileTooBigMessage,
+        buildPartNotFoundMessage,
+        buildWrongFileTypeMessage,
+        buildFlashNotFoundMessage,
+        buildRunCmdFailedMessage,
+        buildUnknownErrorMessage,
+        buildInvalidResponseMessage,
+        buildSuccessTable,
+    };
+})();
+
+// ==============================
+// 文件上传模块
+// ==============================
+
+/**
+ * 文件上传管理器
+ * 负责处理所有文件上传操作，包括进度跟踪、响应解析和错误处理
+ * 适用于 index.html、uboot.html、art.html、cdt.html、ptable.html、simg.html、initramfs.html 等上传页面
+ */
+const uploadManager = (() => {
+    // 私有变量
+    let elements = null;
+
+    /**
+     * 获取或缓存 DOM 元素
+     */
+    function getElements() {
+        if (elements) return elements;
+
+        elements = {
+            title: document.getElementById("title"),
+            hint: document.getElementById("hint"),
+            form: document.getElementById("form"),
+            fileInput: document.getElementById("file"),
+            progressCircle: document.getElementById("bar-circle"),
+            successInfo: document.getElementById("success-info"),
+            errorInfo: document.getElementById("error-info"),
+        };
+
+        return elements;
+    }
+
+    /**
+     * 获取升级相关元素（部分页面需要）
+     */
+    function getUpgradeElements() {
+        return {
+            upgrade: document.getElementById("upgrade"),
+            fileType: document.getElementById("file-type"),
+            size: document.getElementById("size"),
+            md5: document.getElementById("md5"),
+        };
+    }
+
+    /**
+     * 隐藏所有信息显示区域
+     */
+    function hideAll() {
+        const els = getElements();
+        const upgradeEls = getUpgradeElements();
+
+        if (els.form) els.form.style.display = "none";
+        if (els.successInfo) els.successInfo.style.display = "none";
+        if (els.errorInfo) els.errorInfo.style.display = "none";
+        if (upgradeEls.upgrade) upgradeEls.upgrade.style.display = "none";
+    }
+
+    /**
+     * 显示进度条
+     * @param {number} percent - 进度百分比 (0-100)
+     */
+    function showProgress(percent) {
+        const els = getElements();
+        hideAll();
+        if (els.progressCircle) {
+            els.progressCircle.style.display = "block";
+            els.progressCircle.style.setProperty("--percent", Math.max(0, Math.min(100, percent)));
+        }
+    }
+
+    /**
+     * 隐藏进度条
+     */
+    function hideProgress() {
+        const els = getElements();
+        if (els.progressCircle) els.progressCircle.style.display = "none";
+    }
+
+    /**
+     * 处理上传成功
+     * @param {object} info - 成功信息对象
+     * @param {object} options - 额外选项
+     * @param {boolean} options.showUpgrade - 是否显示升级按钮
+     * @param {boolean} options.showBoot - 是否显示启动按钮（initramfs）
+     * @param {string} options.redirectPage - 跳转页面名称
+     */
+    function handleSuccess(info, options = {}) {
+        const els = getElements();
+        const upgradeEls = getUpgradeElements();
+
+        hideProgress();
+
+        // 显示成功信息
+        if (els.successInfo) {
+            els.successInfo.style.display = "block";
+            els.successInfo.innerHTML = errorMessageBuilder.buildSuccessTable(info);
+        }
+
+        // 根据页面类型显示不同按钮
+        if (options.showBoot && upgradeEls.upgrade) {
+            // initramfs 页面显示 "Boot" 按钮
+            upgradeEls.upgrade.style.display = "block";
+            const btn = upgradeEls.upgrade.querySelector("button");
+            if (btn) {
+                btn.textContent = t("common.boot");
+                btn.onclick = function() {
+                    location.href = "/booting.html";
+                };
+            }
+        } else if (options.showUpgrade && upgradeEls.upgrade) {
+            // firmware 等页面显示 "Update" 按钮
+            upgradeEls.upgrade.style.display = "block";
+        }
+
+        // 如果需要跳转到结果页面
+        if (options.redirectPage) {
+            setTimeout(function() {
+                location.href = "/" + options.redirectPage + ".html";
+            }, 500);
+        }
+    }
+
+    /**
+     * 处理上传失败
+     * @param {object} info - 错误信息对象
+     */
+    function handleError(info) {
+        const els = getElements();
+
+        if (els.title) els.title.innerHTML = t('fail.title');
+        if (els.hint) els.hint.innerHTML = t('fail.hint');
+        hideProgress();
+
+        let errorMessage = "";
+
+        // 根据错误类型生成对应的错误信息
+        switch (info?.type) {
+            case "file_too_big":
+                errorMessage = errorMessageBuilder.buildFileTooBigMessage(info);
+                break;
+            case "part_not_found":
+                errorMessage = errorMessageBuilder.buildPartNotFoundMessage(info);
+                break;
+            case "wrong_file_type":
+                errorMessage = errorMessageBuilder.buildWrongFileTypeMessage(info);
+                break;
+            case "flash_not_found":
+                errorMessage = errorMessageBuilder.buildFlashNotFoundMessage(info);
+                break;
+            case "run_cmd_failed":
+                errorMessage = errorMessageBuilder.buildRunCmdFailedMessage(info);
+                break;
+            default:
+                errorMessage = errorMessageBuilder.buildUnknownErrorMessage(info);
+        }
+
+        if (els.errorInfo) {
+            els.errorInfo.style.display = "block";
+            els.errorInfo.innerHTML = errorMessage;
+        }
+    }
+
+    /**
+     * 处理无效响应
+     * @param {string} rawResponse - 原始响应文本
+     */
+    function handleInvalidResponse(rawResponse) {
+        const els = getElements();
+
+        if (els.title) els.title.innerHTML = t('fail.title');
+        if (els.hint) els.hint.innerHTML = t('fail.hint');
+        hideProgress();
+
+        if (els.errorInfo) {
+            els.errorInfo.style.display = "block";
+            els.errorInfo.innerHTML = errorMessageBuilder.buildInvalidResponseMessage(rawResponse);
+        }
+    }
+
+    /**
+     * 执行上传
+     * @param {string} formDataKey - FormData中的键名（如 'firmware'、'uboot'）
+     * @param {object} options - 上传选项
+     * @param {string} options.url - 上传接口URL（默认 '/upload'）
+     * @param {boolean} options.showUpgrade - 成功时是否显示升级按钮
+     * @param {boolean} options.showBoot - 成功时是否显示启动按钮
+     * @param {string} options.redirectPage - 成功后跳转的页面
+     * @param {Function} options.onSuccess - 自定义成功处理函数
+     */
+    function upload(formDataKey, options = {}) {
+        const els = getElements();
+        const file = els.fileInput?.files[0];
+
+        if (!file) {
+            alert(t("file.select"));
+            return;
+        }
+
+        const url = options.url || "/upload";
+        const showUpgrade = options.showUpgrade !== false;
+        const showBoot = options.showBoot || false;
+        const redirectPage = options.redirectPage || null;
+
+        // 显示进度
+        showProgress(0);
+
+        // 准备表单数据
+        const formData = new FormData();
+        formData.append(formDataKey, file);
+
+        // 发送上传请求
+        ajax({
+            url: url,
+            data: formData,
+            done: function(responseText) {
+                let response;
+
+                // 尝试解析JSON响应
+                try {
+                    response = JSON.parse(responseText);
+                } catch (e) {
+                    if (options.onInvalidResponse) {
+                        options.onInvalidResponse(responseText);
+                    } else {
+                        handleInvalidResponse(responseText || t("error.invalid_response"));
+                    }
+                    return;
+                }
+
+                switch (response.status) {
+                    case "success":
+                        if (options.onSuccess) {
+                            options.onSuccess(response.info);
+                        } else {
+                            handleSuccess(response.info, {
+                                showUpgrade: showUpgrade,
+                                showBoot: showBoot,
+                                redirectPage: redirectPage
+                            });
+                        }
+                        break;
+                    case "fail":
+                        if (options.onError) {
+                            options.onError(response.info);
+                        } else {
+                            handleError(response.info);
+                        }
+                        break;
+                    default:
+                        handleInvalidResponse(responseText || t("error.unknown_status"));
+                }
+            },
+            progress: function(event) {
+                if (event.lengthComputable && event.total > 0) {
+                    const percent = parseInt((event.loaded / event.total) * 100);
+                    showProgress(percent);
+                }
+            }
+        });
+    }
+
+    /**
+     * 初始化上传管理器（通用上传页面）
+     * 对于大多数上传页面，不需要特殊初始化
+     */
+    function init() {
+        // 确保有系统信息（用于后续检查等）
+        if (!APP_STATE.sysinfo) {
+            sysinfoManager.fetchAndStore();
+        }
+    }
+
+    // 导出公共 API
+    return {
+        init,
+        upload,
+        showProgress,
+        hideProgress,
+        handleSuccess,
+        handleError,
+        handleInvalidResponse,
+    };
+})();
+
+// ==============================
+// 结果处理模块
+// ==============================
+
+/**
+ * 结果处理管理器
+ * 负责处理 flashing.html、booting.html、reboot.html 等结果页面的轮询和状态显示
+ */
+const resultManager = (() => {
+    // 私有变量
+    let elements = null;
+    let pollTimer = null;
+    let isDestroyed = false;
+    let currentPage = null;
+    let pollCount = 0;  // 轮询计数，用于日志和调试
+
+    /**
+     * 页面配置映射
+     */
+    const pageConfig = {
+        flashing: {
+            titleInProgress: "flashing.title.in_progress",
+            hintInProgress: "flashing.hint.in_progress",
+            titleDone: "flashing.title.done",
+            hintDone: "flashing.hint.done",
+            pollInterval: 3000,      // 3秒轮询间隔
+            timeout: 1800000,        // 30分钟
+            needPolling: true,
+            needTrigger: false,
+        },
+        booting: {
+            titleInProgress: "booting.title.in_progress",
+            hintInProgress: "booting.hint.in_progress",
+            titleDone: "booting.title.done",
+            hintDone: "booting.hint.done",
+            pollInterval: 3000,      // 3秒轮询间隔
+            timeout: 300000,         // 5分钟
+            needPolling: true,
+            needTrigger: false,
+        },
+        reboot: {
+            titleInProgress: "reboot.title.in_progress",
+            hintInProgress: "reboot.hint.in_progress",
+            titleDone: null,
+            hintDone: null,
+            pollInterval: 0,         // 不轮询
+            timeout: 30000,
+            needPolling: false,      // 重启后设备断开，无需轮询
+            needTrigger: true,       // 需要主动发送重启请求
+            triggerUrl: "/reboot",
+        },
+    };
+
+    /**
+     * 获取或缓存 DOM 元素
+     */
+    function getElements() {
+        if (elements) return elements;
+
+        elements = {
+            title: document.getElementById("title"),
+            hint: document.getElementById("hint"),
+            loading: document.getElementById("l"),
+            errorInfo: document.getElementById("error-info"),
+        };
+
+        return elements;
+    }
+
+    /**
+     * 隐藏加载动画
+     */
+    function hideLoading() {
+        const els = getElements();
+        if (els.loading) els.loading.style.display = "none";
+    }
+
+    /**
+     * 显示加载动画
+     */
+    function showLoading() {
+        const els = getElements();
+        if (els.loading) els.loading.style.display = "block";
+    }
+
+    /**
+     * 设置标题和提示文本
+     * @param {string} titleKey - 标题国际化 key
+     * @param {string} hintKey - 提示国际化 key
+     */
+    function setTitleAndHint(titleKey, hintKey) {
+        const els = getElements();
+        if (els.title && titleKey) els.title.innerHTML = t(titleKey);
+        if (els.hint && hintKey) els.hint.innerHTML = t(hintKey);
+    }
+
+    /**
+     * 处理成功结果
+     * @param {string} pageName - 页面名称
+     */
+    function handleSuccess(pageName) {
+        const config = pageConfig[pageName];
+        const els = getElements();
+
+        if (els.errorInfo) els.errorInfo.style.display = "none";
+
+        if (config.titleDone) {
+            setTitleAndHint(config.titleDone, config.hintDone);
+        }
+    }
+
+    /**
+     * 处理失败结果
+     * @param {object} info - 错误信息对象
+     */
+    function handleError(info) {
+        const els = getElements();
+
+        setTitleAndHint("fail.title", "fail.hint");
+        hideLoading();
+
+        let errorMessage = "";
+
+        switch (info?.type) {
+            case "wrong_file_type":
+                errorMessage = errorMessageBuilder.buildWrongFileTypeMessage(info);
+                break;
+            case "flash_not_found":
+                errorMessage = errorMessageBuilder.buildFlashNotFoundMessage(info);
+                break;
+            case "run_cmd_failed":
+                errorMessage = errorMessageBuilder.buildRunCmdFailedMessage(info);
+                break;
+            default:
+                errorMessage = errorMessageBuilder.buildUnknownErrorMessage(info);
+        }
+
+        if (els.errorInfo) {
+            els.errorInfo.style.display = "block";
+            els.errorInfo.innerHTML = errorMessage;
+        }
+    }
+
+    /**
+     * 处理无效响应
+     * @param {string} rawResponse - 原始响应文本
+     */
+    function handleInvalidResponse(rawResponse) {
+        const els = getElements();
+
+        setTitleAndHint("fail.title", "fail.hint");
+        hideLoading();
+
+        if (els.errorInfo) {
+            els.errorInfo.style.display = "block";
+            els.errorInfo.innerHTML = errorMessageBuilder.buildInvalidResponseMessage(rawResponse);
+        }
+    }
+
+    /**
+     * 处理结果响应
+     * @param {string} pageName - 页面名称
+     * @param {object} response - 解析后的响应对象
+     * @param {string} rawResponse - 原始响应文本
+     */
+    function handleResponse(pageName, response, rawResponse) {
+        switch (response.status) {
+            case "success":
+                handleSuccess(pageName);
+                stopPolling();
+                break;
+            case "fail":
+                handleError(response.info);
+                stopPolling();
+                break;
+            default:
+                handleInvalidResponse(rawResponse || t("error.unknown_status"));
+                stopPolling();
+        }
+    }
+
+    /**
+     * 处理响应解析失败
+     * @param {string} rawResponse - 原始响应文本
+     */
+    function handleParseError(rawResponse) {
+        handleInvalidResponse(rawResponse || t("error.invalid_response"));
+        stopPolling();
+    }
+
+    /**
+     * 执行一次轮询
+     * @param {string} pageName - 页面名称
+     * @returns {Promise<boolean>} 返回 true 表示应该继续轮询，false 表示已停止
+     */
+    async function pollOnce(pageName) {
+        if (isDestroyed) return false;
+
+        pollCount++;
+        const isFirstPoll = pollCount === 1;
+
+        try {
+            const response = await fetch("/result");
+
+            if (!response.ok) {
+                // HTTP 错误时继续轮询（可能是设备正在重启）
+                return true;
+            }
+
+            const responseText = await response.text();
+            let result;
+
+            try {
+                result = JSON.parse(responseText);
+            } catch (e) {
+                handleParseError(responseText);
+                return false;
+            }
+
+            // 处理响应
+            switch (result.status) {
+                case "success":
+                    handleSuccess(pageName);
+                    return false;  // 停止轮询
+                case "fail":
+                    handleError(result.info);
+                    return false;  // 停止轮询
+                default:
+                    // 如果是第一次轮询且状态未知，可能是设备还没准备好
+                    // 给几次重试机会，避免过早显示错误
+                    if (isFirstPoll && pollCount <= 3) {
+                        return true;  // 继续重试
+                    }
+                    handleInvalidResponse(responseText || t("error.unknown_status"));
+                    return false;  // 停止轮询
+            }
+
+        } catch (error) {
+            // 网络错误时继续轮询（设备可能正在重启）
+            return true;
+        }
+    }
+
+    /**
+     * 调度下一次轮询
+     * @param {string} pageName - 页面名称
+     */
+    function schedulePoll(pageName) {
+        if (isDestroyed) return;
+
+        const config = pageConfig[pageName];
+        if (!config.needPolling) return;
+
+        if (pollTimer) {
+            clearTimeout(pollTimer);
+        }
+
+        pollTimer = setTimeout(async function() {
+            pollTimer = null;
+            const shouldContinue = await pollOnce(pageName);
+            if (shouldContinue) {
+                schedulePoll(pageName);
+            }
+        }, config.pollInterval || 3000);
+    }
+
+    /**
+     * 开始轮询循环（立即执行第一次，后续按间隔执行）
+     * @param {string} pageName - 页面名称
+     */
+    async function startPolling(pageName) {
+        if (isDestroyed) return;
+
+        const config = pageConfig[pageName];
+        if (!config.needPolling) return;
+
+        // 立即执行第一次轮询
+        const shouldContinue = await pollOnce(pageName);
+
+        // 如果需要继续，则调度后续轮询
+        if (shouldContinue) {
+            schedulePoll(pageName);
+        }
+    }
+
+    /**
+     * 停止轮询
+     */
+    function stopPolling() {
+        if (pollTimer) {
+            clearTimeout(pollTimer);
+            pollTimer = null;
+        }
+    }
+
+    /**
+     * 触发操作（如重启）
+     * @param {string} pageName - 页面名称
+     */
+    function triggerAction(pageName) {
+        const config = pageConfig[pageName];
+
+        if (!config.needTrigger || !config.triggerUrl) {
+            return;
+        }
+
+        // 发送触发请求
+        ajax({
+            url: config.triggerUrl,
+            timeout: config.timeout,
+            done: function(response) {
+                // 设备可能已经在重启中，不需要特别处理
+            }
+        });
+    }
+
+    /**
+     * 初始化结果页面
+     * @param {string} pageName - 页面名称 (flashing/booting/reboot)
+     */
+    function init(pageName) {
+        const config = pageConfig[pageName];
+
+        if (!config) {
+            console.error("Unknown result page:", pageName);
+            return;
+        }
+
+        isDestroyed = false;
+        currentPage = pageName;
+        pollCount = 0;
+
+        // 初始化应用状态
+        APP_STATE.page = pageName;
+        APP_STATE.lang = detectLang();
+        APP_STATE.theme = detectTheme();
+
+        // 应用主题和语言
+        setTheme(APP_STATE.theme);
+        setLang(APP_STATE.lang);
+
+        // 初始化侧边栏
+        ensureSidebar();
+
+        // 初始化设置面板
+        initSettingsPanel();
+
+        // 应用国际化
+        applyI18n(document);
+
+        // 更新文档标题
+        updateDocumentTitle();
+
+        // 添加准备完成的类
+        setTimeout(function() {
+            document.body.classList.add("ready");
+        }, 0);
+
+        // 设置初始标题和提示
+        setTitleAndHint(config.titleInProgress, config.hintInProgress);
+
+        // 确保显示加载动画
+        showLoading();
+
+        // 获取并渲染版本信息
+        loadAndRenderVersionInfo();
+
+        // 根据配置执行对应操作
+        if (config.needTrigger) {
+            // 对于 reboot 页面：先触发重启
+            triggerAction(pageName);
+            // reboot 后设备断开连接，不轮询
+        } else if (config.needPolling) {
+            // 对于 flashing/booting 页面：立即开始轮询
+            startPolling(pageName);
+        }
+    }
+
+    /**
+     * 清理资源
+     */
+    function destroy() {
+        isDestroyed = true;
+        stopPolling();
+        elements = null;
+        pollCount = 0;
+    }
+
+    // 页面卸载时清理
+    if (typeof window !== "undefined") {
+        window.addEventListener("beforeunload", function() {
+            destroy();
+        });
+    }
+
+    // 导出公共 API
+    return {
+        init,
+        destroy,
+    };
+})();
 
 // ==============================
 // 备份功能模块
 // ==============================
 
 /**
- * 设置备份状态显示
+ * 备份管理器
+ * 负责处理闪存备份的配置、执行和文件下载等功能
  */
-function setBackupStatus(text) {
-    const el = document.getElementById("backup_status");
-    if (el) {
-        el.style.display = text ? "block" : "none";
-        el.textContent = text || "";
+const backupManager = (() => {
+    // 私有变量
+    let elements = null;
+    let targetsLoaded = false;
+
+    /**
+     * 获取或缓存 DOM 元素
+     */
+    function getElements() {
+        if (elements) return elements;
+
+        elements = {
+            mode: document.getElementById("backup_mode"),
+            target: document.getElementById("backup_target"),
+            range: document.getElementById("backup_range"),
+            start: document.getElementById("backup_start"),
+            end: document.getElementById("backup_end"),
+            rangeHint: document.getElementById("backup_range_hint"),
+            progress: document.getElementById("backup_progress"),
+            status: document.getElementById("backup_status"),
+        };
+
+        return elements;
     }
-}
 
-/**
- * 设置备份进度
- */
-function setBackupProgress(percent) {
-    const el = document.getElementById("backup_progress");
-    if (el) {
-        const p = Math.max(0, Math.min(100, parseInt(percent || 0)));
-        el.style.display = "block";
-        el.style.setProperty("--percent", p);
+    /**
+     * 设置备份状态显示
+     */
+    function setStatus(text, isError) {
+        const el = getElements().status;
+        if (el) {
+            el.style.display = text ? "block" : "none";
+            el.textContent = text || "";
+            if (isError) {
+                el.style.color = "var(--danger)";
+            } else {
+                el.style.color = "";
+            }
+        }
     }
-}
 
-/**
- * 解析用户输入的长度（支持十六进制和K/M后缀）
- */
-function parseUserLen(str) {
-    if (!str) return null;
-    str = String(str).trim();
-    if (str === "") return null;
+    /**
+     * 设置备份进度
+     */
+    function setProgress(percent) {
+        const el = getElements().progress;
+        if (el) {
+            const p = Math.max(0, Math.min(100, parseInt(percent || 0)));
+            el.style.display = "block";
+            el.style.setProperty("--percent", p);
+        }
+    }
 
-    const match = /^\s*(0x[0-9a-fA-F]+|\d+)\s*([a-zA-Z]*)\s*$/.exec(str);
-    if (!match) return null;
+    /**
+     * 解析用户输入的长度（支持十六进制和K/M后缀）
+     */
+    function parseUserLen(str) {
+        if (!str) return null;
+        str = String(str).trim();
+        if (str === "") return null;
 
-    let val = match[1].toLowerCase().indexOf("0x") === 0 ?
-              parseInt(match[1], 16) : parseInt(match[1], 10);
-    if (!isFinite(val) || val < 0) return null;
+        const match = /^\s*(0x[0-9a-fA-F]+|\d+)\s*([a-zA-Z]*)\s*$/.exec(str);
+        if (!match) return null;
 
-    const suffix = (match[2] || "").toLowerCase();
-    if (suffix === "" || suffix === "b") return val;
-    if (suffix === "k" || suffix === "kb" || suffix === "kib") return val * 1024;
-    if (suffix === "m" || suffix === "mb" || suffix === "mib") return val * 1024 * 1024;
+        let val = match[1].toLowerCase().indexOf("0x") === 0 ?
+                  parseInt(match[1], 16) : parseInt(match[1], 10);
+        if (!isFinite(val) || val < 0) return null;
 
-    return null;
-}
+        const suffix = (match[2] || "").toLowerCase();
+        if (suffix === "" || suffix === "b") return val;
+        if (suffix === "k" || suffix === "kb" || suffix === "kib") return val * 1024;
+        if (suffix === "m" || suffix === "mb" || suffix === "mib") return val * 1024 * 1024;
 
-/**
- * 更新范围提示
- */
-function backupUpdateRangeHint() {
-    const hint = document.getElementById("backup_range_hint");
-    const startVal = parseUserLen(document.getElementById("backup_start").value);
-    const endVal = parseUserLen(document.getElementById("backup_end").value);
+        return null;
+    }
 
-    if (hint) {
+    /**
+     * 更新范围提示
+     */
+    function updateRangeHint() {
+        const hint = getElements().rangeHint;
+        if (!hint) return;
+
+        const startVal = parseUserLen(getElements().start?.value);
+        const endVal = parseUserLen(getElements().end?.value);
+
         if (startVal === null || endVal === null) {
             hint.textContent = t("backup.range.hint");
         } else if (endVal > startVal) {
@@ -1782,227 +2232,242 @@ function backupUpdateRangeHint() {
             hint.textContent = t("backup.range.hint");
         }
     }
-}
 
-/**
- * 备份页面初始化
- */
-function backupInit() {
-    const modeSelect = document.getElementById("backup_mode");
-    const targetSelect = document.getElementById("backup_target");
-    const rangeDiv = document.getElementById("backup_range");
-    const startInput = document.getElementById("backup_start");
-    const endInput = document.getElementById("backup_end");
+    /**
+     * 解析Content-Disposition中的文件名
+     */
+    function parseFilenameFromDisposition(header) {
+        if (!header) return "";
+        const match = /filename\s*=\s*"([^"]+)"/i.exec(header);
+        if (match && match[1]) return match[1];
+        const match2 = /filename\s*=\s*([^;\s]+)/i.exec(header);
+        if (match2 && match2[1]) return match2[1].replace(/^"|"$/g, "");
+        return "";
+    }
 
-    function updateUI() {
-        const isRange = modeSelect.value === "range";
+    /**
+     * 更新UI模式显示
+     */
+    function updateModeUI() {
+        const els = getElements();
+        const isRange = els.mode?.value === "range";
+
+        if (els.range) {
+            els.range.style.display = isRange ? "block" : "none";
+        }
+
         if (isRange) {
-            rangeDiv.style.display = "block";
-            backupUpdateRangeHint();
-        } else {
-            rangeDiv.style.display = "none";
+            updateRangeHint();
         }
     }
 
-    modeSelect.onchange = updateUI;
-    if (startInput) startInput.oninput = backupUpdateRangeHint;
-    if (endInput) endInput.oninput = backupUpdateRangeHint;
+    /**
+     * 加载目标设备列表
+     */
+    function loadTargets() {
+        const els = getElements();
 
-    updateUI();
-    setBackupStatus("");
+        if (!els.target) return;
 
-    // 获取存储设备信息
-    ajax({
-        url: "/sysinfo",
-        done: function(text) {
-            let info;
-            try {
-                info = JSON.parse(text);
-            } catch (e) {
-                setBackupStatus("Failed to parse backup info");
-                return;
-            }
+        ajax({
+            url: "/sysinfo",
+            timeout: 10000,
+            done: function(text) {
+                let info;
+                try {
+                    info = JSON.parse(text);
+                } catch (e) {
+                    setStatus(t("backup.error.exception") + " " + t("sysinfo.error.parse"), true);
+                    return;
+                }
 
-            // 填充目标选择器
-            if (targetSelect) {
-                targetSelect.innerHTML = '<option value="" data-i18n="backup.target.placeholder"></option>';
+                // 清空并添加占位符
+                els.target.innerHTML = '<option value="" data-i18n="backup.target.placeholder"></option>';
 
                 // 添加RAW选项
                 if (info.devices) {
-                    if (info.devices.spi && info.devices.spi.present) {
-                        const opt = document.createElement("option");
-                        opt.value = "raw:spi";
-                        opt.textContent = "[RAW] SPI: " +
-                            (info.devices.spi.name ? info.devices.spi.name : "") +
-                            (info.devices.spi.size ? " (" + bytesToHuman(info.devices.spi.size) + ")" : "");
-                        targetSelect.appendChild(opt);
-                    }
+                    const rawDevices = [
+                        { key: "spi", label: "SPI" },
+                        { key: "mmc", label: "MMC" },
+                        { key: "nand", label: "NAND" }
+                    ];
 
-                    if (info.devices.mmc && info.devices.mmc.present) {
-                        const opt = document.createElement("option");
-                        opt.value = "raw:mmc";
-                        opt.textContent = "[RAW] MMC: " +
-                            (info.devices.mmc.product ? info.devices.mmc.product : "") +
-                            (info.devices.mmc.size ? " (" + bytesToHuman(info.devices.mmc.size) + ")" : "");
-                        targetSelect.appendChild(opt);
-                    }
-
-                    if (info.devices.nand && info.devices.nand.present) {
-                        const opt = document.createElement("option");
-                        opt.value = "raw:nand";
-                        opt.textContent = "[RAW] NAND: " +
-                            (info.devices.nand.name ? info.devices.nand.name : "") +
-                            (info.devices.nand.size ? " (" + bytesToHuman(info.devices.nand.size) + ")" : "");
-                        targetSelect.appendChild(opt);
-                    }
+                    rawDevices.forEach(function(dev) {
+                        const device = info.devices[dev.key];
+                        if (device && device.present) {
+                            const opt = document.createElement("option");
+                            opt.value = "raw:" + dev.key;
+                            opt.textContent = "[RAW] " + dev.label + ": " +
+                                (device.name || device.product || "") +
+                                (device.size ? " (" + bytesToHuman(device.size) + ")" : "");
+                            els.target.appendChild(opt);
+                        }
+                    });
                 }
 
                 // 添加分区选项
                 if (info.partitions) {
-                    // 添加SMEM分区选项
-                    if (info.partitions.smem && info.partitions.smem.present && info.partitions.smem.parts && info.partitions.smem.parts.length) {
-                        info.partitions.smem.parts.forEach(function(part) {
-                            if (part && part.name) {
-                                const opt = document.createElement("option");
-                                opt.value = "smem:" + part.name;
-                                opt.textContent = "[SMEM] " + part.name +
-                                                 (part.size ? " (" + bytesToHuman(part.size) + ")" : "");
-                                targetSelect.appendChild(opt);
-                            }
-                        });
-                    }
-
-                    // 添加MMC分区选项
-                    if (info.partitions.mmc && info.partitions.mmc.present) {
-                        if (info.partitions.mmc.parts && info.partitions.mmc.parts.length) {
-                            info.partitions.mmc.parts.forEach(function(part) {
-                                if (part && part.name) {
-                                    const opt = document.createElement("option");
-                                    opt.value = "mmc:" + part.name;
-                                    opt.textContent = "[MMC] " + part.name +
-                                                     (part.size ? " (" + bytesToHuman(part.size) + ")" : "");
-                                    targetSelect.appendChild(opt);
-                                }
-                            });
-                        }
-                    }
+                    // SMEM分区
+                    addPartitionOptions(info.partitions.smem, "smem");
+                    // MMC分区
+                    addPartitionOptions(info.partitions.mmc, "mmc");
                 }
 
                 // 选择第一个有效选项
-                if (targetSelect.options.length > 1) {
-                    targetSelect.selectedIndex = 1;
+                if (els.target.options.length > 1) {
+                    els.target.selectedIndex = 1;
                 }
 
-                applyI18n(targetSelect);
+                applyI18n(els.target);
+                targetsLoaded = true;
             }
-        }
-    });
-}
-
-/**
- * 解析Content-Disposition中的文件名
- */
-function parseFilenameFromDisposition(header) {
-    if (!header) return "";
-    const match = /filename\s*=\s*"([^"]+)"/i.exec(header);
-    if (match && match[1]) return match[1];
-    const match2 = /filename\s*=\s*([^;\s]+)/i.exec(header);
-    if (match2 && match2[1]) return match2[1].replace(/^"|"$/g, "");
-    return "";
-}
-
-/**
- * 开始备份
- */
-async function startBackup() {
-    const modeSelect = document.getElementById("backup_mode");
-    const targetSelect = document.getElementById("backup_target");
-
-    if (!modeSelect || !targetSelect) return;
-
-    const mode = modeSelect.value;
-    const target = targetSelect.value;
-
-    if (!target) {
-        alert(t("backup.error.no_target"));
-        return;
+        });
     }
 
-    const formData = new FormData();
-    formData.append("mode", mode);
-    formData.append("target", target);
+    /**
+     * 添加分区选项
+     */
+    function addPartitionOptions(partData, type) {
+        const els = getElements();
 
-    if (mode === "range") {
-        const startInput = document.getElementById("backup_start");
-        const endInput = document.getElementById("backup_end");
-
-        if (!startInput || !endInput || !startInput.value || !endInput.value) {
-            alert(t("backup.error.bad_range"));
+        if (!partData || !partData.present || !partData.parts || !partData.parts.length) {
             return;
         }
 
-        formData.append("start", startInput.value);
-        formData.append("end", endInput.value);
+        partData.parts.forEach(function(part) {
+            if (part && part.name) {
+                const opt = document.createElement("option");
+                opt.value = type + ":" + part.name;
+                opt.textContent = "[" + type.toUpperCase() + "] " + part.name +
+                                 (part.size ? " (" + bytesToHuman(part.size) + ")" : "");
+                els.target.appendChild(opt);
+            }
+        });
     }
 
-    setBackupProgress(0);
-    setBackupStatus(t("backup.status.starting"));
+    /**
+     * 开始备份
+     */
+    async function start() {
+        const els = getElements();
+        const mode = els.mode?.value;
+        const target = els.target?.value;
 
-    try {
-        const response = await fetch("/backup", { method: "POST", body: formData });
-
-        if (!response.ok) {
-            setBackupStatus(t("backup.error.http") + " " + response.status);
+        if (!target) {
+            alert(t("backup.error.no_target"));
             return;
         }
 
-        const contentLength = response.headers.get("Content-Length");
-        const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
-        let filename = parseFilenameFromDisposition(response.headers.get("Content-Disposition"));
-        if (!filename) filename = "backup.bin";
+        const formData = new FormData();
+        formData.append("mode", mode);
+        formData.append("target", target);
 
-        // 获取文件名中的备份信息
-        if (typeof makeBackupDownloadName === "function") {
-            filename = makeBackupDownloadName(filename);
-        }
+        if (mode === "range") {
+            const startInput = els.start;
+            const endInput = els.end;
 
-        let received = 0;
-        const chunks = [];
-        const reader = response.body.getReader();
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-            received += value.length;
-            if (totalSize) {
-                setBackupProgress((received / totalSize) * 100);
+            if (!startInput || !endInput || !startInput.value || !endInput.value) {
+                alert(t("backup.error.bad_range"));
+                return;
             }
-            setBackupStatus(t("backup.status.downloading") + " " +
-                           bytesToHuman(received) + (totalSize ? " / " + bytesToHuman(totalSize) : ""));
+
+            formData.append("start", startInput.value);
+            formData.append("end", endInput.value);
         }
 
-        setBackupProgress(100);
-        setBackupStatus(t("backup.status.preparing"));
+        setProgress(0);
+        setStatus(t("backup.status.starting"));
 
-        // 保存文件
-        const blob = new Blob(chunks, { type: "application/octet-stream" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        try {
+            const response = await fetch("/backup", { method: "POST", body: formData });
 
-        setBackupStatus(t("backup.status.done") + " " + filename);
+            if (!response.ok) {
+                setStatus(t("backup.error.http") + " " + response.status, true);
+                return;
+            }
 
-    } catch (error) {
-        setBackupStatus(t("backup.error.exception") + " " + (error.message || String(error)));
+            const contentLength = response.headers.get("Content-Length");
+            const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
+            let filename = parseFilenameFromDisposition(
+                response.headers.get("Content-Disposition")
+            );
+            if (!filename) filename = "backup.bin";
+
+            let received = 0;
+            const chunks = [];
+            const reader = response.body.getReader();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                received += value.length;
+                if (totalSize) {
+                    setProgress((received / totalSize) * 100);
+                }
+                setStatus(
+                    t("backup.status.downloading") + " " +
+                    bytesToHuman(received) +
+                    (totalSize ? " / " + bytesToHuman(totalSize) : "")
+                );
+            }
+
+            setProgress(100);
+            setStatus(t("backup.status.preparing"));
+
+            // 保存文件
+            const blob = new Blob(chunks, { type: "application/octet-stream" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            setStatus(t("backup.status.done") + " " + filename);
+
+        } catch (error) {
+            setStatus(
+                t("backup.error.exception") + " " + (error.message || String(error)),
+                true
+            );
+        }
     }
-}
 
-// 导出备份初始化函数供appInit调用
-window.backupInit = backupInit;
+    /**
+     * 初始化备份管理器
+     */
+    function init() {
+        const els = getElements();
+
+        // 绑定模式切换事件
+        if (els.mode) {
+            els.mode.addEventListener("change", updateModeUI);
+        }
+
+        // 绑定范围输入事件
+        if (els.start) {
+            els.start.addEventListener("input", updateRangeHint);
+        }
+        if (els.end) {
+            els.end.addEventListener("input", updateRangeHint);
+        }
+
+        // 初始化UI状态
+        updateModeUI();
+        setStatus("");
+
+        // 加载目标设备列表
+        loadTargets();
+    }
+
+    // 导出公共 API
+    return {
+        init,
+        start,
+        loadTargets,
+    };
+})();
 
 // ==============================
 // 环境变量管理模块
@@ -3392,598 +3857,666 @@ const consoleManager = (() => {
 // ==============================
 
 /**
- * 创建表格行
- * @param {string} labelKey - 标签的国际化 key
- * @param {string} value - 显示的值
- * @param {string} [valueClass] - 值的额外 CSS 类
- * @returns {HTMLTableRowElement}
+ * 系统信息管理器
+ * 负责加载和渲染设备的系统信息、存储信息和分区表
  */
-function createInfoRow(labelKey, value, valueClass) {
-    const tr = document.createElement("tr");
-    tr.className = "tr";
+const sysinfoManager = (() => {
+    // 私有变量
+    let elements = null;
+    const sectionIds = ["board_info", "flash_info", "partitions_info"];
 
-    const tdLabel = document.createElement("td");
-    tdLabel.className = "td left";
-    tdLabel.setAttribute("width", "33%");
-    tdLabel.setAttribute("data-i18n", labelKey);
-    tdLabel.textContent = t(labelKey);
+    /**
+     * 获取或缓存 DOM 元素
+     */
+    function getElements() {
+        if (elements) return elements;
 
-    const tdValue = document.createElement("td");
-    tdValue.className = "td left";
-    if (valueClass) {
-        tdValue.classList.add(valueClass);
-    }
-    tdValue.textContent = value !== undefined && value !== null ? String(value) : t("sysinfo.no_data");
+        elements = {};
+        sectionIds.forEach(function(id) {
+            elements[id] = document.getElementById(id);
+        });
 
-    tr.appendChild(tdLabel);
-    tr.appendChild(tdValue);
-    return tr;
-}
-
-/**
- * 创建板块表格容器
- * @param {string} sectionId - 板块元素 ID
- * @param {string} titleKey - 标题的国际化 key
- * @returns {HTMLTableElement}
- */
-function createSectionTable(sectionId, titleKey) {
-    const section = document.getElementById(sectionId);
-    if (!section) return null;
-
-    // 清空并设置标题
-    const inner = section.querySelector(".card-main-inner");
-    if (!inner) return null;
-
-    inner.innerHTML = "";
-
-    const h2 = document.createElement("h2");
-    h2.setAttribute("data-i18n", titleKey);
-    h2.textContent = t(titleKey);
-    inner.appendChild(h2);
-
-    const table = document.createElement("table");
-    table.className = "table";
-    inner.appendChild(table);
-
-    return table;
-}
-
-/**
- * 格式化字节数为可读字符串
- * @param {number} bytes
- * @returns {string}
- */
-function formatHexBytes(bytes) {
-    if (bytes === undefined || bytes === null) return t("sysinfo.no_data");
-    const hex = "0x" + bytes.toString(16).toUpperCase();
-    const human = bytesToHuman(bytes);
-    return hex + " (" + human + ")";
-}
-
-/**
- * 处理设备信息
- * @param {object} device - 设备对象
- * @param {string} type - 设备类型 (spi/mmc/nand)
- * @param {HTMLTableElement} table - 目标表格
- */
-function renderDeviceInfo(device, type, table) {
-    if (!device || !device.present) return;
-
-    // 添加设备类型标题行
-    let deviceName;
-    if (type === "mmc" && device.vendor && device.product) {
-        deviceName = device.vendor + " / " + device.product;
-    } else if (device.name) {
-        deviceName = device.name;
-    } else {
-        deviceName = t("sysinfo.present");
+        return elements;
     }
 
-    const headerTr = document.createElement("tr");
-    headerTr.className = "tr";
+    /**
+     * 创建表格行
+     * @param {string} labelKey - 标签的国际化 key
+     * @param {string} value - 显示的值
+     * @param {string} [valueClass] - 值的额外 CSS 类
+     * @returns {HTMLTableRowElement}
+     */
+    function createInfoRow(labelKey, value, valueClass) {
+        const tr = document.createElement("tr");
+        tr.className = "tr";
 
-    const headerTd = document.createElement("td");
-    headerTd.className = "td left";
-    headerTd.setAttribute("colspan", "2");
-    headerTd.style.fontWeight = "600";
-    headerTd.style.color = "var(--primary)";
-    headerTd.style.backgroundColor = "var(--panel-2)";
-    headerTd.textContent = type.toUpperCase() + " (" + deviceName + ")";
+        const tdLabel = document.createElement("td");
+        tdLabel.className = "td left";
+        tdLabel.setAttribute("width", "33%");
+        tdLabel.setAttribute("data-i18n", labelKey);
+        tdLabel.textContent = t(labelKey);
 
-    headerTr.appendChild(headerTd);
-    table.appendChild(headerTr);
-
-    // 大小
-    if (device.size !== undefined) {
-        table.appendChild(createInfoRow("sysinfo.size", formatHexBytes(device.size)));
-    }
-
-    // 根据设备类型显示不同属性
-    const spiProps = {
-        "page_size": "sysinfo.page_size",
-        "block_size": "sysinfo.block_size",
-        "sector_size": "sysinfo.sector_size",
-        "erase_size": "sysinfo.erase_size",
-    };
-
-    const mmcProps = {
-        "block_size": "sysinfo.block_size",
-        "version": "sysinfo.version",
-    };
-
-    const nandProps = {
-        "page_size": "sysinfo.page_size",
-        "block_size": "sysinfo.block_size",
-        "oob_size": "sysinfo.oob_size",
-        "oob_avail": "sysinfo.oob_avail",
-        "ecc_step_size": "sysinfo.ecc_step_size",
-        "ecc_strength": "sysinfo.ecc_strength",
-    };
-
-    let propsToShow;
-    if (type === "spi") {
-        propsToShow = spiProps;
-    } else if (type === "mmc") {
-        propsToShow = mmcProps;
-    } else if (type === "nand") {
-        propsToShow = nandProps;
-    }
-
-    for (const [prop, labelKey] of Object.entries(propsToShow)) {
-        if (device[prop] !== undefined) {
-            let value = device[prop];
-            // 大小相关的用十六进制显示
-            if (prop.includes("size")) {
-                value = formatHexBytes(value);
-            }
-            table.appendChild(createInfoRow(labelKey, value));
+        const tdValue = document.createElement("td");
+        tdValue.className = "td left";
+        if (valueClass) {
+            tdValue.classList.add(valueClass);
         }
+        tdValue.textContent = value !== undefined && value !== null
+            ? String(value)
+            : t("sysinfo.no_data");
+
+        tr.appendChild(tdLabel);
+        tr.appendChild(tdValue);
+        return tr;
     }
-}
 
-/**
- * 渲染分区信息
- * @param {object} partitionsInfo - 分区数据
- * @param {HTMLTableElement} table - 目标表格
- */
-function renderPartitions(partitionsInfo, table) {
-    if (!partitionsInfo) return;
+    /**
+     * 创建板块表格容器
+     * @param {string} sectionId - 板块元素 ID
+     * @param {string} titleKey - 标题的国际化 key
+     * @returns {HTMLTableElement|null}
+     */
+    function createSectionTable(sectionId, titleKey) {
+        const section = document.getElementById(sectionId);
+        if (!section) return null;
 
-    const partTypes = ["smem", "mmc"];
+        const inner = section.querySelector(".card-main-inner");
+        if (!inner) return null;
 
-    partTypes.forEach(function(partType) {
-        const partData = partitionsInfo[partType];
-        if (!partData || !partData.present || !partData.parts || !partData.parts.length) {
-            return;
+        inner.innerHTML = "";
+
+        const h2 = document.createElement("h2");
+        h2.setAttribute("data-i18n", titleKey);
+        h2.textContent = t(titleKey);
+        inner.appendChild(h2);
+
+        const table = document.createElement("table");
+        table.className = "table";
+        inner.appendChild(table);
+
+        return table;
+    }
+
+    /**
+     * 格式化字节数为可读字符串
+     * @param {number} bytes
+     * @returns {string}
+     */
+    function formatHexBytes(bytes) {
+        if (bytes === undefined || bytes === null) return t("sysinfo.no_data");
+        const hex = "0x" + bytes.toString(16).toUpperCase();
+        const human = bytesToHuman(bytes);
+        return hex + " (" + human + ")";
+    }
+
+    /**
+     * 处理设备信息
+     * @param {object} device - 设备对象
+     * @param {string} type - 设备类型 (spi/mmc/nand)
+     * @param {HTMLTableElement} table - 目标表格
+     */
+    function renderDeviceInfo(device, type, table) {
+        if (!device || !device.present) return;
+
+        // 添加设备类型标题行
+        let deviceName;
+        if (type === "mmc" && device.vendor && device.product) {
+            deviceName = device.vendor + " / " + device.product;
+        } else if (device.name) {
+            deviceName = device.name;
+        } else {
+            deviceName = t("sysinfo.present");
         }
 
-        // 添加分区类型标题行
         const headerTr = document.createElement("tr");
         headerTr.className = "tr";
 
         const headerTd = document.createElement("td");
         headerTd.className = "td left";
-        headerTd.setAttribute("colspan", "5");
+        headerTd.setAttribute("colspan", "2");
         headerTd.style.fontWeight = "600";
         headerTd.style.color = "var(--primary)";
         headerTd.style.backgroundColor = "var(--panel-2)";
-        headerTd.textContent = partType.toUpperCase() + " " + t("sysinfo.title.partitions_info");
+        headerTd.textContent = type.toUpperCase() + " (" + deviceName + ")";
 
         headerTr.appendChild(headerTd);
         table.appendChild(headerTr);
 
-        // 添加表头行
-        const theadTr = document.createElement("tr");
-        theadTr.className = "tr";
+        // 大小
+        if (device.size !== undefined) {
+            table.appendChild(createInfoRow("sysinfo.size", formatHexBytes(device.size)));
+        }
 
-        // 列定义：序号、分区名、起始地址、结束地址、大小
-        const columns = [
-            { key: "sysinfo.part_index", text: t("sysinfo.part_index"), width: "8%" },
-            { key: "sysinfo.name", text: t("sysinfo.name"), width: "20%" },
-            { key: "sysinfo.part_start", text: t("sysinfo.part_start"), width: "24%" },
-            { key: "sysinfo.part_end", text: t("sysinfo.part_end"), width: "24%" },
-            { key: "sysinfo.size", text: t("sysinfo.size"), width: "24%" }
-        ];
+        // 根据设备类型显示不同属性
+        const propsMap = {
+            spi: {
+                "page_size": "sysinfo.page_size",
+                "block_size": "sysinfo.block_size",
+                "sector_size": "sysinfo.sector_size",
+                "erase_size": "sysinfo.erase_size",
+            },
+            mmc: {
+                "block_size": "sysinfo.block_size",
+                "version": "sysinfo.version",
+            },
+            nand: {
+                "page_size": "sysinfo.page_size",
+                "block_size": "sysinfo.block_size",
+                "oob_size": "sysinfo.oob_size",
+                "oob_avail": "sysinfo.oob_avail",
+                "ecc_step_size": "sysinfo.ecc_step_size",
+                "ecc_strength": "sysinfo.ecc_strength",
+            },
+        };
 
-        columns.forEach(function(col) {
-            const th = document.createElement("td");
-            th.className = "td left";
-            th.setAttribute("width", col.width);
-            th.setAttribute("data-i18n", col.key);
-            th.textContent = col.text;
-            th.style.fontWeight = "500";
-            th.style.fontSize = "0.85rem";
-            th.style.color = "var(--muted)";
-            theadTr.appendChild(th);
-        });
+        const propsToShow = propsMap[type] || {};
 
-        table.appendChild(theadTr);
-
-        // 添加每个分区
-        partData.parts.forEach(function(part, index) {
-            const tr = document.createElement("tr");
-            tr.className = "tr";
-
-            // 序号（从 1 开始）
-            const tdIndex = document.createElement("td");
-            tdIndex.className = "td left";
-            tdIndex.setAttribute("width", "8%");
-            tdIndex.textContent = index + 1;
-            tdIndex.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-            tdIndex.style.fontSize = "0.85rem";
-
-            // 分区名
-            const tdName = document.createElement("td");
-            tdName.className = "td left";
-            tdName.setAttribute("width", "20%");
-            tdName.textContent = part.name || "";
-            tdName.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-            tdName.style.fontSize = "0.85rem";
-
-            // 起始地址
-            const tdStart = document.createElement("td");
-            tdStart.className = "td left";
-            tdStart.setAttribute("width", "24%");
-            const start = part.start || 0;
-            tdStart.textContent = "0x" + start.toString(16).toUpperCase();
-            tdStart.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-            tdStart.style.fontSize = "0.85rem";
-
-            // 结束地址 = 起始地址 + 大小 - 1
-            const tdEnd = document.createElement("td");
-            tdEnd.className = "td left";
-            tdEnd.setAttribute("width", "24%");
-            const size = part.size || 0;
-            const end = start + size - 1;
-            tdEnd.textContent = "0x" + end.toString(16).toUpperCase();
-            tdEnd.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-            tdEnd.style.fontSize = "0.85rem";
-
-            // 大小
-            const tdSize = document.createElement("td");
-            tdSize.className = "td left";
-            tdSize.setAttribute("width", "24%");
-            tdSize.textContent = "0x" + size.toString(16).toUpperCase() + " (" + bytesToHuman(size) + ")";
-            tdSize.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-            tdSize.style.fontSize = "0.85rem";
-
-            tr.appendChild(tdIndex);
-            tr.appendChild(tdName);
-            tr.appendChild(tdStart);
-            tr.appendChild(tdEnd);
-            tr.appendChild(tdSize);
-            table.appendChild(tr);
-        });
-    });
-}
-
-/**
- * 渲染系统信息数据
- * @param {object} data - 解析后的系统信息数据
- */
-function renderSysinfoData(sections, data) {
-    // ========== 设备信息 ==========
-    var boardTable = createSectionTable("board_info", "sysinfo.title.board_info");
-    if (boardTable) {
-        // 设备详细信息
-        if (data.board) {
-            var b = data.board;
-            if (b.hostname) boardTable.appendChild(createInfoRow("sysinfo.hostname", b.hostname));
-            if (b.model) boardTable.appendChild(createInfoRow("sysinfo.model", b.model));
-            if (b.compatible) boardTable.appendChild(createInfoRow("sysinfo.compatible", b.compatible));
-            if (b.machid) boardTable.appendChild(createInfoRow("sysinfo.machid", b.machid));
-            if (b.ram_size !== undefined) {
-                boardTable.appendChild(createInfoRow("sysinfo.ram_size", formatHexBytes(b.ram_size)));
+        for (const [prop, labelKey] of Object.entries(propsToShow)) {
+            if (device[prop] !== undefined) {
+                let value = device[prop];
+                // 大小相关的用十六进制显示
+                if (prop.includes("size")) {
+                    value = formatHexBytes(value);
+                }
+                table.appendChild(createInfoRow(labelKey, value));
             }
-        }
-
-        // 启动模式
-        if (data.is_9008_mode !== undefined) {
-            const bootMode = data.is_9008_mode ? "9008" : "Normal";
-            boardTable.appendChild(createInfoRow("sysinfo.boot_mode", bootMode));
-        }
-
-        // U-Boot 版本
-        if (data.uboot_version) {
-            boardTable.appendChild(createInfoRow("sysinfo.uboot_version", data.uboot_version));
         }
     }
 
-    // ========== 存储信息 ==========
-    var flashTable = createSectionTable("flash_info", "sysinfo.title.flash_info");
-    if (flashTable) {
-        // SMEM 信息
-        if (data.smeminfo) {
+    /**
+     * 渲染分区信息
+     * @param {object} partitionsInfo - 分区数据
+     * @param {HTMLTableElement} table - 目标表格
+     */
+    function renderPartitions(partitionsInfo, table) {
+        if (!partitionsInfo) return;
 
-            // 添加 SMEM 信息标题行
+        const partTypes = ["smem", "mmc"];
+
+        partTypes.forEach(function(partType) {
+            const partData = partitionsInfo[partType];
+            if (!partData || !partData.present || !partData.parts || !partData.parts.length) {
+                return;
+            }
+
+            // 添加分区类型标题行
             const headerTr = document.createElement("tr");
             headerTr.className = "tr";
 
             const headerTd = document.createElement("td");
             headerTd.className = "td left";
-            headerTd.setAttribute("colspan", "2");
+            headerTd.setAttribute("colspan", "5");
             headerTd.style.fontWeight = "600";
             headerTd.style.color = "var(--primary)";
             headerTd.style.backgroundColor = "var(--panel-2)";
-            headerTd.setAttribute("data-i18n", "sysinfo.smeminfo");
-            headerTd.textContent = t("sysinfo.smeminfo");
+            headerTd.textContent = partType.toUpperCase() + " " + t("sysinfo.title.partitions_info");
 
             headerTr.appendChild(headerTd);
-            flashTable.appendChild(headerTr);
+            table.appendChild(headerTr);
 
-            var smem = data.smeminfo;
-            if (smem.flash_type) flashTable.appendChild(createInfoRow("sysinfo.flash_type", smem.flash_type));
-            if (smem.flash_block_size) flashTable.appendChild(createInfoRow("sysinfo.flash_block_size", formatHexBytes(smem.flash_block_size)));
-            if (smem.flash_density) flashTable.appendChild(createInfoRow("sysinfo.flash_density", formatHexBytes(smem.flash_density)));
-            if (smem.flash_secondary_type) flashTable.appendChild(createInfoRow("sysinfo.flash_secondary_type", smem.flash_secondary_type));
-        }
+            // 添加表头行
+            const theadTr = document.createElement("tr");
+            theadTr.className = "tr";
 
-        // 设备信息
-        if (data.devices) {
-            var devices = data.devices;
+            const columns = [
+                { key: "sysinfo.part_index", width: "8%" },
+                { key: "sysinfo.name", width: "20%" },
+                { key: "sysinfo.part_start", width: "24%" },
+                { key: "sysinfo.part_end", width: "24%" },
+                { key: "sysinfo.size", width: "24%" }
+            ];
 
-            // SPI
-            if (devices.spi && devices.spi.present) {
-                renderDeviceInfo(devices.spi, "spi", flashTable);
-            }
+            columns.forEach(function(col) {
+                const th = document.createElement("td");
+                th.className = "td left";
+                th.setAttribute("width", col.width);
+                th.setAttribute("data-i18n", col.key);
+                th.textContent = t(col.key);
+                th.style.fontWeight = "500";
+                th.style.fontSize = "0.85rem";
+                th.style.color = "var(--muted)";
+                theadTr.appendChild(th);
+            });
 
-            // MMC
-            if (devices.mmc && devices.mmc.present) {
-                renderDeviceInfo(devices.mmc, "mmc", flashTable);
-            }
+            table.appendChild(theadTr);
 
-            // NAND
-            if (devices.nand && devices.nand.present) {
-                renderDeviceInfo(devices.nand, "nand", flashTable);
-            }
-        }
+            // 添加每个分区
+            partData.parts.forEach(function(part, index) {
+                const tr = document.createElement("tr");
+                tr.className = "tr";
 
-        // 如果没有任何设备，显示提示
-        if (flashTable.querySelectorAll("tr").length === 0) {
-            flashTable.appendChild(createInfoRow("sysinfo.no_data", t("sysinfo.no_data")));
-        }
+                const cellStyle = "font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.85rem;";
+
+                // 序号（从 1 开始）
+                const tdIndex = document.createElement("td");
+                tdIndex.className = "td left";
+                tdIndex.setAttribute("width", "8%");
+                tdIndex.textContent = index + 1;
+                tdIndex.style.cssText = cellStyle;
+
+                // 分区名
+                const tdName = document.createElement("td");
+                tdName.className = "td left";
+                tdName.setAttribute("width", "20%");
+                tdName.textContent = part.name || "";
+                tdName.style.cssText = cellStyle;
+
+                // 起始地址
+                const tdStart = document.createElement("td");
+                tdStart.className = "td left";
+                tdStart.setAttribute("width", "24%");
+                const start = part.start || 0;
+                tdStart.textContent = "0x" + start.toString(16).toUpperCase();
+                tdStart.style.cssText = cellStyle;
+
+                // 结束地址 = 起始地址 + 大小 - 1
+                const tdEnd = document.createElement("td");
+                tdEnd.className = "td left";
+                tdEnd.setAttribute("width", "24%");
+                const size = part.size || 0;
+                const end = start + size - 1;
+                tdEnd.textContent = "0x" + end.toString(16).toUpperCase();
+                tdEnd.style.cssText = cellStyle;
+
+                // 大小
+                const tdSize = document.createElement("td");
+                tdSize.className = "td left";
+                tdSize.setAttribute("width", "24%");
+                tdSize.textContent = "0x" + size.toString(16).toUpperCase() + " (" + bytesToHuman(size) + ")";
+                tdSize.style.cssText = cellStyle;
+
+                tr.appendChild(tdIndex);
+                tr.appendChild(tdName);
+                tr.appendChild(tdStart);
+                tr.appendChild(tdEnd);
+                tr.appendChild(tdSize);
+                table.appendChild(tr);
+            });
+        });
     }
 
-    // ========== 分区信息 ==========
-    var partitionTable = createSectionTable("partitions_info", "sysinfo.title.partitions_info");
-    if (partitionTable) {
-        if (data.partitions) {
-            renderPartitions(data.partitions, partitionTable);
+    /**
+     * 渲染系统信息数据
+     * @param {object} data - 解析后的系统信息数据
+     */
+    function renderData(data) {
+        // ========== 设备信息 ==========
+        const boardTable = createSectionTable("board_info", "sysinfo.title.board_info");
+        if (boardTable) {
+            if (data.board) {
+                const b = data.board;
+                if (b.hostname) boardTable.appendChild(createInfoRow("sysinfo.hostname", b.hostname));
+                if (b.model) boardTable.appendChild(createInfoRow("sysinfo.model", b.model));
+                if (b.compatible) boardTable.appendChild(createInfoRow("sysinfo.compatible", b.compatible));
+                if (b.machid) boardTable.appendChild(createInfoRow("sysinfo.machid", b.machid));
+                if (b.ram_size !== undefined) {
+                    boardTable.appendChild(createInfoRow("sysinfo.ram_size", formatHexBytes(b.ram_size)));
+                }
+            }
+
+            // 启动模式
+            if (data.is_9008_mode !== undefined) {
+                const bootMode = data.is_9008_mode ? "9008" : "Normal";
+                boardTable.appendChild(createInfoRow("sysinfo.boot_mode", bootMode));
+            }
+
+            // U-Boot 版本
+            if (data.uboot_version) {
+                boardTable.appendChild(createInfoRow("sysinfo.uboot_version", data.uboot_version));
+            }
         }
 
-        // 如果没有任何分区，显示提示
-        if (partitionTable.querySelectorAll("tr").length === 0) {
-            partitionTable.appendChild(createInfoRow("sysinfo.no_data", t("sysinfo.no_data")));
+        // ========== 存储信息 ==========
+        const flashTable = createSectionTable("flash_info", "sysinfo.title.flash_info");
+        if (flashTable) {
+            // SMEM 信息
+            if (data.smeminfo) {
+                const headerTr = document.createElement("tr");
+                headerTr.className = "tr";
+
+                const headerTd = document.createElement("td");
+                headerTd.className = "td left";
+                headerTd.setAttribute("colspan", "2");
+                headerTd.style.fontWeight = "600";
+                headerTd.style.color = "var(--primary)";
+                headerTd.style.backgroundColor = "var(--panel-2)";
+                headerTd.setAttribute("data-i18n", "sysinfo.smeminfo");
+                headerTd.textContent = t("sysinfo.smeminfo");
+
+                headerTr.appendChild(headerTd);
+                flashTable.appendChild(headerTr);
+
+                const smem = data.smeminfo;
+                if (smem.flash_type) flashTable.appendChild(createInfoRow("sysinfo.flash_type", smem.flash_type));
+                if (smem.flash_block_size) flashTable.appendChild(createInfoRow("sysinfo.flash_block_size", formatHexBytes(smem.flash_block_size)));
+                if (smem.flash_density) flashTable.appendChild(createInfoRow("sysinfo.flash_density", formatHexBytes(smem.flash_density)));
+                if (smem.flash_secondary_type) flashTable.appendChild(createInfoRow("sysinfo.flash_secondary_type", smem.flash_secondary_type));
+            }
+
+            // 设备信息
+            if (data.devices) {
+                const devices = data.devices;
+
+                if (devices.spi && devices.spi.present) {
+                    renderDeviceInfo(devices.spi, "spi", flashTable);
+                }
+
+                if (devices.mmc && devices.mmc.present) {
+                    renderDeviceInfo(devices.mmc, "mmc", flashTable);
+                }
+
+                if (devices.nand && devices.nand.present) {
+                    renderDeviceInfo(devices.nand, "nand", flashTable);
+                }
+            }
+
+            // 如果没有任何设备，显示提示
+            if (flashTable.querySelectorAll("tr").length === 0) {
+                flashTable.appendChild(createInfoRow("sysinfo.no_data", t("sysinfo.no_data")));
+            }
         }
+
+        // ========== 分区信息 ==========
+        const partitionTable = createSectionTable("partitions_info", "sysinfo.title.partitions_info");
+        if (partitionTable) {
+            if (data.partitions) {
+                renderPartitions(data.partitions, partitionTable);
+            }
+
+            // 如果没有任何分区，显示提示
+            if (partitionTable.querySelectorAll("tr").length === 0) {
+                partitionTable.appendChild(createInfoRow("sysinfo.no_data", t("sysinfo.no_data")));
+            }
+        }
+
+        // 应用国际化到所有板块
+        sectionIds.forEach(function(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                applyI18n(el);
+            }
+        });
     }
 
-    // 应用国际化
-    sections.forEach(function(id) {
-        var el = document.getElementById(id);
-        if (el) {
-            applyI18n(el);
-        }
-    });
-}
-
-/**
- * 获取系统信息并将其存储在 APP_STATE 中
- */
-function getAndStoreSysinfo() {
-    ajax({
-        url: "/sysinfo",
-        timeout: 10000,
-        done: function(responseText) {
-            try {
-                APP_STATE.sysinfo = JSON.parse(responseText);
-            } catch (e) {
-                return;
+    /**
+     * 显示加载状态
+     */
+    function showLoading() {
+        sectionIds.forEach(function(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                const inner = el.querySelector(".card-main-inner");
+                if (inner) {
+                    inner.innerHTML = '<span style="color: var(--muted);">' +
+                        t("sysinfo.loading") + '</span>';
+                }
             }
-        }
-    });
-}
+        });
+    }
 
-/**
- * 系统信息页面初始化
- */
-function sysinfoInit() {
-    // 显示加载状态
-    const sections = ["board_info", "flash_info", "partitions_info"];
-    sections.forEach(function(id) {
-        var el = document.getElementById(id);
-        if (el) {
-            var inner = el.querySelector(".card-main-inner");
-            if (inner) {
-                inner.innerHTML = '<span style="color: var(--muted);">' + t("sysinfo.loading") + '</span>';
+    /**
+     * 显示错误状态
+     * @param {string} errorKey - 错误信息的国际化 key
+     */
+    function showError(errorKey) {
+        sectionIds.forEach(function(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                const inner = el.querySelector(".card-main-inner");
+                if (inner) {
+                    inner.innerHTML = '<span style="color: var(--danger);">' +
+                        t(errorKey) + '</span>';
+                }
             }
-        }
-    });
+        });
+    }
 
-    // 请求系统信息
-    ajax({
-        url: "/sysinfo",
-        timeout: 10000,
-        done: function(responseText) {
-            var data;
-            try {
-                data = JSON.parse(responseText);
-            } catch (e) {
-                sections.forEach(function(id) {
-                    var el = document.getElementById(id);
-                    if (el) {
-                        var inner = el.querySelector(".card-main-inner");
-                        if (inner) {
-                            inner.innerHTML = '<span style="color: var(--danger);">' + t("sysinfo.error.parse") + '</span>';
-                        }
-                    }
-                });
-                return;
+    /**
+     * 加载系统信息
+     */
+    function load() {
+        showLoading();
+
+        ajax({
+            url: "/sysinfo",
+            timeout: 10000,
+            done: function(responseText) {
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    showError("sysinfo.error.parse");
+                    return;
+                }
+
+                renderData(data);
             }
+        });
+    }
 
-            renderSysinfoData(sections, data);
-        }
-    });
-}
+    /**
+     * 获取系统信息并存储在全局状态中
+     * 供其他模块使用（如 MIBIB 重载模块需要检查 9008 模式）
+     */
+    function fetchAndStore() {
+        ajax({
+            url: "/sysinfo",
+            timeout: 10000,
+            done: function(responseText) {
+                try {
+                    APP_STATE.sysinfo = JSON.parse(responseText);
+                } catch (e) {
+                    // 静默失败，其他模块会检查 APP_STATE.sysinfo
+                }
+            }
+        });
+    }
 
-// 导出初始化函数
-window.sysinfoInit = sysinfoInit;
+    /**
+     * 初始化系统信息管理器
+     */
+    function init() {
+        load();
+    }
+
+    // 导出公共 API
+    return {
+        init,
+        load,
+        fetchAndStore,
+    };
+})();
 
 // ==============================
 // MIBIB 重载模块
 // ==============================
 
 /**
- * 处理MIBIB重载成功
+ * MIBIB 重载管理器
+ * 负责处理 9008 模式下的 MIBIB 重载操作
  */
-function handleMibibReloadSuccess(elements) {
-    const {
-        successInfo,
-        progressCircle
-    } = elements;
+const mibibManager = (() => {
+    // 私有变量
+    let elements = null;
 
-    if (progressCircle) progressCircle.style.display = "none";
-    if (successInfo) {
-        successInfo.innerHTML = t("mibib.success");
-        successInfo.style.display = "block";
-    }
-}
+    /**
+     * 获取或缓存 DOM 元素
+     */
+    function getElements() {
+        if (elements) return elements;
 
-/**
- * 处理MIBIB重载失败
- */
-function handleMibibReloadError(info, elements) {
-    const {
-        errorInfo,
-        progressCircle
-    } = elements;
+        elements = {
+            form: document.getElementById("form"),
+            fileInput: document.getElementById("file"),
+            progressCircle: document.getElementById("bar-circle"),
+            successInfo: document.getElementById("success-info"),
+            errorInfo: document.getElementById("error-info"),
+        };
 
-    if (progressCircle) progressCircle.style.display = "none";
-
-    // 根据错误类型生成错误信息
-    let errorMessage = "";
-
-    switch (info.type) {
-        case "wrong_file_type":
-            errorMessage = generateWrongFileTypeMessage(info);
-            break;
-        case "flash_not_found":
-            errorMessage = generateFlashNotFoundMessage(info);
-            break;
-        default:
-            errorMessage = JSON.stringify(info) || t("error.unknown_type");
+        return elements;
     }
 
-    // 显示错误信息
-    if (errorInfo) {
-        errorInfo.style.display = "block";
-        errorInfo.innerHTML = errorMessage;
-    }
-}
-
-/**
- * 处理无效的MIBIB重载响应信息
- */
-function handleInvalidMibibReloadResponse(message, elements) {
-    const {
-        errorInfo,
-        progressCircle
-    } = elements;
-
-    if (progressCircle) progressCircle.style.display = "none";
-
-    if (errorInfo) {
-        errorInfo.style.display = "block";
-        errorInfo.innerHTML = `<div class="error-detail">${escapeHtml(message)}</div>`;
-    }
-}
-
-/**
- * 处理MIBIB重载
- */
-function mibibReload() {
-    const sysinfo = APP_STATE.sysinfo;
-
-    if (sysinfo && !sysinfo.is_9008_mode) {
-        alert(t("mibib.not_9008"));
-        return;
+    /**
+     * 检查是否处于 9008 模式
+     * @returns {boolean}
+     */
+    function is9008Mode() {
+        const sysinfo = APP_STATE.sysinfo;
+        return sysinfo && sysinfo.is_9008_mode;
     }
 
-    const fileInput = document.getElementById("file");
-    const file = fileInput.files[0];
-
-    if (!file) {
-        alert(t("file.select"));
-        return;
+    /**
+     * 显示进度
+     * @param {number} percent - 进度百分比
+     */
+    function showProgress(percent) {
+        const els = getElements();
+        if (els.form) els.form.style.display = "none";
+        if (els.successInfo) els.successInfo.style.display = "none";
+        if (els.errorInfo) els.errorInfo.style.display = "none";
+        if (els.progressCircle) {
+            els.progressCircle.style.display = "block";
+            els.progressCircle.style.setProperty("--percent", percent);
+        }
     }
 
-    // 获取页面相关元素
-    const formElement = document.getElementById("form");
-    const successInfo = document.getElementById("success-info");
-    const errorInfo = document.getElementById("error-info");
-    const progressCircle = document.getElementById("bar-circle");
+    /**
+     * 隐藏进度
+     */
+    function hideProgress() {
+        const els = getElements();
+        if (els.progressCircle) els.progressCircle.style.display = "none";
+    }
 
-    // 显示圆环进度条，隐藏无关元素
-    if (formElement) formElement.style.display = "none";
-    if (successInfo) successInfo.style.display = "none";
-    if (errorInfo) errorInfo.style.display = "none";
-    if (progressCircle) progressCircle.style.display = "block";
+    /**
+     * 处理重载成功
+     */
+    function handleSuccess() {
+        const els = getElements();
+        hideProgress();
+        if (els.successInfo) {
+            els.successInfo.style.display = "block";
+        }
+    }
 
-    // 准备表单数据
-    const formData = new FormData();
-    formData.append("mibib", file);
+    /**
+     * 处理重载失败
+     * @param {object} info - 错误信息对象
+     */
+    function handleError(info) {
+        const els = getElements();
+        hideProgress();
 
-    // 发送上传请求
-    ajax({
-        url: "/mibib/reload",
-        data: formData,
-        done: function(responseText) {
-            let response;
+        let errorMessage = "";
 
-            // 尝试解析JSON响应
-            try {
-                response = JSON.parse(responseText);
-            } catch (e) {
-                // 无效的JSON，显示错误
-                handleInvalidMibibReloadResponse(responseText || t("error.invalid_response"), {
-                    errorInfo,
-                    progressCircle
-                });
-                return;
-            }
+        switch (info?.type) {
+            case "wrong_file_type":
+                errorMessage = errorMessageBuilder.buildWrongFileTypeMessage(info);
+                break;
+            case "flash_not_found":
+                errorMessage = errorMessageBuilder.buildFlashNotFoundMessage(info);
+                break;
+            default:
+                errorMessage = errorMessageBuilder.buildUnknownErrorMessage(info);
+        }
 
-            switch (response.status) {
-                case "success":
-                    handleMibibReloadSuccess({
-                        successInfo,
-                        progressCircle
-                    })
-                    break;
-                case "fail":
-                    handleMibibReloadError(response.info, {
-                        errorInfo,
-                        progressCircle
-                    });
-                    break;
-                default:
-                    handleInvalidMibibReloadResponse(responseText || t("error.unknown_status"), {
-                        errorInfo,
-                        progressCircle
-                    });
-            }
-        },
-        progress: function(event) {
-            if (event.lengthComputable && event.total > 0) {
-                const percent = parseInt((event.loaded / event.total) * 100);
-                const progressCircle = document.getElementById("bar-circle");
+        if (els.errorInfo) {
+            els.errorInfo.style.display = "block";
+            els.errorInfo.innerHTML = errorMessage;
+        }
+    }
 
-                if (progressCircle) {
-                    progressCircle.style.display = "block";
-                    progressCircle.style.setProperty("--percent", percent);
+    /**
+     * 处理无效响应
+     * @param {string} message - 原始响应消息
+     */
+    function handleInvalidResponse(message) {
+        const els = getElements();
+        hideProgress();
+
+        if (els.errorInfo) {
+            els.errorInfo.style.display = "block";
+            els.errorInfo.innerHTML = errorMessageBuilder.buildInvalidResponseMessage(message);
+        }
+    }
+
+    /**
+     * 执行重载操作
+     */
+    function reload() {
+        const els = getElements();
+
+        // 检查 9008 模式
+        if (!is9008Mode()) {
+            alert(t("mibib.not_9008"));
+            return;
+        }
+
+        const file = els.fileInput?.files[0];
+
+        if (!file) {
+            alert(t("file.select"));
+            return;
+        }
+
+        // 显示进度
+        showProgress(0);
+
+        // 准备表单数据
+        const formData = new FormData();
+        formData.append("mibib", file);
+
+        // 发送请求
+        ajax({
+            url: "/mibib/reload",
+            data: formData,
+            done: function(responseText) {
+                let response;
+
+                // 尝试解析JSON响应
+                try {
+                    response = JSON.parse(responseText);
+                } catch (e) {
+                    handleInvalidResponse(responseText || t("error.invalid_response"));
+                    return;
+                }
+
+                switch (response.status) {
+                    case "success":
+                        handleSuccess();
+                        break;
+                    case "fail":
+                        handleError(response.info);
+                        break;
+                    default:
+                        handleInvalidResponse(responseText || t("error.unknown_status"));
+                }
+            },
+            progress: function(event) {
+                if (event.lengthComputable && event.total > 0) {
+                    const percent = parseInt((event.loaded / event.total) * 100);
+                    showProgress(percent);
                 }
             }
+        });
+    }
+
+    /**
+     * 初始化 MIBIB 管理器
+     */
+    function init() {
+        // 确保有系统信息
+        if (!APP_STATE.sysinfo) {
+            sysinfoManager.fetchAndStore();
         }
-    });
-}
+    }
+
+    // 导出公共 API
+    return {
+        init,
+        reload,
+    };
+})();
 
 // ==============================
 // 国际化数据

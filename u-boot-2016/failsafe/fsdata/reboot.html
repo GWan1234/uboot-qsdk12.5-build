@@ -7,26 +7,9 @@
 	<title></title>
 	<link rel="stylesheet" href="/style.css">
 	<script src="/main.js"></script>
-	<script>
-		function init() {
-			appInit('reboot');
-
-			/*
-			 * Trigger reboot via background request.
-			 * Device will reset shortly after the HTTP connection is closed.
-			 */
-			ajax({
-				url: '/reboot',
-				done: function (response) {
-					/* server may already be rebooting; keep the page as-is */
-				},
-				timeout: 30000
-			})
-		}
-	</script>
 </head>
 
-<body onload="init()">
+<body onload="resultManager.init('reboot')">
 	<div class="app">
 		<aside id="sidebar" class="sidebar"></aside>
         <div class="sidebar-overlay" id="sidebarOverlay"></div>
