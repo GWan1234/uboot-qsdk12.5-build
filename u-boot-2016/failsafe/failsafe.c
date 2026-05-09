@@ -74,8 +74,8 @@ static int gunzip_and_send(struct httpd_response *response,
 	void *dst = NULL;
 	ulong len = file->uncompressed_size;
 
-	httpd_debug("[DEBUG] %s(): gunzipping %s (%u -> %u bytes)\n",
-           __func__, filename, file->size, file->uncompressed_size);
+	httpd_debug("gunzipping %s (%u -> %u bytes)\n",
+		filename, file->size, file->uncompressed_size);
 
 #if defined(CONFIG_GZIP)
 	dst = malloc(file->uncompressed_size);
@@ -352,7 +352,7 @@ static void upload_handler(enum httpd_uri_handler_status status,
 			goto done;
 		}
 
-		httpd_debug("[DEBUG] %s(): NOT supported upgrade type!\n", __func__);
+		puts("NO supported upgrade type found!\n");
 
 		/* 没有匹配的 upgrade_type，返回 fail*/
 		response->data = "{\"status\":\"fail\","
@@ -360,7 +360,7 @@ static void upload_handler(enum httpd_uri_handler_status status,
 		response->size = strlen(response->data);
 		sess->body_sent = 1;
 
-		httpd_debug("[DEBUG] %s(): response message: %s\n", __func__, response->data);
+		httpd_debug("response message: %s\n", response->data);
 
 		return;
 
@@ -369,15 +369,15 @@ static void upload_handler(enum httpd_uri_handler_status status,
 		upload_data = form_value->data;
 		upload_size = form_value->size;
 
-		httpd_debug("[DEBUG] %s(): upload_data = 0x%p, upload_size = %lu (0x%lx)\n",
-					__func__, upload_data, (ulong)upload_size, (ulong)upload_size);
+		httpd_debug("upload_data = 0x%lx, upload_size = %lu (0x%lx)\n",
+			(ulong)upload_data, (ulong)upload_size, (ulong)upload_size);
 
 		sess->ret = failsafe_validate_image(upgrade_type,
 						upload_data, (ulong)upload_size, response);
 
 		sess->body_sent = 1;
 
-		httpd_debug("[DEBUG] %s(): response message: %s\n", __func__, response->data);
+		httpd_debug("response message: %s\n", response->data);
 
 		return;
 	}
@@ -471,7 +471,7 @@ static void result_handler(enum httpd_uri_handler_status status,
 		response->size = strlen(response->data);
 		st->body_sent = 1;
 
-		httpd_debug("[DEBUG] %s(): response message: %s\n", __func__, response->data);
+		httpd_debug("response message: %s\n", response->data);
 
 		return;
 	}

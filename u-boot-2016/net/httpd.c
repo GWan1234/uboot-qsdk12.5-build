@@ -524,7 +524,7 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 			while (*cl_ptr == ' ')
 				cl_ptr++;
 			pdata->payload_size = simple_strtoul(cl_ptr, NULL, 10);
-			printf("    Content-Length: %d Bytes\n", pdata->payload_size);
+			httpd_debug("Content-Length: %d Bytes\n", pdata->payload_size);
 		}
 
 		/* Content-Type */
@@ -594,8 +594,7 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 			memcpy(pdata->upload_ptr, cbd->data + hdr_size, pdata->upload_size);
 		}
 
-		httpd_debug("[DEBUG] %s(): pdata->upload_ptr = 0x%p\n",
-			__func__, (void *)pdata->upload_ptr);
+		httpd_debug("pdata->upload_ptr = 0x%lx\n", (ulong)pdata->upload_ptr);
 
 		if (pdata->upload_size == pdata->payload_size) {
 			/* upload completed */
@@ -755,7 +754,7 @@ static int httpd_parse_post_data(struct tcp_cb_data *cbd)
 		numformdata++;
 	} while (numformdata < MAX_HTTP_FORM_VALUE_ITEMS);
 
-	httpd_debug("[DEBUG] %s(): numformdata in total: %u\n", __func__, numformdata);
+	httpd_debug("numformdata: %u\n", numformdata);
 
 	/* process each formdata */
 	for (i = 0; i < numformdata; i++) {
@@ -795,10 +794,8 @@ static int httpd_parse_post_data(struct tcp_cb_data *cbd)
 			((char *)val->data)[val->size] = 0;
 		}
 
-		httpd_debug("[DEBUG] %s(): numformdata = %u, val->name = %s, "
-			"val->filename = %s, val->data = 0x%p, val->size = %lu (0x%lx)\n",
-			__func__, i + 1, val->name,
-			val->filename, val->data, (ulong)val->size, (ulong)val->size);
+		httpd_debug("formdata[%u]: name = %s, filename = %s, data = 0x%lx, size = %lu (0x%lx)\n",
+			i + 1, val->name, val->filename, (ulong)val->data, (ulong)val->size, (ulong)val->size);
 	}
 
 	free(boundary);
@@ -947,8 +944,7 @@ static void httpd_cleanup(struct httpd_instance *inst, struct tcp_cb_data *cbd)
 
     /* 释放动态分配的解压缓冲区 */
     if (resp->gunzip_buffer) {
-        httpd_debug("[DEBUG] %s(): Freeing gunzip buffer at 0x%p\n",
-			__func__, resp->gunzip_buffer);
+        httpd_debug("Freeing gunzip buffer at 0x%lx\n", (ulong)resp->gunzip_buffer);
         free(resp->gunzip_buffer);
         resp->gunzip_buffer = NULL;
     }

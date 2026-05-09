@@ -6,7 +6,7 @@ extern int httpd_debug_state;
 #define httpd_debug(fmt, args...)   \
     do {    \
         if (httpd_debug_state)  \
-            printf(fmt, ##args);    \
+            printf("%s: " fmt, __func__, ##args);    \
     } while (0)
 #else
 #define httpd_debug(fmt, args...)   do { } while (0)
