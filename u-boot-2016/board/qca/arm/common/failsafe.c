@@ -152,28 +152,28 @@ static int check_part_exists(const char *part_name, int flag)
  * check_file_size_is_valid - 检查文件大小是否合法
  * @file_name: 文件名
  * @part_name: 分区名（该文件将要被刷写到的分区）
- * @file_size_in_bytes: 文件大小字节数
+ * @file_size_bytes: 文件大小字节数
  *
  * 如果文件大小超过相应分区大小，返回 RET_FILE_TOO_BIG；
  * 如果未找到相应分区，返回 RET_PART_NOT_FOUND；
  * 否则，返回 RET_SUCCESS。
  */
 static int check_file_size_is_valid(char *file_name, char *part_name,
-							const ulong file_size_in_bytes)
+							const ulong file_size_bytes)
 {
 	int ret;
     block_dev_desc_t *mmc_dev;
     disk_partition_t disk_info = {0};
-    ulong part_size_in_blocks = 0;
-	ulong part_size_in_bytes = 0;
-    ulong file_size_in_blocks = 0;
+    ulong part_size_blocks = 0;
+	ulong part_size_bytes = 0;
+    ulong file_size_blocks = 0;
 	uint32_t offset_bytes, size_bytes;
 
 	if (dfd->spi || dfd->nand) {
 		ret = getpart_offset_size(part_name, &offset_bytes, &size_bytes);
 		if (!ret) {
-			part_size_in_bytes = (ulong)size_bytes;
-			if (file_size_in_bytes > part_size_in_bytes)
+			part_size_bytes = (ulong)size_bytes;
+			if (file_size_bytes > part_size_bytes)
 				goto file_too_big;
 			return RET_SUCCESS;
 		}
@@ -190,14 +190,14 @@ static int check_file_size_is_valid(char *file_name, char *part_name,
 	if (ret)
 		goto part_not_found;
 
-	part_size_in_blocks = (ulong)disk_info.size;
-	part_size_in_bytes = part_size_in_blocks * disk_info.blksz;
+	part_size_blocks = (ulong)disk_info.size;
+	part_size_bytes = part_size_blocks * disk_info.blksz;
 
 	if (disk_info.blksz)
-		file_size_in_blocks = file_size_in_bytes / disk_info.blksz
-								+ (file_size_in_bytes % disk_info.blksz != 0);
+		file_size_blocks = file_size_bytes / disk_info.blksz
+								+ (file_size_bytes % disk_info.blksz != 0);
 
-	if (file_size_in_blocks > part_size_in_blocks)
+	if (file_size_blocks > part_size_blocks)
 		goto file_too_big;
 
 	return RET_SUCCESS;
@@ -207,10 +207,10 @@ file_too_big:
 		"{\"type\":\"file_too_big\","
 		"\"filename\":\"%s\",\"filesize\":\"%lu\","
 		"\"partname\":\"%s\",\"partsize\":\"%lu\"}",
-		file_name, file_size_in_bytes,
-		part_name, part_size_in_bytes);
+		file_name, file_size_bytes,
+		part_name, part_size_bytes);
 	printf("Error: %s size (%lu bytes) exceeds partition %s size (%lu bytes)\n",
-		file_name, file_size_in_bytes, part_name, part_size_in_bytes);
+		file_name, file_size_bytes, part_name, part_size_bytes);
 	return RET_FILE_TOO_BIG;
 
 part_not_found:
@@ -221,7 +221,7 @@ part_not_found:
 	return RET_PART_NOT_FOUND;
 }
 
-static inline void handle_wrong_fw_type(const char *expected_file_type_str, const int fw_type)
+static void handle_wrong_fw_type(const char *expected_file_type_str, const int fw_type)
 {
 	char *actual_file_type_str = fw_type_to_string(fw_type);
 	snprintf(info, sizeof(info),
@@ -232,7 +232,7 @@ static inline void handle_wrong_fw_type(const char *expected_file_type_str, cons
 		expected_file_type_str, actual_file_type_str);
 }
 
-static inline void handle_flash_not_found(const int fw_type, const char *flash_type_str)
+static void handle_flash_not_found(const int fw_type, const char *flash_type_str)
 {
 	char *fw_type_str = fw_type_to_string(fw_type);
 	snprintf(info, sizeof(info),
@@ -243,7 +243,7 @@ static inline void handle_flash_not_found(const int fw_type, const char *flash_t
 		fw_type_str, flash_type_str);
 }
 
-static inline void handle_invalid_jdc_fw(const char *node_prefix)
+static void handle_invalid_jdc_fw(const char *node_prefix)
 {
 	snprintf(info, sizeof(info),
 		"{\"type\":\"fit_node_not_found\","
@@ -259,24 +259,24 @@ static int get_jdc_fw_node_name(const void * data_addr)
                             jdc_fw.hlos_name, sizeof(jdc_fw.hlos_name));
     if (ret) {
         handle_invalid_jdc_fw("hlos");
-		return -1;
+		return RET_FAILURE;
     }
 
     ret = fit_image_get_node_by_prefix(fit, FIT_IMAGES_PATH, "rootfs",
                             jdc_fw.rootfs_name, sizeof(jdc_fw.rootfs_name));
     if (ret) {
         handle_invalid_jdc_fw("rootfs");
-		return -1;
+		return RET_FAILURE;
     }
 
     ret = fit_image_get_node_by_prefix(fit, FIT_IMAGES_PATH, "wififw",
                             jdc_fw.wififw_name, sizeof(jdc_fw.wififw_name));
     if (ret) {
         handle_invalid_jdc_fw("wififw");
-		return -1;
+		return RET_FAILURE;
     }
 
-	return 0;
+	return RET_SUCCESS;
 }
 
 static int failsafe_validate_firmware(const void *data_addr, const ulong data_size)
@@ -503,7 +503,7 @@ static int failsafe_validate_initramfs(const void *data_addr, const ulong data_s
 }
 
 int failsafe_validate_image(const int upgrade_type, const void *data_addr,
-			const ulong data_size_in_bytes, struct httpd_response *response)
+		const ulong data_size, struct httpd_response *response)
 {
 	int ret;
 
@@ -517,25 +517,25 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 
 	switch (upgrade_type) {
 	case WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE:
-		ret = failsafe_validate_firmware(data_addr, data_size_in_bytes);
+		ret = failsafe_validate_firmware(data_addr, data_size);
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_UBOOT:
-		ret = failsafe_validate_uboot(data_addr, data_size_in_bytes);
+		ret = failsafe_validate_uboot(data_addr, data_size);
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_ART:
-		ret = failsafe_validate_art(data_addr, data_size_in_bytes);
+		ret = failsafe_validate_art(data_addr, data_size);
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_CDT:
-		ret = failsafe_validate_cdt(data_addr, data_size_in_bytes);
+		ret = failsafe_validate_cdt(data_addr, data_size);
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_PTABLE:
-		ret = failsafe_validate_ptable(data_addr, data_size_in_bytes);
+		ret = failsafe_validate_ptable(data_addr, data_size);
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_SIMG:
-		ret = failsafe_validate_simg(data_addr, data_size_in_bytes);
+		ret = failsafe_validate_simg(data_addr, data_size);
 		break;
 	case WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS:
-		ret = failsafe_validate_initramfs(data_addr, data_size_in_bytes);
+		ret = failsafe_validate_initramfs(data_addr, data_size);
 		break;
 	default:
 		strlcpy(info, "{\"type\":\"wrong_upgrade_type\"}", sizeof(info));
@@ -549,7 +549,7 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 		u8 md5_sum[16];
 
 		memset(md5_str, 0, sizeof(md5_str));
-		md5((u8 *)data_addr, data_size_in_bytes, md5_sum);
+		md5((u8 *)data_addr, data_size, md5_sum);
 
 		for (int i = 0; i < 16; i++) {
 			u8 hex = (md5_sum[i] >> 4) & 0xf;
@@ -558,9 +558,10 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 			md5_str[i * 2 + 1] = hexchars[hex];
 		}
 
+		// TODO: 加入文件名
 		snprintf(info, sizeof(info),
 			"{\"type\":\"%s\",\"size\":\"%lu\",\"md5\":\"%s\"}",
-			fw_type_to_string(fw_type), data_size_in_bytes, md5_str);
+			fw_type_to_string(fw_type), data_size, md5_str);
 	}
 
 	snprintf(resp, sizeof(resp),
@@ -633,9 +634,9 @@ static int run_command_capture(const char *cmd)
 	return ret;
 }
 
-static int failsafe_run_command_list(struct cmdlist runcmd)
+static int failsafe_run_command_list(struct cmdlist *runcmd)
 {
-    struct cmdlist *p = &runcmd;
+    struct cmdlist *p = runcmd;
 
     if (p->count > MAX_CMD_COUNT) {
         printf("\nError: too many commands (current: %d, max: %d), "
@@ -728,7 +729,7 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 		return RET_WRONG_FW_TYPE;
 	}
 
-	return failsafe_run_command_list(runcmd);
+	return failsafe_run_command_list(&runcmd);
 }
 
 static int failsafe_write_uboot(const ulong data_addr, const ulong data_size)
@@ -744,17 +745,14 @@ static int failsafe_write_uboot(const ulong data_addr, const ulong data_size)
         return RET_WRONG_FW_TYPE;
 	}
 
-	int ret;
-
 	snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 		"flash 0:APPSBL 0x%lx 0x%lx", data_addr, data_size);
 
-	ret = check_part_exists("0:APPSBL_1", 0);
-	if (!ret)
+	if (!check_part_exists("0:APPSBL_1", 0))
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"flash 0:APPSBL_1 0x%lx 0x%lx", data_addr, data_size);
 
-	return failsafe_run_command_list(runcmd);
+	return failsafe_run_command_list(&runcmd);
 }
 
 static int failsafe_write_art(const ulong data_addr, const ulong data_size)
@@ -768,7 +766,7 @@ static int failsafe_write_art(const ulong data_addr, const ulong data_size)
 	snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 		"flash 0:ART 0x%lx 0x%lx", data_addr, data_size);
 
-	return failsafe_run_command_list(runcmd);
+	return failsafe_run_command_list(&runcmd);
 }
 
 static int failsafe_write_cdt(const ulong data_addr, const ulong data_size)
@@ -784,17 +782,14 @@ static int failsafe_write_cdt(const ulong data_addr, const ulong data_size)
         return RET_WRONG_FW_TYPE;
 	}
 
-	int ret;
-
 	snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 		"flash 0:CDT 0x%lx 0x%lx", data_addr, data_size);
 
-	ret = check_part_exists("0:CDT_1", 0);
-	if (!ret)
+	if (!check_part_exists("0:CDT_1", 0))
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"flash 0:CDT_1 0x%lx 0x%lx", data_addr, data_size);
 
-	return failsafe_run_command_list(runcmd);
+	return failsafe_run_command_list(&runcmd);
 }
 
 static void handle_gpt_write_cmd(const ulong data_addr, const ulong data_size)
@@ -853,10 +848,10 @@ static int failsafe_write_ptable(const ulong data_addr, const ulong data_size)
         return RET_WRONG_FW_TYPE;
     }
 
-	return failsafe_run_command_list(runcmd);
+	return failsafe_run_command_list(&runcmd);
 }
 
-static inline ulong get_writable_data_size(const uint32_t data_size)
+static ulong get_nand_writable_data_size(const uint32_t data_size)
 {
 	uint32_t adj_size, writable_size = data_size;
 	nand_info_t *nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
@@ -891,7 +886,7 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 			handle_flash_not_found(fw_type, "NAND");
 			return RET_FLASH_NOT_FOUND;
 		}
-		ulong writable_size = get_writable_data_size((const uint32_t)data_size);
+		ulong writable_size = get_nand_writable_data_size((const uint32_t)data_size);
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"nand erase 0x0 0x%lx && "
 			"nand write 0x%lx 0x0 0x%lx",
@@ -912,7 +907,7 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 		return RET_WRONG_FW_TYPE;
 	}
 
-	return failsafe_run_command_list(runcmd);
+	return failsafe_run_command_list(&runcmd);
 }
 
 int failsafe_write_image(const int upgrade_type, const ulong data_addr,

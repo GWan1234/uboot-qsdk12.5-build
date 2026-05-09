@@ -32,7 +32,7 @@
 #include "modules/webconsole.h"
 
 #if defined(CONFIG_HTTPD_DEBUG)
-int httpd_debug_state;
+bool httpd_debug_on;
 #endif
 
 /*
@@ -56,20 +56,19 @@ int __weak boot_from_mem(const ulong data_addr)
 }
 
 int __weak failsafe_validate_image(const int upgrade_type, const void *data_addr,
-			const ulong data_size_in_bytes, struct httpd_response *response)
+		const ulong data_size, struct httpd_response *response)
 {
 	return RET_SUCCESS;
 }
 
 int __weak failsafe_write_image(const int upgrade_type, const ulong data_addr,
-				const ulong data_size, struct httpd_response *response)
+		const ulong data_size, struct httpd_response *response)
 {
 	return RET_FAILURE;
 }
 
 static int gunzip_and_send(struct httpd_response *response,
-				const struct fs_desc *file,
-				const char *filename)
+		const struct fs_desc *file, const char *filename)
 {
 	void *dst = NULL;
 	ulong len = file->uncompressed_size;
@@ -111,8 +110,7 @@ static int gunzip_and_send(struct httpd_response *response,
 	return 0;
 }
 
-static int output_plain_file(struct httpd_response *response,
-				const char *filename)
+static int output_plain_file(struct httpd_response *response, const char *filename)
 {
 	const struct fs_desc *file;
 
@@ -599,9 +597,9 @@ static int do_httpd(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 
 #if defined(CONFIG_HTTPD_DEBUG)
 	if (getenv("httpd_debug") || is_9008_mode)
-		httpd_debug_state = 1;
+		httpd_debug_on = true;
 	else
-		httpd_debug_state = 0;
+		httpd_debug_on = false;
 #endif
 
 #if defined(CONFIG_NET_FORCE_IPADDR)

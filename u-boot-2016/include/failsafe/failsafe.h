@@ -2,10 +2,10 @@
 #define __FAILSAFE_H__
 
 #if defined(CONFIG_HTTPD_DEBUG)
-extern int httpd_debug_state;
+extern bool httpd_debug_on;
 #define httpd_debug(fmt, args...)   \
     do {    \
-        if (httpd_debug_state)  \
+        if (httpd_debug_on)  \
             printf("%s: " fmt, __func__, ##args);    \
     } while (0)
 #else
