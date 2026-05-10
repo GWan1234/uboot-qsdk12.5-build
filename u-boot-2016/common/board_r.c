@@ -643,7 +643,7 @@ static int initr_bbmii(void)
 #ifdef CONFIG_CMD_NET
 static int initr_net(void)
 {
-#if !defined(CONFIG_IPQ_ETH_INIT_DEFER)
+#if defined(CONFIG_HTTPD) || !defined(CONFIG_IPQ_ETH_INIT_DEFER)
 	puts("Net: ");
 	eth_initialize();
 #endif

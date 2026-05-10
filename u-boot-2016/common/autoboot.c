@@ -425,7 +425,7 @@ void autoboot_command(const char *s)
 	}
 #endif /* CONFIG_MENUKEY */
 
-#ifdef CONFIG_IPQ_ETH_INIT_DEFER
+#if !defined(CONFIG_HTTPD) && defined(CONFIG_IPQ_ETH_INIT_DEFER)
 	puts("\nNet:   ");
 	eth_initialize();
 #endif

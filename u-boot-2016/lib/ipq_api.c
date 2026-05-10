@@ -124,11 +124,7 @@ static bool button_is_pressed_for_enough_time(void)
 	else
 		return false;
 
-#if defined(CONFIG_IPQ_ETH_INIT_DEFER)
-	puts("Net: ");
-	eth_initialize();
-#endif
-	printf("\n%s button pressed, enter web failsafe mode after: %-2d", button_name, counter);
+	printf("%s button pressed, enter web failsafe mode after: %-2d", button_name, counter);
 
 	while (button_name != NULL) {
         bool still_pressed = false;
@@ -181,31 +177,38 @@ static bool failsafe_env_exists(void)
 
 void do_httpd_check(void)
 {
-	bool start_httpd = false;
+	ulong ts;
+	int counter = 3;
+	bool abort = false, start_httpd = false;
 
 	if (is_9008_mode || failsafe_env_exists()) {
-#if defined(CONFIG_IPQ_ETH_INIT_DEFER)
-		puts("Net: ");
-		eth_initialize();
-
-		printf("%s, enter web failsafe mode after: 3 ",
-			is_9008_mode ? "currently in 9008 mode" : "failsafe env variable detected");
+		puts(is_9008_mode ? "currently in 9008 mode" : "failsafe env variable defined");
+		printf(", enter web failsafe mode after: %-2d", counter);
 		/* Wait 3s for link to settle down */
-		for (int i = 3; i > 0; i--) {
-			led_off("power_led");
-			mdelay(500);
-			led_on("power_led");
-			mdelay(500);
-			printf("\b\b%-2d", i - 1);
+		while (!abort && counter > 0) {
+			led_toggle("power_led");
+			counter--;
+			ts = get_timer(0);
+			do {
+				if (tstc()) { /* we got a key press	*/
+					abort = true;
+					counter = 0;
+					(void) getc(); /* consume input	*/
+					break;;
+				}
+			} while (!abort && get_timer(ts) < 1000);
+			printf("\b\b%-2d", counter);
 		}
 		putc('\n');
-#else
-		printf("%s, auto enter web failsafe mode\n",
-			is_9008_mode ? "currently in 9008 mode" : "failsafe env variable detected");
-#endif /* CONFIG_IPQ_ETH_INIT_DEFER */
 		start_httpd = true;
-	} else if (button_is_pressed_for_enough_time()) {
-		start_httpd = true;
+	}
+
+	if (!start_httpd)
+		start_httpd = button_is_pressed_for_enough_time();
+
+	if (abort) {
+		led_on("power_led");
+		cli_loop();
 	}
 
 	if (start_httpd) {
