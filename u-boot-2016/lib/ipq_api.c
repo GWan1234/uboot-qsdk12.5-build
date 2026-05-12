@@ -19,6 +19,16 @@ extern qca_mmc mmc_host;
 extern struct sdhci_host mmc_host;
 #endif
 
+#define BUTTON_PRESSED           0
+
+#define RESET_BUTTON_NAME        "reset_key"
+#define WPS_BUTTON_NAME          "wps_key"
+#define SCREEN_BUTTON_NAME       "screen_key"
+
+enum BUTTON {
+	RESET, WPS, SCREEN
+};
+
 detected_flash_device_t detected_flash_device;
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -87,14 +97,26 @@ void led_off(const char *gpio_name)
 	return;
 }
 
-bool button_is_pressed(const char *gpio_name, int value)
+static bool button_is_pressed(enum BUTTON button, int value)
 {
 	unsigned int gpio;
+	const char *button_name;
 
-	if (strcmp(gpio_name, "RESET") == 0)
-		gpio = fdt_get_gpio_by_name(gpio_name, 1);
-	else
-		gpio = fdt_get_gpio_by_name(gpio_name, 0);
+	switch (button) {
+	case RESET:
+		button_name = RESET_BUTTON_NAME;
+		break;
+	case WPS:
+		button_name = WPS_BUTTON_NAME;
+		break;
+	case SCREEN:
+		button_name = SCREEN_BUTTON_NAME;
+		break;
+	default:
+		return false;
+	}
+
+	gpio = fdt_get_gpio_by_name(button_name, button == RESET ? 1 : 0);
 
 	if (!gpio)
 		return false;
@@ -113,50 +135,45 @@ bool button_is_pressed(const char *gpio_name, int value)
 static bool button_is_pressed_for_enough_time(void)
 {
 	int counter = 3;
-	char *button_name = NULL;
+	ulong ts;
+	enum BUTTON button;
+	bool led_state_on, still_pressed = true;
 
-    if (button_is_pressed("reset_key", RESET_BUTTON_IS_PRESSED))
-        button_name = "RESET";
-    else if (button_is_pressed("wps_key", WPS_BUTTON_IS_PRESSED))
-        button_name = "WPS";
-    else if (button_is_pressed("screen_key", SCREEN_BUTTON_IS_PRESSED))
-        button_name = "SCREEN";
+    if (button_is_pressed(RESET, BUTTON_PRESSED))
+        button = RESET;
+    else if (button_is_pressed(WPS, BUTTON_PRESSED))
+        button = WPS;
+    else if (button_is_pressed(SCREEN, BUTTON_PRESSED))
+        button = SCREEN;
 	else
 		return false;
 
-	printf("%s button pressed, enter web failsafe mode after: %-2d", button_name, counter);
+	printf("%s button pressed, enter web failsafe mode after: %-2d",
+		button == RESET ? "reset" : button == WPS ? "wps" : "screen", counter);
 
-	while (button_name != NULL) {
-        bool still_pressed = false;
-
-        if (strcmp(button_name, "RESET") == 0)
-            still_pressed = button_is_pressed("reset_key", RESET_BUTTON_IS_PRESSED);
-        else if (strcmp(button_name, "WPS") == 0)
-            still_pressed = button_is_pressed("wps_key", WPS_BUTTON_IS_PRESSED);
-        else if (strcmp(button_name, "SCREEN") == 0)
-            still_pressed = button_is_pressed("screen_key", SCREEN_BUTTON_IS_PRESSED);
-
-        if (!still_pressed) {
-			putc('\n');
-            return false;
-		}
-
-		led_off("power_led");
-		mdelay(500);
-		led_on("power_led");
-		mdelay(500);
-
+	while (counter > 0 && still_pressed) {
 		counter--;
+		ts = get_timer(0);
+		led_state_on = false;
+		led_off("power_led");
+		do {
+			still_pressed = button_is_pressed(button, BUTTON_PRESSED);
+
+			if (!led_state_on && get_timer(ts) >= 500) {
+				led_state_on = true;
+				led_on("power_led");
+			}
+
+			udelay(10000);
+		} while (still_pressed && get_timer(ts) < 1000);
 
 		printf("\b\b%-2d", counter);
-
-		if (counter <= 0) {
-			putc('\n');
-			return true;
-		}
 	}
 
-	return false;
+	putc('\n');
+	led_on("power_led");
+
+	return still_pressed;
 }
 
 static bool failsafe_env_exists(void)
@@ -179,16 +196,19 @@ void do_httpd_check(void)
 {
 	ulong ts;
 	int counter = 3;
-	bool abort = false, start_httpd = false;
+	bool led_state_on, abort = false, start_httpd = false;
 
 	if (is_9008_mode || failsafe_env_exists()) {
 		puts(is_9008_mode ? "currently in 9008 mode" : "failsafe env variable defined");
 		printf(", enter web failsafe mode after: %-2d", counter);
-		/* Wait 3s for link to settle down */
+
+		/* Wait 3s for phy link to settle down */
 		while (!abort && counter > 0) {
-			led_toggle("power_led");
 			counter--;
 			ts = get_timer(0);
+			led_state_on = false;
+			led_off("power_led");
+
 			do {
 				if (tstc()) { /* we got a key press	*/
 					abort = true;
@@ -196,10 +216,18 @@ void do_httpd_check(void)
 					(void) getc(); /* consume input	*/
 					break;;
 				}
+				if (!led_state_on && get_timer(ts) >= 500) {
+					led_state_on = true;
+					led_on("power_led");
+				}
+				udelay(10000);
 			} while (!abort && get_timer(ts) < 1000);
+
 			printf("\b\b%-2d", counter);
 		}
+
 		putc('\n');
+		led_on("power_led");
 		start_httpd = true;
 	}
 

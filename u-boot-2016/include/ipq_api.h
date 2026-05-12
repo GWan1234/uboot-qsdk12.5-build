@@ -1,7 +1,3 @@
-#define RESET_BUTTON_IS_PRESSED        0
-#define WPS_BUTTON_IS_PRESSED          0
-#define SCREEN_BUTTON_IS_PRESSED       0
-
 typedef struct {
 	bool spi;
 	bool nand;
