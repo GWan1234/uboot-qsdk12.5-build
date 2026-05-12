@@ -1347,6 +1347,9 @@ void ipq6018_ppe_provision_init(void)
 	/* Allowing DHCP packets */
 	ipq6018_ppe_acl_set(0, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 67, 0xffff, 0, 0);
 	ipq6018_ppe_acl_set(1, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 68, 0xffff, 0, 0);
+	/* Allowing U-Boot abort packets (37541/37540) */
+	ipq6018_ppe_acl_set(2, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 37541, 0xffff, 0, 0);
+	ipq6018_ppe_acl_set(3, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 37540, 0xffff, 0, 0);
 	/* Dropping all the UDP packets */
-	ipq6018_ppe_acl_set(2, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 0, 0, 0, 1);
+	ipq6018_ppe_acl_set(4, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 0, 0, 0, 1);
 }

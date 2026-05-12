@@ -402,4 +402,9 @@ extern loff_t board_env_size;
 #define CONFIG_CONSOLE_RECORD_IN_SIZE  0x3000
 #define CONFIG_CONSOLE_RECORD_OUT_SIZE 0x6000
 
+/*
+ * Network abort detection for U-Boot autoboot
+ */
+#define CONFIG_NET_ABORT
+
 #endif /* _IPQ6018_H */

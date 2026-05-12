@@ -306,4 +306,6 @@ obj-y += xyzModem.o
 endif
 obj-y += cmd_disk.o
 
+obj-$(CONFIG_NET_ABORT) += net_abort.o
+
 CFLAGS_env_embedded.o := -Wa,--no-warn -DENV_CRC=$(shell tools/envcrc 2>/dev/null)

@@ -15,6 +15,9 @@
 #include <post.h>
 #include <u-boot/sha256.h>
 #include <asm/arch-qca-common/qca_common.h>
+#if defined(CONFIG_NET_ABORT)
+#include <net_abort.h>
+#endif
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -226,11 +229,18 @@ static int abortboot_normal(int bootdelay)
 	int abort = 0;
 	unsigned long ts;
 
+#if defined(CONFIG_NET_ABORT)
+	bool net_abort_enabled = net_abort_prepare();
+#else
+	bool net_abort_enabled = false;
+#endif
+
 #ifdef CONFIG_MENUPROMPT
 	printf(CONFIG_MENUPROMPT);
 #else
 	if (bootdelay >= 0)
-		printf("Hit any key to stop autoboot: %-2d", bootdelay);
+		printf("Hit any key%s to stop autoboot: %-2d",
+			net_abort_enabled ? " or use net abort tool" : "", bootdelay);
 #endif
 
 #if defined CONFIG_ZERO_BOOTDELAY_CHECK
@@ -262,6 +272,16 @@ static int abortboot_normal(int bootdelay)
 # endif
 				break;
 			}
+#if defined(CONFIG_NET_ABORT)
+			if (net_abort_enabled) {
+				eth_rx();
+				if (net_abort_detected()) {
+					abort  = 1;	/* don't auto boot	*/
+					bootdelay = 0;	/* no more delay	*/
+					break;
+				}
+			}
+#endif
 			udelay(10000);
 		} while (!abort && get_timer(ts) < 1000);
 
@@ -269,6 +289,11 @@ static int abortboot_normal(int bootdelay)
 	}
 
 	putc('\n');
+
+#if defined(CONFIG_NET_ABORT)
+	if (net_abort_enabled)
+		net_abort_finish();
+#endif
 
 #ifdef CONFIG_SILENT_CONSOLE
 	if (abort)

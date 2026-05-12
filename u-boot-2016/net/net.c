@@ -113,6 +113,9 @@
 #if defined(CONFIG_TCP)
 #include "tcp.h"
 #endif
+#if defined(CONFIG_NET_ABORT)
+#include <net_abort.h>
+#endif
 #include <ipq_api.h>
 #include <mmc.h>
 #include <sdhci.h>
@@ -436,6 +439,17 @@ int net_loop(enum proto_t protocol)
 	} else {
 		eth_init_state_only();
 	}
+
+#if defined(CONFIG_TCP) && defined(CONFIG_NET_ABORT)
+	if (protocol == TCP && net_abort_detected()) {
+		/* 多发送几次回复消息，确保客户端能收到 */
+		for (int i = 0; i < 5; i++) {
+			net_abort_reply();
+			mdelay(200);
+		}
+	}
+#endif
+
 restart:
 #ifdef CONFIG_USB_KEYBOARD
 	net_busy_flag = 0;
