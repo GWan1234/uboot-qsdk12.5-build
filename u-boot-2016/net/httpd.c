@@ -69,6 +69,7 @@ struct httpd_tcp_pdata {
 	char *upload_ptr;
 	u32 payload_size;
 	u32 upload_size;
+	ulong upload_start;
 
 	struct httpd_request request;
 	struct httpd_response response;
@@ -602,6 +603,8 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 			pdata->upload_ptr[pdata->payload_size] = 0;
 			pdata->status = HTTPD_S_FULL_RCVD;
 		} else {
+			/* upload start time */
+			pdata->upload_start = get_timer(0);
 			/* switch status for further receving */
 			pdata->status = HTTPD_S_PAYLOAD_RECVING;
 			/* uploading mark */
@@ -644,6 +647,13 @@ static int httpd_recv_payload(struct httpd_instance *inst,
 	}
 
 	if (pdata->upload_size == pdata->payload_size) {
+#if defined(CONFIG_HTTPD_DEBUG)
+		ulong upload_duration = get_timer(pdata->upload_start);
+		if (httpd_debug_on && upload_duration > 0) {
+			httpd_debug("speed: ");
+			print_size(pdata->upload_size / upload_duration * 1000, "/s\n");
+		}
+#endif
 		led_on("blink_led");
 		pdata->upload_ptr[pdata->payload_size] = 0;
 		pdata->status = HTTPD_S_FULL_RCVD;
