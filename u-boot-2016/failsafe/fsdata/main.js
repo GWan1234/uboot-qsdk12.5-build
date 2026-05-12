@@ -1088,42 +1088,60 @@ function ajax(options) {
  * 版本信息渲染器
  * 负责获取 U-Boot 版本信息并渲染到页脚
  */
-function loadAndRenderVersionInfo() {
-    const versionContainer = document.getElementById("version");
+const versionRenderer = (() => {
+    /**
+     * 渲染版本信息
+     */
+    function render(versionText) {
+        const versionEl = document.getElementById("version");
+        if (!versionEl) return;
 
-    if (!versionContainer) return;
+        versionEl.innerHTML = `
+            <a href="https://github.com/chenxin527/uboot-qsdk12.5-build"
+               target="_blank"
+               class="version-link"
+               title="${t("title.project")}"
+               data-i18n-attr="title:title.project">
+                ${versionText || "U-Boot QSDK 12.5"}
+            </a>
+            <span class="separator">/</span>
+            <a href="https://github.com/chenxin527"
+               target="_blank"
+               class="author-link"
+               title="${t("title.author")}"
+               data-i18n-attr="title:title.author">
+                沉心
+            </a>
+        `;
+    }
 
-    versionContainer.innerHTML = '<span class="loading">Loading version info...</span>';
+    /**
+     * 加载并渲染版本信息
+     */
+    async function loadAndRender() {
+        const versionEl = document.getElementById("version");
+        if (!versionEl) return;
 
-    // 发送请求获取版本信息
-    ajax({
-        url: "/version",
-        timeout: 5000,
-        done: function(responseText) {
-            const versionText = responseText ? responseText : "U-Boot QSDK 12.5";
-            const projectTitle = t("title.project");
-            const authorTitle = t("title.author");
+        try {
+            const response = await fetch("/version", { method: "GET" });
 
-            versionContainer.innerHTML = `
-                <a href="https://github.com/chenxin527/uboot-qsdk12.5-build"
-                   target="_blank"
-                   class="version-link"
-                   title="${projectTitle}"
-                   data-i18n-attr="title:title.project">
-                    ${versionText}
-                </a>
-                <span class="separator">/</span>
-                <a href="https://github.com/chenxin527"
-                   target="_blank"
-                   class="author-link"
-                   title="${authorTitle}"
-                   data-i18n-attr="title:title.author">
-                    沉心
-                </a>
-            `;
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const versionText = await response.text();
+            render(versionText);
+
+        } catch (error) {
+            console.warn(error.message + ": Failed to fetch version");
+            render();
         }
-    });
-}
+    }
+
+    return {
+        loadAndRender
+    };
+})();
 
 // ==============================
 // 应用初始化模块
@@ -1180,24 +1198,24 @@ function appInit(pageName) {
             mibibManager.init();
             break;
         default:
-            uploadManager.init();
+            sysinfoManager.fetchAndStore();
             break;
     }
 
     // 获取并渲染版本信息
-    loadAndRenderVersionInfo();
+    versionRenderer.loadAndRender();
 }
 
 // ==============================
-// 错误信息生成工具模块
+// 信息生成工具模块
 // ==============================
 
 /**
- * 错误信息构建器
- * 提供各种错误类型的结构化 HTML 生成函数
+ * 信息构建器
+ * 提供成功信息与各种错误类型信息的结构化 HTML 生成函数
  * 被 uploadManager、resultManager、mibibManager 等模块共享使用
  */
-const errorMessageBuilder = (() => {
+const messageBuilder = (() => {
 
     /**
      * HTML转义（防止XSS）
@@ -1448,7 +1466,6 @@ const errorMessageBuilder = (() => {
 /**
  * 文件上传管理器
  * 负责处理所有文件上传操作，包括进度跟踪、响应解析和错误处理
- * 适用于 index.html、uboot.html、art.html、cdt.html、ptable.html、simg.html、initramfs.html 等上传页面
  */
 const uploadManager = (() => {
     // 私有变量
@@ -1468,21 +1485,10 @@ const uploadManager = (() => {
             progressCircle: document.getElementById("bar-circle"),
             successInfo: document.getElementById("success-info"),
             errorInfo: document.getElementById("error-info"),
+            upgrade: document.getElementById("upgrade"),
         };
 
         return elements;
-    }
-
-    /**
-     * 获取升级相关元素（部分页面需要）
-     */
-    function getUpgradeElements() {
-        return {
-            upgrade: document.getElementById("upgrade"),
-            fileType: document.getElementById("file-type"),
-            size: document.getElementById("size"),
-            md5: document.getElementById("md5"),
-        };
     }
 
     /**
@@ -1490,12 +1496,11 @@ const uploadManager = (() => {
      */
     function hideAll() {
         const els = getElements();
-        const upgradeEls = getUpgradeElements();
 
         if (els.form) els.form.style.display = "none";
         if (els.successInfo) els.successInfo.style.display = "none";
         if (els.errorInfo) els.errorInfo.style.display = "none";
-        if (upgradeEls.upgrade) upgradeEls.upgrade.style.display = "none";
+        if (els.upgrade) els.upgrade.style.display = "none";
     }
 
     /**
@@ -1520,47 +1525,32 @@ const uploadManager = (() => {
     }
 
     /**
+     * 设置标题和提示文本
+     * @param {string} titleKey - 标题国际化 key
+     * @param {string} hintKey - 提示国际化 key
+     */
+    function setTitleAndHint(titleKey, hintKey) {
+        const els = getElements();
+        if (els.title && titleKey) els.title.innerHTML = t(titleKey);
+        if (els.hint && hintKey) els.hint.innerHTML = t(hintKey);
+    }
+
+    /**
      * 处理上传成功
      * @param {object} info - 成功信息对象
-     * @param {object} options - 额外选项
-     * @param {boolean} options.showUpgrade - 是否显示升级按钮
-     * @param {boolean} options.showBoot - 是否显示启动按钮（initramfs）
-     * @param {string} options.redirectPage - 跳转页面名称
      */
-    function handleSuccess(info, options = {}) {
+    function handleSuccess(info) {
         const els = getElements();
-        const upgradeEls = getUpgradeElements();
 
         hideProgress();
 
         // 显示成功信息
         if (els.successInfo) {
             els.successInfo.style.display = "block";
-            els.successInfo.innerHTML = errorMessageBuilder.buildSuccessTable(info);
+            els.successInfo.innerHTML = messageBuilder.buildSuccessTable(info);
         }
 
-        // 根据页面类型显示不同按钮
-        if (options.showBoot && upgradeEls.upgrade) {
-            // initramfs 页面显示 "Boot" 按钮
-            upgradeEls.upgrade.style.display = "block";
-            const btn = upgradeEls.upgrade.querySelector("button");
-            if (btn) {
-                btn.textContent = t("common.boot");
-                btn.onclick = function() {
-                    location.href = "/booting.html";
-                };
-            }
-        } else if (options.showUpgrade && upgradeEls.upgrade) {
-            // firmware 等页面显示 "Update" 按钮
-            upgradeEls.upgrade.style.display = "block";
-        }
-
-        // 如果需要跳转到结果页面
-        if (options.redirectPage) {
-            setTimeout(function() {
-                location.href = "/" + options.redirectPage + ".html";
-            }, 500);
-        }
+        if (els.upgrade) els.upgrade.style.display = "block";
     }
 
     /**
@@ -1570,8 +1560,7 @@ const uploadManager = (() => {
     function handleError(info) {
         const els = getElements();
 
-        if (els.title) els.title.innerHTML = t('fail.title');
-        if (els.hint) els.hint.innerHTML = t('fail.hint');
+        setTitleAndHint("fail.title", "fail.hint");
         hideProgress();
 
         let errorMessage = "";
@@ -1579,22 +1568,19 @@ const uploadManager = (() => {
         // 根据错误类型生成对应的错误信息
         switch (info?.type) {
             case "file_too_big":
-                errorMessage = errorMessageBuilder.buildFileTooBigMessage(info);
+                errorMessage = messageBuilder.buildFileTooBigMessage(info);
                 break;
             case "part_not_found":
-                errorMessage = errorMessageBuilder.buildPartNotFoundMessage(info);
+                errorMessage = messageBuilder.buildPartNotFoundMessage(info);
                 break;
             case "wrong_file_type":
-                errorMessage = errorMessageBuilder.buildWrongFileTypeMessage(info);
+                errorMessage = messageBuilder.buildWrongFileTypeMessage(info);
                 break;
             case "flash_not_found":
-                errorMessage = errorMessageBuilder.buildFlashNotFoundMessage(info);
-                break;
-            case "run_cmd_failed":
-                errorMessage = errorMessageBuilder.buildRunCmdFailedMessage(info);
+                errorMessage = messageBuilder.buildFlashNotFoundMessage(info);
                 break;
             default:
-                errorMessage = errorMessageBuilder.buildUnknownErrorMessage(info);
+                errorMessage = messageBuilder.buildUnknownErrorMessage(info);
         }
 
         if (els.errorInfo) {
@@ -1610,27 +1596,20 @@ const uploadManager = (() => {
     function handleInvalidResponse(rawResponse) {
         const els = getElements();
 
-        if (els.title) els.title.innerHTML = t('fail.title');
-        if (els.hint) els.hint.innerHTML = t('fail.hint');
+        setTitleAndHint("fail.title", "fail.hint");
         hideProgress();
 
         if (els.errorInfo) {
             els.errorInfo.style.display = "block";
-            els.errorInfo.innerHTML = errorMessageBuilder.buildInvalidResponseMessage(rawResponse);
+            els.errorInfo.innerHTML = messageBuilder.buildInvalidResponseMessage(rawResponse);
         }
     }
 
     /**
      * 执行上传
      * @param {string} formDataKey - FormData中的键名（如 'firmware'、'uboot'）
-     * @param {object} options - 上传选项
-     * @param {string} options.url - 上传接口URL（默认 '/upload'）
-     * @param {boolean} options.showUpgrade - 成功时是否显示升级按钮
-     * @param {boolean} options.showBoot - 成功时是否显示启动按钮
-     * @param {string} options.redirectPage - 成功后跳转的页面
-     * @param {Function} options.onSuccess - 自定义成功处理函数
      */
-    function upload(formDataKey, options = {}) {
+    function upload(formDataKey) {
         const els = getElements();
         const file = els.fileInput?.files[0];
 
@@ -1638,11 +1617,6 @@ const uploadManager = (() => {
             alert(t("file.select"));
             return;
         }
-
-        const url = options.url || "/upload";
-        const showUpgrade = options.showUpgrade !== false;
-        const showBoot = options.showBoot || false;
-        const redirectPage = options.redirectPage || null;
 
         // 显示进度
         showProgress(0);
@@ -1653,41 +1627,24 @@ const uploadManager = (() => {
 
         // 发送上传请求
         ajax({
-            url: url,
+            url: "/upload",
             data: formData,
             done: function(responseText) {
                 let response;
 
-                // 尝试解析JSON响应
                 try {
                     response = JSON.parse(responseText);
                 } catch (e) {
-                    if (options.onInvalidResponse) {
-                        options.onInvalidResponse(responseText);
-                    } else {
-                        handleInvalidResponse(responseText || t("error.invalid_response"));
-                    }
+                    handleInvalidResponse(responseText || t("error.invalid_response"));
                     return;
                 }
 
                 switch (response.status) {
                     case "success":
-                        if (options.onSuccess) {
-                            options.onSuccess(response.info);
-                        } else {
-                            handleSuccess(response.info, {
-                                showUpgrade: showUpgrade,
-                                showBoot: showBoot,
-                                redirectPage: redirectPage
-                            });
-                        }
+                        handleSuccess(response.info);
                         break;
                     case "fail":
-                        if (options.onError) {
-                            options.onError(response.info);
-                        } else {
-                            handleError(response.info);
-                        }
+                        handleError(response.info);
                         break;
                     default:
                         handleInvalidResponse(responseText || t("error.unknown_status"));
@@ -1702,26 +1659,9 @@ const uploadManager = (() => {
         });
     }
 
-    /**
-     * 初始化上传管理器（通用上传页面）
-     * 对于大多数上传页面，不需要特殊初始化
-     */
-    function init() {
-        // 确保有系统信息（用于后续检查等）
-        if (!APP_STATE.sysinfo) {
-            sysinfoManager.fetchAndStore();
-        }
-    }
-
     // 导出公共 API
     return {
-        init,
-        upload,
-        showProgress,
-        hideProgress,
-        handleSuccess,
-        handleError,
-        handleInvalidResponse,
+        upload
     };
 })();
 
@@ -1731,50 +1671,24 @@ const uploadManager = (() => {
 
 /**
  * 结果处理管理器
- * 负责处理 flashing.html、booting.html、reboot.html 等结果页面的轮询和状态显示
  */
 const resultManager = (() => {
     // 私有变量
     let elements = null;
-    let pollTimer = null;
-    let isDestroyed = false;
-    let currentPage = null;
-    let pollCount = 0;  // 轮询计数，用于日志和调试
 
     /**
      * 页面配置映射
      */
     const pageConfig = {
         flashing: {
-            titleInProgress: "flashing.title.in_progress",
-            hintInProgress: "flashing.hint.in_progress",
             titleDone: "flashing.title.done",
             hintDone: "flashing.hint.done",
-            pollInterval: 3000,      // 3秒轮询间隔
             timeout: 1800000,        // 30分钟
-            needPolling: true,
-            needTrigger: false,
         },
         booting: {
-            titleInProgress: "booting.title.in_progress",
-            hintInProgress: "booting.hint.in_progress",
             titleDone: "booting.title.done",
             hintDone: "booting.hint.done",
-            pollInterval: 3000,      // 3秒轮询间隔
             timeout: 300000,         // 5分钟
-            needPolling: true,
-            needTrigger: false,
-        },
-        reboot: {
-            titleInProgress: "reboot.title.in_progress",
-            hintInProgress: "reboot.hint.in_progress",
-            titleDone: null,
-            hintDone: null,
-            pollInterval: 0,         // 不轮询
-            timeout: 30000,
-            needPolling: false,      // 重启后设备断开，无需轮询
-            needTrigger: true,       // 需要主动发送重启请求
-            triggerUrl: "/reboot",
         },
     };
 
@@ -1829,11 +1743,10 @@ const resultManager = (() => {
         const config = pageConfig[pageName];
         const els = getElements();
 
-        if (els.errorInfo) els.errorInfo.style.display = "none";
+        showLoading()
 
-        if (config.titleDone) {
-            setTitleAndHint(config.titleDone, config.hintDone);
-        }
+        if (els.errorInfo) els.errorInfo.style.display = "none";
+        if (config.titleDone) setTitleAndHint(config.titleDone, config.hintDone);
     }
 
     /**
@@ -1850,16 +1763,16 @@ const resultManager = (() => {
 
         switch (info?.type) {
             case "wrong_file_type":
-                errorMessage = errorMessageBuilder.buildWrongFileTypeMessage(info);
+                errorMessage = messageBuilder.buildWrongFileTypeMessage(info);
                 break;
             case "flash_not_found":
-                errorMessage = errorMessageBuilder.buildFlashNotFoundMessage(info);
+                errorMessage = messageBuilder.buildFlashNotFoundMessage(info);
                 break;
             case "run_cmd_failed":
-                errorMessage = errorMessageBuilder.buildRunCmdFailedMessage(info);
+                errorMessage = messageBuilder.buildRunCmdFailedMessage(info);
                 break;
             default:
-                errorMessage = errorMessageBuilder.buildUnknownErrorMessage(info);
+                errorMessage = messageBuilder.buildUnknownErrorMessage(info);
         }
 
         if (els.errorInfo) {
@@ -1880,29 +1793,7 @@ const resultManager = (() => {
 
         if (els.errorInfo) {
             els.errorInfo.style.display = "block";
-            els.errorInfo.innerHTML = errorMessageBuilder.buildInvalidResponseMessage(rawResponse);
-        }
-    }
-
-    /**
-     * 处理结果响应
-     * @param {string} pageName - 页面名称
-     * @param {object} response - 解析后的响应对象
-     * @param {string} rawResponse - 原始响应文本
-     */
-    function handleResponse(pageName, response, rawResponse) {
-        switch (response.status) {
-            case "success":
-                handleSuccess(pageName);
-                stopPolling();
-                break;
-            case "fail":
-                handleError(response.info);
-                stopPolling();
-                break;
-            default:
-                handleInvalidResponse(rawResponse || t("error.unknown_status"));
-                stopPolling();
+            els.errorInfo.innerHTML = messageBuilder.buildInvalidResponseMessage(rawResponse);
         }
     }
 
@@ -1912,138 +1803,11 @@ const resultManager = (() => {
      */
     function handleParseError(rawResponse) {
         handleInvalidResponse(rawResponse || t("error.invalid_response"));
-        stopPolling();
-    }
-
-    /**
-     * 执行一次轮询
-     * @param {string} pageName - 页面名称
-     * @returns {Promise<boolean>} 返回 true 表示应该继续轮询，false 表示已停止
-     */
-    async function pollOnce(pageName) {
-        if (isDestroyed) return false;
-
-        pollCount++;
-        const isFirstPoll = pollCount === 1;
-
-        try {
-            const response = await fetch("/result");
-
-            if (!response.ok) {
-                // HTTP 错误时继续轮询（可能是设备正在重启）
-                return true;
-            }
-
-            const responseText = await response.text();
-            let result;
-
-            try {
-                result = JSON.parse(responseText);
-            } catch (e) {
-                handleParseError(responseText);
-                return false;
-            }
-
-            // 处理响应
-            switch (result.status) {
-                case "success":
-                    handleSuccess(pageName);
-                    return false;  // 停止轮询
-                case "fail":
-                    handleError(result.info);
-                    return false;  // 停止轮询
-                default:
-                    // 如果是第一次轮询且状态未知，可能是设备还没准备好
-                    // 给几次重试机会，避免过早显示错误
-                    if (isFirstPoll && pollCount <= 3) {
-                        return true;  // 继续重试
-                    }
-                    handleInvalidResponse(responseText || t("error.unknown_status"));
-                    return false;  // 停止轮询
-            }
-
-        } catch (error) {
-            // 网络错误时继续轮询（设备可能正在重启）
-            return true;
-        }
-    }
-
-    /**
-     * 调度下一次轮询
-     * @param {string} pageName - 页面名称
-     */
-    function schedulePoll(pageName) {
-        if (isDestroyed) return;
-
-        const config = pageConfig[pageName];
-        if (!config.needPolling) return;
-
-        if (pollTimer) {
-            clearTimeout(pollTimer);
-        }
-
-        pollTimer = setTimeout(async function() {
-            pollTimer = null;
-            const shouldContinue = await pollOnce(pageName);
-            if (shouldContinue) {
-                schedulePoll(pageName);
-            }
-        }, config.pollInterval || 3000);
-    }
-
-    /**
-     * 开始轮询循环（立即执行第一次，后续按间隔执行）
-     * @param {string} pageName - 页面名称
-     */
-    async function startPolling(pageName) {
-        if (isDestroyed) return;
-
-        const config = pageConfig[pageName];
-        if (!config.needPolling) return;
-
-        // 立即执行第一次轮询
-        const shouldContinue = await pollOnce(pageName);
-
-        // 如果需要继续，则调度后续轮询
-        if (shouldContinue) {
-            schedulePoll(pageName);
-        }
-    }
-
-    /**
-     * 停止轮询
-     */
-    function stopPolling() {
-        if (pollTimer) {
-            clearTimeout(pollTimer);
-            pollTimer = null;
-        }
-    }
-
-    /**
-     * 触发操作（如重启）
-     * @param {string} pageName - 页面名称
-     */
-    function triggerAction(pageName) {
-        const config = pageConfig[pageName];
-
-        if (!config.needTrigger || !config.triggerUrl) {
-            return;
-        }
-
-        // 发送触发请求
-        ajax({
-            url: config.triggerUrl,
-            timeout: config.timeout,
-            done: function(response) {
-                // 设备可能已经在重启中，不需要特别处理
-            }
-        });
     }
 
     /**
      * 初始化结果页面
-     * @param {string} pageName - 页面名称 (flashing/booting/reboot)
+     * @param {string} pageName - 页面名称 (flashing/booting)
      */
     function init(pageName) {
         const config = pageConfig[pageName];
@@ -2053,77 +1817,39 @@ const resultManager = (() => {
             return;
         }
 
-        isDestroyed = false;
-        currentPage = pageName;
-        pollCount = 0;
+        appInit(pageName);
 
-        // 初始化应用状态
-        APP_STATE.page = pageName;
-        APP_STATE.lang = detectLang();
-        APP_STATE.theme = detectTheme();
+        ajax({
+            url: "/result",
+            done: function(responseText) {
+                let response;
 
-        // 应用主题和语言
-        setTheme(APP_STATE.theme);
-        setLang(APP_STATE.lang);
+                try {
+                    response = JSON.parse(responseText);
+                } catch (e) {
+                    handleParseError(responseText);
+                    return;
+                }
 
-        // 初始化侧边栏
-        ensureSidebar();
-
-        // 初始化设置面板
-        initSettingsPanel();
-
-        // 应用国际化
-        applyI18n(document);
-
-        // 更新文档标题
-        updateDocumentTitle();
-
-        // 添加准备完成的类
-        setTimeout(function() {
-            document.body.classList.add("ready");
-        }, 0);
-
-        // 设置初始标题和提示
-        setTitleAndHint(config.titleInProgress, config.hintInProgress);
-
-        // 确保显示加载动画
-        showLoading();
-
-        // 获取并渲染版本信息
-        loadAndRenderVersionInfo();
-
-        // 根据配置执行对应操作
-        if (config.needTrigger) {
-            // 对于 reboot 页面：先触发重启
-            triggerAction(pageName);
-            // reboot 后设备断开连接，不轮询
-        } else if (config.needPolling) {
-            // 对于 flashing/booting 页面：立即开始轮询
-            startPolling(pageName);
-        }
-    }
-
-    /**
-     * 清理资源
-     */
-    function destroy() {
-        isDestroyed = true;
-        stopPolling();
-        elements = null;
-        pollCount = 0;
-    }
-
-    // 页面卸载时清理
-    if (typeof window !== "undefined") {
-        window.addEventListener("beforeunload", function() {
-            destroy();
+                switch (response.status) {
+                    case "success":
+                        handleSuccess(pageName);
+                        break;
+                    case "fail":
+                        handleError(response.info);
+                        break;
+                    default:
+                        handleInvalidResponse(responseText || t("error.unknown_status"));
+                        break;
+                }
+            },
+            timeout: config.timeout
         });
     }
 
     // 导出公共 API
     return {
-        init,
-        destroy,
+        init
     };
 })();
 
@@ -4411,13 +4137,13 @@ const mibibManager = (() => {
 
         switch (info?.type) {
             case "wrong_file_type":
-                errorMessage = errorMessageBuilder.buildWrongFileTypeMessage(info);
+                errorMessage = messageBuilder.buildWrongFileTypeMessage(info);
                 break;
             case "flash_not_found":
-                errorMessage = errorMessageBuilder.buildFlashNotFoundMessage(info);
+                errorMessage = messageBuilder.buildFlashNotFoundMessage(info);
                 break;
             default:
-                errorMessage = errorMessageBuilder.buildUnknownErrorMessage(info);
+                errorMessage = messageBuilder.buildUnknownErrorMessage(info);
         }
 
         if (els.errorInfo) {
@@ -4436,7 +4162,7 @@ const mibibManager = (() => {
 
         if (els.errorInfo) {
             els.errorInfo.style.display = "block";
-            els.errorInfo.innerHTML = errorMessageBuilder.buildInvalidResponseMessage(message);
+            els.errorInfo.innerHTML = messageBuilder.buildInvalidResponseMessage(message);
         }
     }
 

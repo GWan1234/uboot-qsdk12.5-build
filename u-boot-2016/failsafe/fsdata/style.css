@@ -1177,19 +1177,6 @@ html[data-theme="dark"] .cmd-value {
     display: inline;
 }
 
-/* 加载状态 */
-#version .loading {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    color: var(--muted);
-    opacity: 0.6;
-    animation: loading-pulse 1.5s infinite;
-}
-
-@keyframes loading-pulse {
-    0%, 100% { opacity: 0.6; }
-    50% { opacity: 0.3; }
-}
-
 /* 暗色主题适配 */
 html[data-theme="dark"] .version-link {
     opacity: 0.9;
