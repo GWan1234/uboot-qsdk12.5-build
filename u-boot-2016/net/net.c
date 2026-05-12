@@ -428,8 +428,15 @@ int net_loop(enum proto_t protocol)
 		ret = eth_init();
 #if defined(CONFIG_TCP)
 		while (protocol == TCP && ret < 0) {
+			ulong ts = get_timer(0);
+			do {
+				if (ctrlc()) {
+					eth_halt();
+					return ret;
+				}
+				udelay(10000);
+			} while (get_timer(ts) < 1000);
 			ret = eth_init();
-			mdelay(1000);
 		}
 #endif
 		if (ret < 0) {
