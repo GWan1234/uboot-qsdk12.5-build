@@ -51,7 +51,7 @@ bool net_abort_prepare(void)
 {
 	ulong ts;
 	int ret, counter = 3;;
-	bool led_state_on, abort = false;
+	bool abort = false;
 
 	net_abort_pkt_received = false;
 
@@ -62,9 +62,6 @@ bool net_abort_prepare(void)
 	while (!abort && counter > 0) {
 		counter--;
 		ts = get_timer(0);
-		led_state_on = false;
-		led_off("power_led");
-
 		do {
 			if (tstc()) { /* we got a key press	*/
 				abort = true;
@@ -72,10 +69,7 @@ bool net_abort_prepare(void)
 				(void) getc(); /* consume input	*/
 				break;;
 			}
-			if (!led_state_on && get_timer(ts) >= 500) {
-				led_state_on = true;
-				led_on("power_led");
-			}
+
 			udelay(10000);
 		} while (!abort && get_timer(ts) < 1000);
 
@@ -83,7 +77,6 @@ bool net_abort_prepare(void)
 	}
 
 	putc('\n');
-	led_on("power_led");
 
 	ret = eth_init();
 	for (int i = 3; i > 0 && ret < 0; i--) {
