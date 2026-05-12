@@ -409,7 +409,6 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 
 	reset_headers();
 
-	handle_start_led_state();
 
 	/* copy TCP data into cache */
 	size_rcvd = min_t(size_t, cbd->datalen,
@@ -509,8 +508,10 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 	if (p)
 		*p = 0;
 
-	if (strcmp(uri_ptr, "/console/poll"))
+	if (strcmp(uri_ptr, "/console/poll")) {
+		handle_start_led_state();
 		printf("%s %s\n", pdata->buf, uri_ptr);
+	}
 
 	/* record URI */
 	pdata->uri = uri_ptr;
