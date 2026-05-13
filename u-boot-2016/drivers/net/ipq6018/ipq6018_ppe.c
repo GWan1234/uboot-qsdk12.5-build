@@ -22,6 +22,7 @@
 #include "ipq6018_uniphy.h"
 #include <fdtdec.h>
 #include "ipq_phy.h"
+#include "ipq6018_acl.h"
 
 DECLARE_GLOBAL_DATA_PTR;
 #define pr_info(fmt, args...) printf(fmt, ##args);
@@ -79,7 +80,8 @@ void ppe_ipo_action_set(union ipo_action_u *hw_act, int rule_id)
 	}
 }
 
-void ipq6018_ppe_acl_set(int rule_id, int rule_type, int pkt_type, int l4_port_no, int l4_port_mask, int permit, int deny)
+void ipq6018_ppe_acl_set(int rule_id, int rule_type, int pkt_type,
+		int l4_port_no, int l4_port_mask, enum acl_action action)
 {
 	union ipo_rule_reg_u hw_reg = {0};
 	union ipo_mask_reg_u hw_mask = {0};
@@ -96,18 +98,22 @@ void ipq6018_ppe_acl_set(int rule_id, int rule_type, int pkt_type, int l4_port_n
 			hw_reg.bf.rule_field_1 = pkt_type<<17;
 			hw_mask.bf.maskfield_0 = l4_port_mask;
 			hw_mask.bf.maskfield_1 = 7<<17;
-			if (permit == 0x0) {
+
+			switch (action) {
+			case ACL_ALLOW:
 				hw_act.bf.dest_info_change_en = 1;
-				hw_act.bf.fwd_cmd = 0;/*forward*/
+				hw_act.bf.fwd_cmd = 0; /*forward*/
 				hw_reg.bf.pri = 0x1;
-			}
-
-			if (deny == 0x1) {
+				break;
+			case ACL_DENY:
 				hw_act.bf.dest_info_change_en = 1;
-				hw_act.bf.fwd_cmd = 1;/*drop*/
+				hw_act.bf.fwd_cmd = 1; /*drop*/
 				hw_reg.bf.pri = 0x0;
-
+				break;
+			default:
+				break;
 			}
+
 			hw_reg.bf.src_0 = 0x6;
 			hw_reg.bf.src_1 = 0x7;
 			ppe_ipo_rule_reg_set(&hw_reg, rule_id);
@@ -1345,17 +1351,16 @@ void ipq6018_ppe_provision_init(void)
 	}
 
 	/* Allowing DHCP packets (destination port: 67)*/
-	ipq6018_ppe_acl_set(0, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 67, 0xffff, 0, 0);
+	ipq6018_ppe_acl_set(ACL_RULE_DHCP_TO_SERVER, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 67, 0xffff, ACL_ALLOW);
 #if defined(CONFIG_DHCPD)
 	/* Dropping DHCP packets (destination port: 68) */
-	ipq6018_ppe_acl_set(1, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 68, 0xffff, 0, 1);
+	ipq6018_ppe_acl_set(ACL_RULE_DHCP_TO_CLIENT, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 68, 0xffff, ACL_DENY);
 #else
 	/* Allowing DHCP packets (destination port: 68) */
-	ipq6018_ppe_acl_set(1, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 68, 0xffff, 0, 0);
+	ipq6018_ppe_acl_set(ACL_RULE_DHCP_TO_CLIENT, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 68, 0xffff, ACL_ALLOW);
 #endif
 	/* Allowing U-Boot abort packets (37541/37540) */
-	ipq6018_ppe_acl_set(2, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 37541, 0xffff, 0, 0);
-	ipq6018_ppe_acl_set(3, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 37540, 0xffff, 0, 0);
+	ipq6018_ppe_acl_set(ACL_RULE_NET_ABORT, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 37541, 0xffff, ACL_ALLOW);
 	/* Dropping all the UDP packets */
-	ipq6018_ppe_acl_set(4, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 0, 0, 0, 1);
+	ipq6018_ppe_acl_set(ACL_RULE_UDP_DENY_ALL, ADPT_ACL_HPPE_IPV4_DIP_RULE, UDP_PKT, 0, 0, ACL_DENY);
 }

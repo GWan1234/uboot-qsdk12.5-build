@@ -322,6 +322,5 @@ extern void ppe_port_bridge_txmac_set(int port, int status);
 extern void ipq6018_10g_r_speed_set(int port, int status);
 extern int phy_status_get_from_ppe(int port_id);
 
-extern void ipq6018_ppe_acl_set(int rule_id, int rule_type, int pkt_type, int l4_port_no, int l4_port_mask, int permit, int deny);
 extern void ppe_uniphy_mode_set(uint32_t uniphy_index, uint32_t mode);
 #endif /* ___IPQ6018_EDMA__ */
