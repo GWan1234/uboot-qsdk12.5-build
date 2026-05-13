@@ -322,7 +322,6 @@ extern loff_t board_env_size;
 #define CONFIG_NET_RETRY_COUNT		5
 #define CONFIG_SYS_RX_ETH_BUFFER	16
 #define CONFIG_CMD_PING
-#define CONFIG_CMD_DHCP
 #define CONFIG_MII
 #define CONFIG_CMD_MII
 #define CONFIG_IPADDR		192.168.1.1
@@ -380,7 +379,6 @@ extern loff_t board_env_size;
 #define CONFIG_CMD_BOOTCONFIG
 #define CONFIG_CMD_IMI
 #define CONFIG_CMD_FLASHREAD
-#define CONFIG_DHCPD
 #define CONFIG_HTTPD
 #define CONFIG_TCP
 #define CONFIG_LIB_RAND
@@ -406,5 +404,15 @@ extern loff_t board_env_size;
  * Network abort detection for U-Boot autoboot
  */
 #define CONFIG_NET_ABORT
+
+/*
+ * DHCP Server support
+ */
+#define CONFIG_DHCPD
+#if defined(CONFIG_DHCPD)
+#define CONFIG_CMD_DISABLE_BOOTP
+#else
+#define CONFIG_CMD_DHCP
+#endif
 
 #endif /* _IPQ6018_H */
