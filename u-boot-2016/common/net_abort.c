@@ -67,7 +67,8 @@ bool net_abort_prepare(void)
 				abort = true;
 				counter = 0;
 				(void) getc(); /* consume input	*/
-				break;;
+				putc('\n');
+				return false;
 			}
 
 			udelay(10000);
