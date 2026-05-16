@@ -109,11 +109,11 @@ int boot_from_mem(const ulong data_addr)
     int ret;
 	char rcmd[99], bootm_arg[66];
 
-	printf("\n"
-        "*****************************\n"
-        "*     INITRAMFS BOOTING     *\n"
-        "* DO NOT POWER OFF DEVICE ! *\n"
-        "*****************************\n");
+	puts("\n"
+        "********************************\n"
+        " INITRAMFS BOOTING\n"
+        " DO NOT POWER OFF DEVICE!\n"
+        "********************************\n");
 
     ret = config_select((unsigned int)data_addr, bootm_arg, sizeof(bootm_arg));
 
@@ -681,13 +681,18 @@ static int failsafe_run_command_list(struct cmdlist *runcmd)
     return RET_SUCCESS;
 }
 
-static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
+static void print_upgrade_hint(const char *upgrade_type_str)
 {
 	printf("\n"
-		"****************************\n"
-		"*    FIRMWARE UPGRADING    *\n"
-		"* DO NOT POWER OFF DEVICE! *\n"
-		"****************************\n");
+		"********************************\n"
+		" %s UPGRADING\n"
+		" DO NOT POWER OFF DEVICE!\n"
+		"********************************\n", upgrade_type_str);
+}
+
+static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
+{
+	print_upgrade_hint("FIRMWARE");
 
 	switch (fw_type) {
 	case FW_TYPE_FACTORY_KERNEL6M:
@@ -777,11 +782,7 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 
 static int failsafe_write_uboot(const ulong data_addr, const ulong data_size)
 {
-	printf("\n"
-        "****************************\n"
-        "*     U-BOOT UPGRADING     *\n"
-        "* DO NOT POWER OFF DEVICE! *\n"
-        "****************************\n");
+    print_upgrade_hint("U-BOOT");
 
     if (fw_type != FW_TYPE_ELF) {
 		handle_wrong_fw_type("U-BOOT ELF", fw_type);
@@ -800,11 +801,7 @@ static int failsafe_write_uboot(const ulong data_addr, const ulong data_size)
 
 static int failsafe_write_art(const ulong data_addr, const ulong data_size)
 {
-	printf("\n"
-        "****************************\n"
-        "*      ART  UPGRADING      *\n"
-        "* DO NOT POWER OFF DEVICE! *\n"
-        "****************************\n");
+    print_upgrade_hint("ART");
 
 	snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 		"flash 0:ART 0x%lx 0x%lx", data_addr, data_size);
@@ -814,11 +811,7 @@ static int failsafe_write_art(const ulong data_addr, const ulong data_size)
 
 static int failsafe_write_cdt(const ulong data_addr, const ulong data_size)
 {
-	printf("\n"
-        "****************************\n"
-        "*      CDT  UPGRADING      *\n"
-        "* DO NOT POWER OFF DEVICE! *\n"
-        "****************************\n");
+    print_upgrade_hint("CDT");
 
     if (fw_type != FW_TYPE_CDT) {
 		handle_wrong_fw_type("CDT", fw_type);
@@ -856,11 +849,7 @@ static void handle_gpt_write_cmd(const ulong data_addr, const ulong data_size)
 
 static int failsafe_write_ptable(const ulong data_addr, const ulong data_size)
 {
-	printf("\n"
-		"****************************\n"
-		"*     PTABLE UPGRADING     *\n"
-		"* DO NOT POWER OFF DEVICE! *\n"
-		"****************************\n");
+	print_upgrade_hint("PTABLE");
 
 	switch(fw_type) {
 	case FW_TYPE_EMMC:
@@ -910,11 +899,7 @@ static ulong get_nand_writable_data_size(const uint32_t data_size)
 
 static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 {
-	printf("\n"
-		"*****************************\n"
-		"*       SIMG UPGRADING      *\n"
-		"* DO NOT POWER OFF DEVICE ! *\n"
-		"*****************************\n");
+	print_upgrade_hint("SIMG");
 
 	switch (fw_type) {
 	case FW_TYPE_EMMC:
