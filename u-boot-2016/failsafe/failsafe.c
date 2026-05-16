@@ -574,6 +574,7 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/console/exec", &webconsole_exec_handler, NULL);
 	httpd_register_uri_handler(inst, "/console/clear", &webconsole_clear_handler, NULL);
 	httpd_register_uri_handler(inst, "/console/upload", &webconsole_upload_handler, NULL);
+	httpd_register_uri_handler(inst, "/console/cmdlist", &webconsole_cmdlist_handler, NULL);
 
 	httpd_register_uri_handler(inst, "", &not_found_handler, NULL);
 

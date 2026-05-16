@@ -28,7 +28,10 @@ void webconsole_clear_handler(enum httpd_uri_handler_status status,
 		struct httpd_request *request,
 		struct httpd_response *response);
 void webconsole_upload_handler(enum httpd_uri_handler_status status,
-	struct httpd_request *request,
-	struct httpd_response *response);
+		struct httpd_request *request,
+		struct httpd_response *response);
+void webconsole_cmdlist_handler(enum httpd_uri_handler_status status,
+		struct httpd_request *request,
+		struct httpd_response *response);
 
 #endif /* _FAILSAFE_WEBCONSOLE_H_ */

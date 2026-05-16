@@ -1864,6 +1864,225 @@ html[data-theme="dark"] .bar-circle-mini::before {
     );
 }
 
+/* ====== 命令提示框样式 ====== */
+.cmd-suggestions {
+    position: absolute;
+    bottom: 100%;  /* 显示在输入框上方 */
+    left: 0;
+    right: 0;
+    margin-bottom: 8px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+    z-index: 1000;
+    min-width: 280px;
+    max-width: 500px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+/* 正常状态提示框 */
+.cmd-suggestions.normal {
+    border-color: var(--border);
+}
+
+/* 无匹配状态提示框 */
+.cmd-suggestions.no-match {
+    border-color: var(--danger);
+    background: var(--err-bg);
+}
+
+.cmd-suggestions .suggestions-header {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    background: var(--panel-2);
+}
+
+.cmd-suggestions.no-match .suggestions-header {
+    color: var(--danger);
+    border-bottom-color: var(--danger);
+}
+
+/* 提示框包含禁止命令时的特殊样式 */
+.cmd-suggestions.has-danger {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 1px rgba(245, 54, 92, 0.2), var(--shadow);
+}
+
+.cmd-suggestions.has-danger .suggestions-header {
+    background: var(--err-bg);
+    color: var(--danger);
+    border-bottom-color: var(--danger);
+}
+
+.suggestions-list {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+/* 提示项样式 */
+.suggestion-item {
+    padding: 6px 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.85rem;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border-left: 3px solid transparent;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.suggestion-item:hover {
+    background: var(--panel-2);
+    border-left-color: var(--primary);
+}
+
+.suggestion-item .suggestion-cmd {
+    flex: 1;
+    font-weight: 500;
+}
+
+.suggestion-item .suggestion-desc {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-left: auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+}
+
+/* 匹配高亮 */
+.suggestion-highlight {
+    background-color: rgba(49, 161, 161, 0.2);
+    color: var(--primary);
+    font-weight: 600;
+    border-radius: 2px;
+    padding: 0 2px;
+}
+
+/* 精确匹配项样式 */
+.suggestion-item.suggestion-exact {
+    background: rgba(49, 161, 161, 0.08);
+    border-left-color: var(--primary);
+}
+
+.suggestion-item.suggestion-exact .suggestion-cmd {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+/* 精确匹配标记 */
+.suggestion-exact-badge {
+    display: inline-block;
+    margin-left: 6px;
+    color: var(--primary);
+    font-weight: bold;
+}
+
+/* 危险命令样式 */
+.suggestion-item.suggestion-danger {
+    background: var(--err-bg);
+    border-left-color: var(--danger);
+}
+
+.suggestion-item.suggestion-danger:hover {
+    background: rgba(220, 38, 38, 0.2);
+}
+
+.suggestion-item.suggestion-danger .suggestion-cmd {
+    color: var(--danger);
+}
+
+.suggestion-item.suggestion-danger .suggestion-desc {
+    color: var(--danger);
+    opacity: 0.9;
+}
+
+.suggestion-danger-icon {
+    display: inline-block;
+    margin-right: 6px;
+    font-size: 0.8rem;
+}
+
+/* 危险命令警告标记 */
+.suggestion-danger-badge {
+    background: var(--danger);
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 12px;
+    margin-left: 8px;
+    font-weight: normal;
+}
+
+/* 无匹配消息 */
+.no-match-message {
+    padding: 12px;
+    text-align: center;
+    color: var(--danger);
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.no-match-message::before {
+    content: "⚠️";
+}
+
+/* 输入框错误状态 */
+.console-input.input-error {
+    border-color: var(--danger) !important;
+    box-shadow: 0 0 0 2px rgba(245, 54, 92, 0.1) !important;
+    animation: shake 0.3s ease-in-out;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+}
+
+/* 暗色主题适配 */
+html[data-theme="dark"] .cmd-suggestions {
+    background: var(--panel);
+}
+
+html[data-theme="dark"] .suggestion-item:hover {
+    background: rgba(148, 163, 184, 0.1);
+}
+
+html[data-theme="dark"] .suggestion-highlight {
+    background-color: rgba(59, 179, 179, 0.3);
+    color: var(--primary-2);
+}
+
+html[data-theme="dark"] .suggestion-item.suggestion-exact {
+    background: rgba(59, 179, 179, 0.15);
+}
+
+html[data-theme="dark"] .suggestion-item.suggestion-danger {
+    background: rgba(248, 113, 113, 0.1);
+}
+
+html[data-theme="dark"] .suggestion-item.suggestion-danger:hover {
+    background: rgba(248, 113, 113, 0.2);
+}
+
+html[data-theme="dark"] .suggestion-danger-badge {
+    background: var(--danger);
+    color: #fff;
+}
+
 /* ====== 备份页面样式 ====== */
 
 /* 备份表单容器 */
@@ -2320,6 +2539,19 @@ html[data-theme="dark"] .card-main-section .table .tr:has(.td[style*="font-weigh
     .bar-circle-mini {
         --size: 1.5rem;
         --stroke-width: 2px;
+    }
+
+    .cmd-suggestions {
+        min-width: 240px;
+        max-width: calc(100vw - 40px);
+    }
+
+    .suggestion-item .suggestion-desc {
+        display: none;
+    }
+
+    .suggestions-list {
+        max-height: 150px;
     }
 }
 

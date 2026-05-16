@@ -353,3 +353,59 @@ void webconsole_upload_handler(enum httpd_uri_handler_status status,
 	response->size = strlen(response->data);
 	response->info.code = 200;
 }
+
+void webconsole_cmdlist_handler(enum httpd_uri_handler_status status,
+	struct httpd_request *request,
+	struct httpd_response *response)
+{
+	cmd_tbl_t *cmd_start = ll_entry_start(cmd_tbl_t, cmd);
+	const int cmd_items = ll_entry_count(cmd_tbl_t, cmd);
+	int len = 0, left = 6666;
+	char *buf;
+	char esc_cmd_usage[512];
+
+	if (status == HTTP_CB_CLOSED) {
+		failsafe_webconsole_free_session(status, response);
+		return;
+	}
+
+	if (status != HTTP_CB_NEW)
+		return;
+
+	response->status = HTTP_RESP_STD;
+	response->info.connection_close = 1;
+	response->info.content_type = "application/json";
+
+	if (!request || request->method != HTTP_GET) {
+		response->info.code = 405;
+		response->data = "{\"error\":\"method\"}\n";
+		response->size = strlen(response->data);
+		return;
+	}
+
+	buf = malloc(left);
+	if (!buf) {
+		response->info.code = 500;
+		response->data = "{\"error\":\"oom\"}\n";
+		response->size = strlen(response->data);
+		return;
+	}
+
+	len += snprintf(buf + len, left - len, "{");
+	len += snprintf(buf + len, left - len, "\"cmdlist\": [");
+
+	for (int i = 0; i < cmd_items; i++) {
+		json_escape(cmd_start[i].usage, esc_cmd_usage, sizeof(esc_cmd_usage));
+		len += snprintf(buf + len, left - len,
+			"%s{\"name\":\"%s\",\"usage\":\"%s\"}",
+			i ? "," : "", cmd_start[i].name, esc_cmd_usage);
+	}
+
+	len += snprintf(buf + len, left - len, "]");
+	len += snprintf(buf + len, left - len, "}");
+
+	response->info.code = 200;
+	response->data = buf;
+	response->size = strlen(buf);
+	response->session_data = buf;
+}

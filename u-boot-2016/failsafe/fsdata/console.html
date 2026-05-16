@@ -46,11 +46,15 @@
                         </div>
 
                         <div class="console-input-row">
-                            <div class="field console-input-field">
+                            <div class="field console-input-field" style="position: relative;">
+                                <div id="cmd_suggestions" class="cmd-suggestions" style="display: none;">
+                                    <div class="suggestions-header" data-i18n="console.cmd.suggest"></div>
+                                    <div id="suggestions_list" class="suggestions-list"></div>
+                                </div>
                                 <input id="console_cmd" class="field-control console-input"
                                        type="text" autocomplete="off"
                                        autocapitalize="off" autocorrect="off" spellcheck="false"
-                                       data-i18n-attr="placeholder:console.placeholder.cmd">
+                                       data-i18n-attr="placeholder:console.cmd.placeholder">
                             </div>
                             <button type="button" class="button" onclick="consoleManager.send()" data-i18n="console.send"></button>
                         </div>

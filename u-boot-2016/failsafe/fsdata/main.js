@@ -1080,6 +1080,19 @@ function ajax(options) {
     xhr.send(options.data);
 }
 
+/**
+ * HTML转义（防止XSS）
+ */
+function escapeHtml(str) {
+    if (!str) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 // ==============================
 // 版本信息模块
 // ==============================
@@ -1216,20 +1229,6 @@ function appInit(pageName) {
  * 被 uploadManager、resultManager、mibibManager 等模块共享使用
  */
 const messageBuilder = (() => {
-
-    /**
-     * HTML转义（防止XSS）
-     */
-    function escapeHtml(unsafe) {
-        if (!unsafe) return "";
-        return String(unsafe)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
-
     /**
      * 生成标准错误表格
      * @param {string} title - 错误标题（国际化 key）
@@ -1446,7 +1445,6 @@ const messageBuilder = (() => {
 
     // 导出公共 API
     return {
-        escapeHtml,
         buildErrorTable,
         buildFileTooBigMessage,
         buildPartNotFoundMessage,
@@ -3113,7 +3111,7 @@ const networkManager = (() => {
 
 /**
  * 控制台管理器
- * 负责处理 U-Boot 命令的发送、输出接收和管理，以及文件上传功能
+ * 负责处理 U-Boot 命令的发送、输出接收和管理，以及文件上传功能和命令自动补全提示
  */
 const consoleManager = (() => {
     // 私有变量
@@ -3124,7 +3122,31 @@ const consoleManager = (() => {
         history: [],
         histPos: -1,
         persistKey: "failsafe_console_output",
-        persistMax: 200000
+        persistMax: 200000,
+        commands: [],           // 存储所有命令对象 {name, usage}
+        commandNames: new Map(), // 存储命令名称到完整对象的映射
+        debounceTimer: null,
+        currentMatch: null,
+        isCommandLoaded: false,
+        loadingCommands: false,
+        forbiddenCommands: new Map([
+            ['bootp', {
+                reasonKey: 'console.cmd.forbid.reason.common'
+            }],
+            ['dhcp', {
+                reasonKey: 'console.cmd.forbid.reason.common'
+            }],
+            ['ping', {
+                reasonKey: 'console.cmd.forbid.reason.common'
+            }],
+            ['tftpboot', {
+                reasonKey: 'console.cmd.forbid.reason.common',
+                altKey: 'console.cmd.forbid.alt.tftpb'
+            }],
+            ['tftpput', {
+                reasonKey: 'console.cmd.forbid.reason.common'
+            }]
+        ])
     };
 
     /**
@@ -3139,7 +3161,9 @@ const consoleManager = (() => {
             status: document.getElementById("console_status"),
             fileInfo: document.getElementById("console_file_info"),
             fileProgress: document.getElementById("console_file_progress"),
-            progressCircle: document.getElementById("bar-circle-mini")
+            progressCircle: document.getElementById("bar-circle-mini"),
+            suggestionsBox: document.getElementById("cmd_suggestions"),
+            suggestionsList: document.getElementById("suggestions_list")
         };
 
         return elements;
@@ -3196,6 +3220,458 @@ const consoleManager = (() => {
         if (el) {
             const p = Math.max(0, Math.min(100, parseInt(percent || 0)));
             el.style.setProperty("--percent", p);
+        }
+    }
+
+    /**
+     * 加载命令列表
+     */
+    async function loadCommands() {
+        if (state.isCommandLoaded || state.loadingCommands) return;
+
+        state.loadingCommands = true;
+
+        try {
+            const response = await fetch("/console/cmdlist", {
+                method: "GET",
+                cache: "no-store",
+                headers: {
+                    "Accept": "application/json"
+                }
+            });
+
+            if (!response.ok) {
+                console.warn(`HTTP ${response.status}: Failed to load commands`);
+                return;
+            }
+
+            const data = await response.json();
+
+            if (data && data.cmdlist && Array.isArray(data.cmdlist)) {
+                state.commands = data.cmdlist.map(cmd => ({
+                    name: cmd.name,
+                    usage: cmd.usage || ""
+                }));
+
+                // 构建命令名称映射（用于快速精确匹配）
+                state.commandNames.clear();
+                state.commands.forEach(cmd => {
+                    if (cmd.name) {
+                        state.commandNames.set(cmd.name.toLowerCase(), cmd);
+                    }
+                });
+
+                state.isCommandLoaded = true;
+
+            } else {
+                console.warn("Invalid commands data format: ", data);
+            }
+
+        } catch (error) {
+            console.warn("Failed to load commands: ", error.message);
+        } finally {
+            state.loadingCommands = false;
+        }
+    }
+
+    /**
+     * 高亮匹配文本
+     */
+    function highlightMatch(text, query) {
+        if (!query || query.length === 0) return text;
+
+        const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+        return text.replace(regex, match => `<span class="suggestion-highlight">${escapeHtml(match)}</span>`);
+    }
+
+    /**
+     * 转义正则表达式特殊字符
+     */
+    function escapeRegex(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    /**
+     * 获取命令的简短描述（从 usage 中提取）
+     */
+    function getCommandDescription(cmd) {
+        if (!cmd.usage) return "";
+
+        // 取 usage 的第一行，去除开头的特殊字符
+        let firstLine = cmd.usage.split('\n')[0].trim();
+
+        // 如果第一行只是命令名，尝试取第二行
+        if (firstLine === cmd.name || firstLine === cmd.name + " ") {
+            const lines = cmd.usage.split('\n');
+            if (lines.length > 1) {
+                firstLine = lines[1].trim();
+            }
+        }
+
+        // 限制描述长度
+        if (firstLine.length > 40) {
+            firstLine = firstLine.substring(0, 37) + "...";
+        }
+
+        return firstLine;
+    }
+
+    /**
+     * 从输入中提取命令名（忽略前导空格，只取第一个单词）
+     * @param {string} input - 用户输入
+     * @returns {string} 提取的命令名（小写），如果没有命令则返回空字符串
+     */
+    function extractCommandName(input) {
+        if (!input) return "";
+
+        // 去除前导空格
+        const trimmed = input.trimStart();
+        if (trimmed.length === 0) return "";
+
+        // 提取第一个单词（命令名），遇到空格或换行停止
+        const match = trimmed.match(/^[^\s]+/);
+        return match ? match[0].toLowerCase() : "";
+    }
+
+    /**
+     * 过滤匹配的命令
+     * @param {string} input - 用户输入（可能包含参数）
+     * @returns {Object} 匹配的命令列表及精确匹配信息
+     */
+    function filterCommands(input) {
+        // 提取命令名（忽略前导空格和参数）
+        const commandName = extractCommandName(input);
+
+        // 如果命令名为空（输入为空或只有空格），返回空数组
+        if (!commandName || commandName.length === 0) {
+            return { matches: [], exactMatch: null, hasForbidden: false };
+        }
+
+        // 前缀匹配和包含匹配
+        const matches = state.commands.filter(cmd => {
+            const cmdName = cmd.name.toLowerCase();
+            // 前缀匹配优先
+            if (cmdName.startsWith(commandName)) {
+                return true;
+            }
+            // TODO: 返回某个匹配是前缀匹配还是包含匹配
+            // 包含匹配（作为后备）
+            // if (cmdName.includes(commandName)) {
+            //     return true;
+            // }
+            return false;
+        }).sort((a, b) => a.name.localeCompare(b.name));
+
+        // 限制最多显示10条建议
+        const limitedMatches = matches.slice(0, 10);
+
+        // 检查是否有精确匹配
+        let exactMatch = null;
+        let exactMatchIsForbidden = false;
+        if (state.commandNames.has(commandName)) {
+            exactMatch = state.commandNames.get(commandName);
+            exactMatchIsForbidden = isForbiddenCommand(commandName) !== null;
+        }
+
+        // 判断是否有其他匹配（不包括精确匹配本身）
+        const hasOtherMatches = limitedMatches.some(cmd => cmd.name.toLowerCase() !== commandName);
+
+        // 判断需要隐藏提示框的条件（同时满足）：
+        // 1. 有精确匹配
+        // 2. 没有其他匹配
+        // 3. 精确匹配的命令不是禁止命令（如果是禁止命令，即使只有它也不隐藏）
+        const shouldHide = exactMatch !== null && !hasOtherMatches && !exactMatchIsForbidden;
+
+        // 检查匹配结果中是否包含禁止命令
+        const hasForbidden = limitedMatches.some(cmd => state.forbiddenCommands.has(cmd.name.toLowerCase()));
+
+        return {
+            matches: limitedMatches,
+            exactMatch: exactMatch,
+            exactMatchIsForbidden: exactMatchIsForbidden,
+            shouldHide: shouldHide,
+            hasForbidden: hasForbidden
+        };
+    }
+
+    /**
+     * 检查命令是否被禁止
+     * @param {string} commandName - 命令名称
+     * @returns {Object|null} 禁止信息，如果不被禁止则返回 null
+     */
+    function isForbiddenCommand(commandName) {
+        if (!commandName) return null;
+        const lowerName = commandName.toLowerCase();
+        return state.forbiddenCommands.get(lowerName) || null;
+    }
+
+    /**
+     * 显示提示框
+     */
+    function showSuggestions(filterResult, input) {
+        const els = getElements();
+        const inputEl = els.cmd;
+
+        if (!els.suggestionsBox || !els.suggestionsList) return;
+
+        // 提取命令名用于显示（去除前导空格）
+        const commandName = extractCommandName(input);
+
+        // 清除输入框的错误样式
+        inputEl.classList.remove('input-error');
+
+        // 如果输入为空（去除前导空格后），隐藏提示框
+        if (!commandName || commandName.length === 0) {
+            hideSuggestions();
+            return;
+        }
+
+        const { matches, exactMatch, shouldHide, hasForbidden } = filterResult;
+
+        // 如果需要隐藏（只有精确匹配、无其他匹配、且精确匹配不是禁止命令），隐藏提示框
+        if (shouldHide) {
+            hideSuggestions();
+            return;
+        }
+
+        // 无匹配命令，显示错误提示
+        if (matches.length === 0 && !exactMatch) {
+            els.suggestionsBox.className = "cmd-suggestions no-match";
+            els.suggestionsList.innerHTML = `
+                <div class="no-match-message">
+                    ${escapeHtml(commandName) + ": " + t("console.cmd.nomatch")}
+                </div>
+            `;
+            els.suggestionsBox.style.display = "block";
+
+            // 输入框变红
+            inputEl.classList.add('input-error');
+            return;
+        }
+
+        // 有匹配命令（包括精确匹配但还有其他选项的情况）
+        if (matches.length > 0) {
+            // 如果包含禁止命令，添加特殊类名
+            els.suggestionsBox.className = hasForbidden ? "cmd-suggestions has-danger" : "cmd-suggestions normal";
+
+            let html = '';
+            matches.forEach(match => {
+                const isExact = exactMatch && match.name.toLowerCase() === commandName;
+                const isForbidden = isForbiddenCommand(match.name);
+                const displayDesc = getCommandDescription(match);
+                const highlightedName = highlightMatch(escapeHtml(match.name), commandName);
+
+                // 根据是否为禁止命令选择样式类
+                let itemClass = 'suggestion-item';
+                if (isForbidden) {
+                    itemClass += ' suggestion-danger';
+                }
+                if (isExact && !isForbidden) {
+                    itemClass += ' suggestion-exact';
+                }
+
+                html += `
+                    <div class="${itemClass}" data-cmd="${escapeHtml(match.name)}" data-is-forbidden="${isForbidden ? 'true' : 'false'}">
+                        <span class="suggestion-cmd">
+                            ${isForbidden ? '<span class="suggestion-danger-icon">⛔</span>' : ''}
+                            ${highlightedName}
+                            ${isForbidden ? `<span class="suggestion-danger-badge">${t('console.cmd.forbid')}</span>` : ''}
+                            ${isExact && !isForbidden ? '<span class="suggestion-exact-badge">✓</span>' : ''}
+                        </span>
+                        <span class="suggestion-desc">${escapeHtml(displayDesc)}</span>
+                    </div>
+                `;
+            });
+            els.suggestionsList.innerHTML = html;
+            els.suggestionsBox.style.display = "block";
+
+            // 绑定点击事件
+            const items = els.suggestionsList.querySelectorAll('.suggestion-item');
+            items.forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const cmd = item.getAttribute('data-cmd');
+                    const isForbidden = item.getAttribute('data-is-forbidden') === 'true';
+
+                    if (isForbidden) {
+                        // 禁止命令：显示警告并阻止执行
+                        const forbiddenInfo = isForbiddenCommand(cmd);
+                        showForbiddenWarning(cmd, forbiddenInfo);
+                        return;
+                    }
+
+                    if (cmd && inputEl) {
+                        // 保留用户已输入的命令后的参数部分
+                        const trimmedInput = inputEl.value.trimStart();
+                        const currentCommand = extractCommandName(trimmedInput);
+                        const afterCommand = trimmedInput.substring(currentCommand.length);
+
+                        // 替换命令名，保留参数
+                        inputEl.value = cmd + afterCommand;
+                        inputEl.focus();
+                        hideSuggestions();
+                        inputEl.classList.remove('input-error');
+                    }
+                });
+            });
+            return;
+        }
+
+        // 默认情况（不应该到达这里）
+        hideSuggestions();
+    }
+
+    /**
+     * 显示禁止命令警告对话框
+     * @param {string} commandName - 命令名称
+     * @param {Object} forbiddenInfo - 禁止信息
+     */
+    function showForbiddenWarning(commandName, forbiddenInfo) {
+        let message;
+
+        message = commandName + ": " + t("console.cmd.forbid.hint");
+        if (forbiddenInfo.reasonKey) message += "\n\n" + t(forbiddenInfo.reasonKey);
+        if (forbiddenInfo.altKey) message += "\n\n" + t(forbiddenInfo.altKey);
+
+        alert(message);
+    }
+
+    /**
+     * 隐藏提示框
+     */
+    function hideSuggestions() {
+        const els = getElements();
+        const inputEl = els.cmd;
+
+        if (els.suggestionsBox) {
+            els.suggestionsBox.style.display = "none";
+        }
+
+        // 清除错误样式
+        if (inputEl) {
+            inputEl.classList.remove('input-error');
+        }
+
+        state.currentMatch = null;
+    }
+
+    /**
+     * 处理输入变化（防抖）
+     */
+    function onInputChange() {
+        // 清除之前的定时器
+        if (state.debounceTimer) {
+            clearTimeout(state.debounceTimer);
+        }
+
+        // 设置防抖
+        state.debounceTimer = setTimeout(() => {
+            const els = getElements();
+            const rawInput = els.cmd ? els.cmd.value : "";
+
+            // 如果命令列表还没加载，先加载
+            if (!state.isCommandLoaded && !state.loadingCommands) {
+                loadCommands().then(() => {
+                    const filterResult = filterCommands(rawInput);
+                    showSuggestions(filterResult, rawInput);
+                });
+            } else {
+                const filterResult = filterCommands(rawInput);
+                showSuggestions(filterResult, rawInput);
+            }
+        }, 200);
+    }
+
+    /**
+     * 处理键盘事件（用于命令补全和发送）
+     */
+    function onKeyDown(e) {
+        const els = getElements();
+        const inputEl = els.cmd;
+        if (!inputEl) return;
+
+        // Enter 键发送命令
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            hideSuggestions();
+            send();
+            return;
+        }
+
+        // Tab 键自动补全
+        if (e.key === 'Tab') {
+            e.preventDefault();
+
+            const rawInput = inputEl.value;
+            const commandName = extractCommandName(rawInput);
+
+            if (!commandName || commandName.length === 0) return;
+
+            // 查找匹配的命令
+            const filterResult = filterCommands(rawInput);
+            const { matches, exactMatch, exactMatchIsForbidden } = filterResult;
+
+            if (matches.length === 1) {
+                // 只有一个匹配且是禁止命令，直接返回
+                const isForbidden = isForbiddenCommand(matches[0].name);
+                if (isForbidden) return;
+
+                // 只有一个匹配且不是禁止命令，自动补全
+                const trimmedInput = rawInput.trimStart();
+                const afterCommand = trimmedInput.substring(commandName.length);
+                hideSuggestions();
+                inputEl.value = matches[0].name + afterCommand;
+                inputEl.classList.remove('input-error');
+            } else if (matches.length > 0) {
+                // 多个匹配，显示提示框
+                showSuggestions(filterResult, rawInput);
+            }
+            return;
+        }
+
+        // ESC 键隐藏提示框
+        if (e.key === 'Escape') {
+            hideSuggestions();
+            return;
+        }
+
+        // 上下箭头历史记录（不处理 Tab 相关的）
+        // 上箭头 - 历史记录向前
+        if (e.key === "ArrowUp") {
+            const history = state.history;
+            if (!history || !history.length) return;
+
+            state.histPos = Math.min(history.length - 1, state.histPos + 1);
+            inputEl.value = history[state.histPos] || "";
+            // 触发输入事件重新计算提示
+            const newInput = inputEl.value;
+            const filterResult = filterCommands(newInput);
+            showSuggestions(filterResult, newInput);
+            inputEl.classList.remove('input-error');
+            e.preventDefault();
+            return;
+        }
+
+        // 下箭头 - 历史记录向后
+        if (e.key === "ArrowDown") {
+            const history = state.history;
+            if (!history || !history.length) return;
+
+            state.histPos = Math.max(-1, state.histPos - 1);
+            inputEl.value = state.histPos >= 0 ? (history[state.histPos] || "") : "";
+            // 触发输入事件重新计算提示
+            const newInput = inputEl.value;
+            const filterResult = filterCommands(newInput);
+            showSuggestions(filterResult, newInput);
+            inputEl.classList.remove('input-error');
+            e.preventDefault();
+            return;
+        }
+
+        // Ctrl+L 清空终端输出
+        if ((e.ctrlKey || e.metaKey) && e.key === "l") {
+            e.preventDefault();
+            clear();
         }
     }
 
@@ -3332,7 +3808,38 @@ const consoleManager = (() => {
         if (!cmdEl || !cmdEl.value.trim()) return;
 
         const line = cmdEl.value.trim();
+
+        // 检查命令是否被禁止
+        const commandName = extractCommandName(line);
+        const { matches, exactMatch } = filterCommands(line);
+        let fullCommandName;
+
+        if (exactMatch) {
+            // 命令有精确匹配
+            fullCommandName = commandName;
+        } else if (matches.length === 1) {
+            // 命令没有精确匹配，但有唯一前缀匹配
+            fullCommandName = matches[0].name;
+        } else {
+            // 命令没有精确匹配，且无前缀匹配或有不止一个前缀匹配
+            alert(commandName + ": " + t("console.cmd.unknown"));
+            return;
+        }
+
+        const forbiddenInfo = isForbiddenCommand(fullCommandName);
+
+        if (forbiddenInfo) {
+            // 显示禁止命令警告，不发送命令
+            showForbiddenWarning(fullCommandName, forbiddenInfo);
+            // 警告关闭后，恢复焦点到输入框
+            cmdEl.focus();
+            return;
+        }
+
         cmdEl.value = "";
+
+        // 隐藏提示框
+        hideSuggestions();
 
         // 添加到历史记录
         state.history.unshift(line);
@@ -3497,41 +4004,32 @@ const consoleManager = (() => {
         const cmdEl = getElements().cmd;
         if (!cmdEl) return;
 
-        cmdEl.addEventListener("keydown", (e) => {
-            // Enter 发送命令
-            if (e.key === "Enter") {
-                e.preventDefault();
-                send();
-                return;
-            }
+        // 输入事件（带防抖）
+        cmdEl.addEventListener("input", onInputChange);
 
-            // 上箭头 - 历史记录向前
-            if (e.key === "ArrowUp") {
-                const history = state.history;
-                if (!history || !history.length) return;
+        // 键盘事件（统一处理所有按键）
+        cmdEl.addEventListener("keydown", onKeyDown);
 
-                state.histPos = Math.min(history.length - 1, state.histPos + 1);
-                cmdEl.value = history[state.histPos] || "";
-                e.preventDefault();
-                return;
-            }
-
-            // 下箭头 - 历史记录向后
-            if (e.key === "ArrowDown") {
-                const history = state.history;
-                if (!history || !history.length) return;
-
-                state.histPos = Math.max(-1, state.histPos - 1);
-                cmdEl.value = state.histPos >= 0 ? (history[state.histPos] || "") : "";
-                e.preventDefault();
-            }
+        // 失去焦点时隐藏提示框（延迟一下，让点击事件有机会执行）
+        cmdEl.addEventListener("blur", () => {
+            setTimeout(() => {
+                hideSuggestions();
+            }, 200);
         });
 
-        // Ctrl+L 清空输出（类似终端行为）
-        cmdEl.addEventListener("keydown", (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === "l") {
-                e.preventDefault();
-                clear();
+        // 获得焦点时的处理
+        cmdEl.addEventListener("focus", () => {
+            const rawInput = cmdEl.value;
+            if (rawInput && rawInput.trimStart().length > 0) {
+                if (!state.isCommandLoaded && !state.loadingCommands) {
+                    loadCommands().then(() => {
+                        const filterResult = filterCommands(rawInput);
+                        showSuggestions(filterResult, rawInput);
+                    });
+                } else {
+                    const filterResult = filterCommands(rawInput);
+                    showSuggestions(filterResult, rawInput);
+                }
             }
         });
     }
@@ -3549,6 +4047,9 @@ const consoleManager = (() => {
         // 加载持久化数据
         loadPersistedOutput();
 
+        // 预加载命令列表（不阻塞UI）
+        loadCommands();
+
         // 启动轮询
         state.running = true;
         setStatus(t("console.status.ready"));
@@ -3565,6 +4066,9 @@ const consoleManager = (() => {
      */
     function destroy() {
         stopPoll();
+        if (state.debounceTimer) {
+            clearTimeout(state.debounceTimer);
+        }
         elements = null;
     }
 
@@ -4352,7 +4856,14 @@ const I18N = (() => {
             "console.hint": "Run <strong>U-Boot commands</strong> directly in your browser.<br>Output is streamed by polling (no WebSocket). Treat this as <strong>root access</strong>.",
             "console.send": "Send",
             "console.clear": "Clear",
-            "console.placeholder.cmd": "help; printenv",
+            "console.cmd.forbid": "Forbidden",
+            "console.cmd.forbid.hint": "this command has been disabled!",
+            "console.cmd.forbid.reason.common": "This command will cause the HTTPD service to exit abnormally. Do not use it in the web terminal!",
+            "console.cmd.forbid.alt.tftpb": "Use the upload function provided on this page instead.",
+            "console.cmd.nomatch": "no matching command",
+            "console.cmd.placeholder": "help; printenv",
+            "console.cmd.suggest": "📝 Suggested command",
+            "console.cmd.unknown": "unknown command!",
             "console.status.ready": "Ready",
             "console.status.running": "Running...",
             "console.status.done": "Done",
@@ -4610,7 +5121,14 @@ const I18N = (() => {
             "console.hint": "在浏览器中直接执行 <strong>U-Boot 命令</strong>。<br>输出通过轮询方式获取（非 WebSocket），相当于 <strong>root 权限</strong>。",
             "console.send": "发送",
             "console.clear": "清空",
-            "console.placeholder.cmd": "help; printenv",
+            "console.cmd.forbid": "禁止",
+            "console.cmd.forbid.hint": "此命令已被禁止执行！",
+            "console.cmd.forbid.reason.common": "此命令会导致 HTTPD 服务异常退出，请勿在网页终端中使用！",
+            "console.cmd.forbid.alt.tftpb": "请使用本页面提供的上传功能替代。",
+            "console.cmd.nomatch": "没有匹配的命令",
+            "console.cmd.placeholder": "help; printenv",
+            "console.cmd.suggest": "📝 建议命令",
+            "console.cmd.unknown": "未知命令！",
             "console.status.ready": "就绪",
             "console.status.running": "执行中...",
             "console.status.done": "完成",
