@@ -502,8 +502,8 @@ static int failsafe_validate_initramfs(const void *data_addr, const ulong data_s
     return RET_SUCCESS;
 }
 
-int failsafe_validate_image(const int upgrade_type, const void *data_addr,
-		const ulong data_size, struct httpd_response *response)
+int failsafe_validate_image(const int upgrade_type, const char *filename,
+	const void *data_addr, const ulong data_size, struct httpd_response *response)
 {
 	int ret;
 
@@ -545,7 +545,7 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 
 	if (!ret) {
 		char *hexchars = "0123456789abcdef";
-		char md5_str[33];
+		char md5_str[33], esc_filename[512];
 		u8 md5_sum[16];
 
 		memset(md5_str, 0, sizeof(md5_str));
@@ -558,10 +558,10 @@ int failsafe_validate_image(const int upgrade_type, const void *data_addr,
 			md5_str[i * 2 + 1] = hexchars[hex];
 		}
 
-		// TODO: 加入文件名
+		json_escape(filename, esc_filename, sizeof(esc_filename));
 		snprintf(info, sizeof(info),
-			"{\"type\":\"%s\",\"size\":\"%lu\",\"md5\":\"%s\"}",
-			fw_type_to_string(fw_type), data_size, md5_str);
+			"{\"type\":\"%s\",\"size\":\"%lu\",\"md5\":\"%s\",\"name\":\"%s\"}",
+			fw_type_to_string(fw_type), data_size, md5_str, esc_filename[0] ? esc_filename : "NONE");
 	}
 
 	snprintf(resp, sizeof(resp),

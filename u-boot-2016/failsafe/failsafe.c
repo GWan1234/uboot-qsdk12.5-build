@@ -55,8 +55,8 @@ int __weak boot_from_mem(const ulong data_addr)
 	return RET_FAILURE;
 }
 
-int __weak failsafe_validate_image(const int upgrade_type, const void *data_addr,
-		const ulong data_size, struct httpd_response *response)
+int __weak failsafe_validate_image(const int upgrade_type, const char *filename,
+	const void *data_addr, const ulong data_size, struct httpd_response *response)
 {
 	return RET_SUCCESS;
 }
@@ -370,7 +370,7 @@ static void upload_handler(enum httpd_uri_handler_status status,
 		httpd_debug("upload_data = 0x%lx, upload_size = %lu (0x%lx)\n",
 			(ulong)upload_data, (ulong)upload_size, (ulong)upload_size);
 
-		sess->ret = failsafe_validate_image(upgrade_type,
+		sess->ret = failsafe_validate_image(upgrade_type, form_value->filename,
 						upload_data, (ulong)upload_size, response);
 
 		sess->body_sent = 1;

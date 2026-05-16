@@ -1412,6 +1412,14 @@ const messageBuilder = (() => {
             <table class="info-table">
                 <tbody>`;
 
+        if (info.name) {
+            html += `
+                    <tr>
+                        <td class="info-label" data-i18n="label.name">${t("label.name")}</td>
+                        <td class="info-value">${escapeHtml(info.name)}</td>
+                    </tr>`;
+        }
+
         if (info.type) {
             html += `
                     <tr>
@@ -4803,6 +4811,7 @@ const I18N = (() => {
             "common.warn.1": "Do not power off the device during update.",
             "common.warn.2": "If everything goes well, the device will restart.",
             "file.select": "Please select a file first!",
+            "label.name": "File",
             "label.type": "Type",
             "label.size": "Size",
             "label.md5": "MD5",
@@ -5069,6 +5078,7 @@ const I18N = (() => {
             "common.warn.1": "刷写过程中请勿断电。",
             "common.warn.2": "如果更新成功，设备将自动重启。",
             "file.select": "请选择文件！",
+            "label.name": "文件",
             "label.type": "类型",
             "label.size": "大小",
             "label.md5": "MD5",
