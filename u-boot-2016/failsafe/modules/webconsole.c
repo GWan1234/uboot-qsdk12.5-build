@@ -25,6 +25,8 @@
 #include <mmc.h>
 #include <sdhci.h>
 #include <part.h>
+#include <u-boot/md5.h>
+#include <failsafe/fw.h>
 
 #include "webconsole.h"
 
@@ -322,6 +324,8 @@ void webconsole_upload_handler(enum httpd_uri_handler_status status,
 	block_dev_desc_t *mmc_dev;
 	detected_flash_device_t *dfd = &detected_flash_device;
 	ulong size_blocks;
+	unsigned char md5_sum[16];
+	int fw_type;
 
 	if (status != HTTP_CB_NEW)
 		return;
@@ -337,6 +341,21 @@ void webconsole_upload_handler(enum httpd_uri_handler_status status,
 		response->info.code = 400;
 		return;
 	}
+
+	fw_type = check_fw_type((const void *)file->data);
+	md5((unsigned char *)file->data, file->size, md5_sum);
+
+	printf("[FILE] %s\n", file->filename);
+	printf("[TYPE] %s\n", fw_type_to_string(fw_type));
+	printf("[ADDR] 0x%lx\n", (ulong)file->data);
+
+	printf("[SIZE] 0x%lx (", (ulong)file->size);
+	print_size(file->size, ")\n");
+
+	puts("[MD5 ] ");
+	for (int i = 0; i < 16; i++)
+		printf("%02x", md5_sum[i] & 0xFF);
+	putc('\n');
 
 	setenv_hex("fileaddr", (ulong)file->data);
     setenv_hex("filesize", (ulong)file->size);
