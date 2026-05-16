@@ -70,31 +70,31 @@ char *fw_type_to_string(const int fw_type) {
 	case FW_TYPE_ELF:
 		return "ELF";
 	case FW_TYPE_EMMC:
-		return "EMMC IMAGE";
+		return "GPT (Single Image for eMMC device)";
 	case FW_TYPE_FACTORY_KERNEL6M:
-		return "FACTORY FIRMWARE (KERNEL SIZE: 6MB)";
+		return "Factory Firmware (Kernel Size: 6MiB)";
 	case FW_TYPE_FACTORY_KERNEL12M:
-		return "FACTORY FIRMWARE (KERNEL SIZE: 12MB)";
+		return "Factory Firmware (Kernel Size: 12MiB)";
 	case FW_TYPE_LEGACY_IMAGE:
-		return "LEGACY IMAGE";
+		return "Legacy Image";
 	case FW_TYPE_FIT:
-		return "FIT IMAGE";
+		return "FIT Image";
 	case FW_TYPE_QSDK:
-		return "JDCLOUD OFFICIAL FIRMWARE";
+		return "JDCloud Official Firmware";
 	case FW_TYPE_MIBIB_NAND:
 		return "MIBIB for NAND device";
 	case FW_TYPE_MIBIB_NOR:
 		return "MIBIB for SPI-NOR device";
 	case FW_TYPE_NAND:
-		return "NAND IMAGE";
+		return "Single Image for NAND device";
 	case FW_TYPE_NOR:
-		return "SPI-NOR IMAGE";
+		return "Single Image for SPI-NOR device";
 	case FW_TYPE_SYSUPGRADE:
-		return "SYSUPGRADE FIRMWARE";
+		return "Sysupgrade Firmware";
 	case FW_TYPE_UBI:
-		return "UBI FIRMWARE";
+		return "UBI Firmware";
 	case FW_TYPE_UNKNOWN:
 	default:
-		return "UNKNOWN";
+		return "Unknown";
 	}
 }

@@ -435,7 +435,7 @@ static int failsafe_validate_ptable(const void *data_addr, const ulong data_size
         }
         return check_file_size_is_valid("MIBIB", "0:MIBIB", data_size);
     default:
-        handle_wrong_fw_type("PTABLE", fw_type);
+        handle_wrong_fw_type("Partition Table (GPT or MIBIB)", fw_type);
         return RET_WRONG_FW_TYPE;
     }
 }
@@ -844,7 +844,7 @@ static int failsafe_write_ptable(const ulong data_addr, const ulong data_size)
 			"flash 0:MIBIB 0x%lx 0x%lx", data_addr, data_size);
         break;
     default:
-        handle_wrong_fw_type("PTABLE", fw_type);
+        handle_wrong_fw_type("Partition Table (GPT or MIBIB)", fw_type);
         return RET_WRONG_FW_TYPE;
     }
 
