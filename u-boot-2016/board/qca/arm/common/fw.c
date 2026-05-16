@@ -22,14 +22,19 @@ int check_fw_type(const void *address) {
 		else
 			return FW_TYPE_ELF;
 	case HEADER_MAGIC_FIT:
-		if (*((u32 *)(address + 0x5C)) == HEADER_MAGIC_QSDK)
-			return FW_TYPE_QSDK;
-		else if (*((u32 *)(address + 0x600000)) == HEADER_MAGIC_SQUASHFS)
+		if (*((u32 *)(address + 0x5C)) == HEADER_MAGIC_QSDK) {
+			switch (*((u32 *)(address + 0x65))) {
+			case HEADER_MAGIC_GLINET_V3: return FW_TYPE_GLINET_V3;
+			case HEADER_MAGIC_GLINET_V4: return FW_TYPE_GLINET_V4;
+			case HEADER_MAGIC_JDCLOUD: return FW_TYPE_JDCLOUD;
+			default: return FW_TYPE_FIT;
+			}
+		}
+		if (*((u32 *)(address + 0x600000)) == HEADER_MAGIC_SQUASHFS)
 			return FW_TYPE_FACTORY_KERNEL6M;
-		else if (*((u32 *)(address + 0xC00000)) == HEADER_MAGIC_SQUASHFS)
+		if (*((u32 *)(address + 0xC00000)) == HEADER_MAGIC_SQUASHFS)
 			return FW_TYPE_FACTORY_KERNEL12M;
-		else
-			return FW_TYPE_FIT;
+		return FW_TYPE_FIT;
 	case HEADER_MAGIC_LEGACY_IMAGE:
 		if (*((u32 *)(address + 0x40)) == HEADER_MAGIC_ASUSWRT_EMMC)
 			return FW_TYPE_ASUSWRT_EMMC;
@@ -72,14 +77,18 @@ char *fw_type_to_string(const int fw_type) {
 	case FW_TYPE_EMMC:
 		return "GPT (Single Image for eMMC device)";
 	case FW_TYPE_FACTORY_KERNEL6M:
-		return "Factory Firmware (Kernel Size: 6MiB)";
+		return "Factory Firmware (Kernel Size: 6 MiB)";
 	case FW_TYPE_FACTORY_KERNEL12M:
-		return "Factory Firmware (Kernel Size: 12MiB)";
+		return "Factory Firmware (Kernel Size: 12 MiB)";
 	case FW_TYPE_LEGACY_IMAGE:
 		return "Legacy Image";
 	case FW_TYPE_FIT:
 		return "FIT Image";
-	case FW_TYPE_QSDK:
+	case FW_TYPE_GLINET_V3:
+		return "GLiNet Official Firmware (Version: 3.x)";
+	case FW_TYPE_GLINET_V4:
+		return "GLiNet Official Firmware (Version: 4.x)";
+	case FW_TYPE_JDCLOUD:
 		return "JDCloud Official Firmware";
 	case FW_TYPE_MIBIB_NAND:
 		return "MIBIB for NAND device";

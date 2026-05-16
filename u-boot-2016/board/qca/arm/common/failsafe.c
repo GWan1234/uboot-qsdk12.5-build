@@ -66,6 +66,8 @@ static struct {
 	char wififw_name[256];
 } jdc_fw;
 
+static char gl_fw_ubi_name[66];
+
 static char info[666];
 static char resp[888];
 static int fw_type;
@@ -250,7 +252,22 @@ static void handle_invalid_jdc_fw(const char *node_prefix)
 		"\"node_prefix\":\"%s\"}", node_prefix);
 }
 
-static int get_jdc_fw_node_name(const void * data_addr)
+static int get_gl_fw_node_name(const void *data_addr)
+{
+	int ret;
+
+	ret = fit_image_get_node_by_prefix(data_addr, FIT_IMAGES_PATH, "ubi",
+                            gl_fw_ubi_name, sizeof(gl_fw_ubi_name));
+    if (ret) {
+        strlcpy(info,
+			"{\"type\":\"fit_node_not_found\","
+			"\"node_prefix\":\"ubi\"}", sizeof(info));
+    }
+
+	return ret ? RET_FAILURE : RET_SUCCESS;
+}
+
+static int get_jdc_fw_node_name(const void *data_addr)
 {
 	int ret;
 	const void *fit = data_addr;
@@ -330,7 +347,18 @@ static int failsafe_validate_firmware(const void *data_addr, const ulong data_si
             break;
         ret = check_part_exists("rootfs", 1);
         break;
-    case FW_TYPE_QSDK:
+	case FW_TYPE_GLINET_V3:
+	case FW_TYPE_GLINET_V4:
+		if (!dfd->nand) {
+			handle_flash_not_found(fw_type, "NAND");
+			return RET_FLASH_NOT_FOUND;
+		}
+		ret = check_part_exists("rootfs", 1);
+        if (ret)
+            break;
+		ret = get_gl_fw_node_name(data_addr);
+		break;
+    case FW_TYPE_JDCLOUD:
 		if (!dfd->mmc) {
 			handle_flash_not_found(fw_type, "EMMC");
 			return RET_FLASH_NOT_FOUND;
@@ -389,7 +417,9 @@ static int failsafe_validate_art(const void *data_addr, const ulong data_size)
     case FW_TYPE_FACTORY_KERNEL12M:
     case FW_TYPE_LEGACY_IMAGE:
     case FW_TYPE_FIT:
-    case FW_TYPE_QSDK:
+	case FW_TYPE_GLINET_V3:
+	case FW_TYPE_GLINET_V4:
+    case FW_TYPE_JDCLOUD:
     case FW_TYPE_MIBIB_NAND:
     case FW_TYPE_MIBIB_NOR:
     case FW_TYPE_NAND:
@@ -679,7 +709,20 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 		strlcpy(runcmd.list[runcmd.count++],
 			"bootconfig set all 0 && bootconfig sync", MAX_CMD_LEN);
 		break;
-	case FW_TYPE_QSDK:
+	case FW_TYPE_GLINET_V3:
+	case FW_TYPE_GLINET_V4:
+		if (!dfd->nand) {
+			handle_flash_not_found(fw_type, "NAND");
+			return RET_FLASH_NOT_FOUND;
+		}
+		setenv("verbose", "1"); /* 执行 xtract_n_flash 时输出详细信息 */
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"xtract_n_flash 0x%lx %s rootfs",
+			data_addr, gl_fw_ubi_name);
+		strlcpy(runcmd.list[runcmd.count++],
+			"bootconfig set all 0 && bootconfig sync", MAX_CMD_LEN);
+		break;
+	case FW_TYPE_JDCLOUD:
 		if (!dfd->mmc) {
 			handle_flash_not_found(fw_type, "EMMC");
 			return RET_FLASH_NOT_FOUND;

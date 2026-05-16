@@ -10,12 +10,14 @@ enum {
     FW_TYPE_FACTORY_KERNEL6M,   /* Factory 格式的固件 (Kernel 大小: 6MB) */
     FW_TYPE_FACTORY_KERNEL12M,  /* Factory 格式的固件 (Kernel 大小: 12MB) */
     FW_TYPE_FIT,                /* FIT Image，包括 Factory Image 和 FIT Initramfs uImage */
+    FW_TYPE_GLINET_V3,          /* GLiNet 官方固件（版本：3.x） */
+    FW_TYPE_GLINET_V4,          /* GLiNet 官方固件（版本：4.x） */
+    FW_TYPE_JDCLOUD,            /* 京东云官方固件 */
     FW_TYPE_LEGACY_IMAGE,       /* Legacy Image */
     FW_TYPE_MIBIB_NAND,         /* NAND 的 MIBIB 分区表 */
     FW_TYPE_MIBIB_NOR,          /* SPI-NOR 的 MIBIB 分区表 */
     FW_TYPE_NAND,               /* NAND 的镜像，只需以 SBL1 开头即可 */
     FW_TYPE_NOR,                /* SPI-NOR 的镜像，至少包含 SBL1 和 MIBIB */
-    FW_TYPE_QSDK,               /* QSDK 固件，目前仅支持京东云官方固件 */
     FW_TYPE_SYSUPGRADE,         /* Sysupgrade Tar 格式的固件 */
     FW_TYPE_UBI,                /* UBI 固件（针对 NAND 机型） */
 };
@@ -43,11 +45,15 @@ enum {
 #define HEADER_MAGIC_EMMC          0xAA55
 #define HEADER_MAGIC_FIT           0xEDFE0DD0
 #define HEADER_MAGIC_LEGACY_IMAGE  0x56190527
-#define HEADER_MAGIC_QSDK          0x73616C46
 #define HEADER_MAGIC_SQUASHFS      0x73717368
 #define HEADER_MAGIC_SYSUPGRADE1   0x75737973
 #define HEADER_MAGIC_SYSUPGRADE2   0x61726770
 #define HEADER_MAGIC_UBI           0x23494255
+
+#define HEADER_MAGIC_QSDK          0x73616C46
+#define HEADER_MAGIC_GLINET_V3     0x646E616E
+#define HEADER_MAGIC_GLINET_V4     0x74636166
+#define HEADER_MAGIC_JDCLOUD       0x636D6D65
 
 int check_fw_type(const void *address);
 char *fw_type_to_string(const int fw_type);
