@@ -1451,7 +1451,6 @@ const messageBuilder = (() => {
         return html;
     }
 
-    // 导出公共 API
     return {
         buildErrorTable,
         buildFileTooBigMessage,
@@ -1474,7 +1473,6 @@ const messageBuilder = (() => {
  * 负责处理所有文件上传操作，包括进度跟踪、响应解析和错误处理
  */
 const uploadManager = (() => {
-    // 私有变量
     let elements = null;
 
     /**
@@ -1550,7 +1548,6 @@ const uploadManager = (() => {
 
         hideProgress();
 
-        // 显示成功信息
         if (els.successInfo) {
             els.successInfo.style.display = "block";
             els.successInfo.innerHTML = messageBuilder.buildSuccessTable(info);
@@ -1571,7 +1568,6 @@ const uploadManager = (() => {
 
         let errorMessage = "";
 
-        // 根据错误类型生成对应的错误信息
         switch (info?.type) {
             case "file_too_big":
                 errorMessage = messageBuilder.buildFileTooBigMessage(info);
@@ -1624,14 +1620,11 @@ const uploadManager = (() => {
             return;
         }
 
-        // 显示进度
         showProgress(0);
 
-        // 准备表单数据
         const formData = new FormData();
         formData.append(formDataKey, file);
 
-        // 发送上传请求
         ajax({
             url: "/upload",
             data: formData,
@@ -1665,7 +1658,6 @@ const uploadManager = (() => {
         });
     }
 
-    // 导出公共 API
     return {
         upload
     };
@@ -1679,7 +1671,6 @@ const uploadManager = (() => {
  * 结果处理管理器
  */
 const resultManager = (() => {
-    // 私有变量
     let elements = null;
 
     /**
@@ -1689,12 +1680,12 @@ const resultManager = (() => {
         flashing: {
             titleDone: "flashing.title.done",
             hintDone: "flashing.hint.done",
-            timeout: 1800000,        // 30分钟
+            timeout: 1800000,
         },
         booting: {
             titleDone: "booting.title.done",
             hintDone: "booting.hint.done",
-            timeout: 300000,         // 5分钟
+            timeout: 300000,
         },
     };
 
@@ -1853,7 +1844,6 @@ const resultManager = (() => {
         });
     }
 
-    // 导出公共 API
     return {
         init
     };
@@ -1868,7 +1858,6 @@ const resultManager = (() => {
  * 负责处理闪存备份的配置、执行和文件下载等功能
  */
 const backupManager = (() => {
-    // 私有变量
     let elements = null;
     let targetsLoaded = false;
 
@@ -2039,9 +2028,7 @@ const backupManager = (() => {
 
                 // 添加分区选项
                 if (info.partitions) {
-                    // SMEM分区
                     addPartitionOptions(info.partitions.smem, "smem");
-                    // MMC分区
                     addPartitionOptions(info.partitions.mmc, "mmc");
                 }
 
@@ -2193,7 +2180,6 @@ const backupManager = (() => {
         loadTargets();
     }
 
-    // 导出公共 API
     return {
         init,
         start,
@@ -2210,7 +2196,6 @@ const backupManager = (() => {
  * 负责处理 U-Boot 环境变量的查看、添加、修改、删除等操作
  */
 const envManager = (() => {
-    // 私有变量
     let elements = null;
     let envData = []; // 存储解析后的环境变量数据
     let editMode = null; // 'add' | 'edit' | null
@@ -2268,7 +2253,6 @@ const envManager = (() => {
 
         if (!els.tableBody || !els.envTable || !els.emptyHint) return;
 
-        // 清空表格
         els.tableBody.innerHTML = '';
 
         if (!data || data.length === 0) {
@@ -2277,7 +2261,6 @@ const envManager = (() => {
             return;
         }
 
-        // 显示表格，隐藏空提示
         els.emptyHint.style.display = 'none';
         els.envTable.style.display = 'table';
 
@@ -2697,7 +2680,6 @@ const envManager = (() => {
         refresh();
     }
 
-    // 导出公共 API
     return {
         init,
         refresh,
@@ -2721,7 +2703,6 @@ const envManager = (() => {
  * 负责处理 U-Boot 网络参数（ipaddr、netmask、serverip）的查看、设置、重置操作
  */
 const networkManager = (() => {
-    // 私有变量
     let elements = null;
     let validationState = {
         ipaddr: true,
@@ -3048,7 +3029,6 @@ const networkManager = (() => {
 
             setStatus(t('network.status.reset'));
 
-            // 刷新显示
             delayedRefresh();
 
         } catch (error) {
@@ -3094,17 +3074,13 @@ const networkManager = (() => {
      * 初始化网络管理器
      */
     function init() {
-        // 获取元素引用
         getElements();
 
-        // 绑定验证事件
         bindValidationEvents();
 
-        // 自动刷新一次
         refresh();
     }
 
-    // 导出公共 API
     return {
         init,
         refresh,
@@ -3122,7 +3098,6 @@ const networkManager = (() => {
  * 负责处理 U-Boot 命令的发送、输出接收和管理，以及文件上传功能和命令自动补全提示
  */
 const consoleManager = (() => {
-    // 私有变量
     let elements = null;
     let state = {
         running: false,
@@ -3930,22 +3905,17 @@ const consoleManager = (() => {
             const file = fileInput.files[0];
             if (!file) return;
 
-            // 显示文件名
             showFileInfo(`${t("console.uploading")} ${file.name}`);
 
-            // 显示进度条
             showFileProgress(true);
             setFileProgress(0);
 
-            // 准备表单数据
             const formData = new FormData();
             formData.append("file", file);
 
             try {
-                // 使用 XMLHttpRequest 以支持上传进度
                 const xhr = new XMLHttpRequest();
 
-                // 上传进度
                 xhr.upload.addEventListener("progress", function(event) {
                     if (event.lengthComputable && event.total > 0) {
                         const percent = parseInt((event.loaded / event.total) * 100);
@@ -3953,25 +3923,20 @@ const consoleManager = (() => {
                     }
                 });
 
-                // 请求完成
                 xhr.onreadystatechange = function() {
                     if (xhr.readyState === 4) {
-                        // 隐藏进度条
                         showFileProgress(false);
 
                         if (xhr.status === 200) {
                             const responseText = xhr.responseText.trim();
                             if (responseText === "ok") {
-                                // 上传成功
                                 showFileInfo(`✓ ${t("console.upload.success")}`, true);
                                 setStatus(t("console.upload.success"), false);
                             } else {
-                                // 上传失败
                                 showFileInfo(`✗ ${t("console.upload.failed")}: ${responseText}`, false);
                                 setStatus(`${t("console.upload.failed")}: ${responseText}`, true);
                             }
                         } else {
-                            // HTTP 错误
                             showFileInfo(`✗ ${t("console.status.http")} ${xhr.status}`, false);
                             setStatus(`${t("console.status.http")} ${xhr.status}`, true);
                         }
@@ -3987,7 +3952,6 @@ const consoleManager = (() => {
                 xhr.send(formData);
 
             } catch (error) {
-                // 隐藏进度条
                 showFileProgress(false);
                 showFileInfo(`✗ ${formatError(error)}`, false);
                 setStatus(formatError(error), true);
@@ -4046,13 +4010,10 @@ const consoleManager = (() => {
      * 初始化控制台管理器
      */
     function init() {
-        // 获取元素引用
         getElements();
 
-        // 绑定事件
         bindKeyboardEvents();
 
-        // 加载持久化数据
         loadPersistedOutput();
 
         // 预加载命令列表（不阻塞UI）
@@ -4080,7 +4041,6 @@ const consoleManager = (() => {
         elements = null;
     }
 
-    // 导出公共 API
     return {
         init,
         send,
@@ -4099,7 +4059,6 @@ const consoleManager = (() => {
  * 负责加载和渲染设备的系统信息、存储信息和分区表
  */
 const sysinfoManager = (() => {
-    // 私有变量
     let elements = null;
     const sectionIds = ["board_info", "flash_info", "partitions_info"];
 
@@ -4557,7 +4516,6 @@ const sysinfoManager = (() => {
         load();
     }
 
-    // 导出公共 API
     return {
         init,
         load,
@@ -4574,7 +4532,6 @@ const sysinfoManager = (() => {
  * 负责处理 9008 模式下的 MIBIB 重载操作
  */
 const mibibManager = (() => {
-    // 私有变量
     let elements = null;
 
     /**
@@ -4697,21 +4654,17 @@ const mibibManager = (() => {
             return;
         }
 
-        // 显示进度
         showProgress(0);
 
-        // 准备表单数据
         const formData = new FormData();
         formData.append("mibib", file);
 
-        // 发送请求
         ajax({
             url: "/mibib/reload",
             data: formData,
             done: function(responseText) {
                 let response;
 
-                // 尝试解析JSON响应
                 try {
                     response = JSON.parse(responseText);
                 } catch (e) {
@@ -4749,7 +4702,6 @@ const mibibManager = (() => {
         }
     }
 
-    // 导出公共 API
     return {
         init,
         reload,
@@ -4761,7 +4713,6 @@ const mibibManager = (() => {
 // ==============================
 
 const I18N = (() => {
-    // 模板函数
     const t = {
         en: {
             updateHint: (type) => `You are going to update <strong>${type}</strong> on the device.<br>Please choose a file from your local hard drive and click <strong>Upload</strong> button.`,
