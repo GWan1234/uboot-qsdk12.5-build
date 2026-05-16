@@ -2357,17 +2357,20 @@ html[data-theme="dark"] .card-main-section .table .tr:has(.td[style*="font-weigh
     }
 
     .env-col-name {
-        min-width: 80px;
+        width: 25%;
+        min-width: 95px;
         max-width: 150px;
     }
 
     .env-col-value {
+        width: 60%;
         min-width: 100px;
         max-width: 200px;
     }
 
     .env-col-actions {
-        min-width: 110px;
+        width: 15%;
+        min-width: 75px;
     }
 
     .env-action-btn {
