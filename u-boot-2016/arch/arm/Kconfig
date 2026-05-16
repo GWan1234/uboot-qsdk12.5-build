@@ -789,6 +789,11 @@ config TARGET_IPQ6018_CMIOT_AX18
     help
         Support for CMIOT AX18 board
 
+config TARGET_IPQ6018_GLINET_GL_AX1800
+    bool "GLiNet AX1800"
+    help
+        Support for GLiNet AX1800 board
+
 config TARGET_IPQ6018_JDCLOUD_RE_CS_02
     bool "JDCloud AX6600 (Athena)"
     help

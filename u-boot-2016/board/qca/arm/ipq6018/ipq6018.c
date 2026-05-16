@@ -1279,6 +1279,12 @@ void ipq_uboot_fdt_fixup(void)
 			add_config_entry("config-cp03-c1");
 			break;
 #endif
+#if defined(CONFIG_TARGET_IPQ6018_GLINET_GL_AX1800)
+		case MACH_TYPE_IPQ6018_GLINET_GL_AX1800:
+			add_config_entry("config@cp03-c1");
+			add_config_entry("config-cp03-c1");
+			break;
+#endif
 #if defined(CONFIG_TARGET_IPQ6018_JDCLOUD_RE_CS_02)
 		case MACH_TYPE_IPQ6018_JDCLOUD_RE_CS_02:
 			add_config_entry("config@cp03-c3");

@@ -625,6 +625,7 @@ compile_all_targets() {
 
     # 依次编译所有设备
     compile_target_after_cache_clean "ipq60xx" "cmiot_ax18"        "ipq6018_cmiot_ax18"
+    compile_target_after_cache_clean "ipq60xx" "glinet_gl_ax1800"  "ipq6018_glinet_gl_ax1800"
     compile_target_after_cache_clean "ipq60xx" "jdcloud_re-cs-02"  "ipq6018_jdcloud_re_cs_02"
     compile_target_after_cache_clean "ipq60xx" "jdcloud_re-cs-07"  "ipq6018_jdcloud_re_cs_07"
     compile_target_after_cache_clean "ipq60xx" "jdcloud_re-ss-01"  "ipq6018_jdcloud_re_ss_01"
@@ -651,6 +652,7 @@ show_help() {
     echo "  设备："
     echo "    IPQ60xx:"
     echo "      build_ax18              编译 CMIOT AX18"
+    echo "      build_gl-ax1800         编译 GLiNet AX1800"
     echo "      build_re-cs-02          编译 JDCloud AX6600 (Athena)"
     echo "      build_re-cs-07          编译 JDCloud ER1"
     echo "      build_re-ss-01          编译 JDCloud AX1800 Pro (Arthur)"
@@ -698,6 +700,10 @@ case "$1" in
 
     "build_ax18")
         compile_single_target "ipq60xx" "cmiot_ax18" "ipq6018_cmiot_ax18"
+        ;;
+
+    "build_gl-ax1800")
+        compile_single_target "ipq60xx" "glinet_gl_ax1800"  "ipq6018_glinet_gl_ax1800"
         ;;
 
     "build_re-cs-02")
