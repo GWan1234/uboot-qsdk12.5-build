@@ -33,6 +33,7 @@ class SidebarManager {
         this.currentPath = this.getCurrentPath();
         this.currentPageId = this.getCurrentPageId();
         this.navigationSections = this.getNavigationConfig();
+        this.rebootItem = this.getRebootConfig();
     }
 
     /**
@@ -76,6 +77,21 @@ class SidebarManager {
     }
 
     /**
+     * 重启功能配置（独立一级菜单）
+     */
+    getRebootConfig() {
+        return {
+            titleKey: "nav.reboot",
+            id: "reboot",
+            path: "/reboot.html",
+            // 点击时弹出确认框，确认后跳转到 reboot.html
+            onClick: () => {
+                return confirm(t("reboot.confirm"));
+            }
+        };
+    }
+
+    /**
      * 导航配置
      */
     getNavigationConfig() {
@@ -105,8 +121,7 @@ class SidebarManager {
                     { path: "/backup.html", labelKey: "nav.backup", id: "backup" },
                     { path: "/console.html", labelKey: "nav.console", id: "console" },
                     { path: "/env.html", labelKey: "nav.env", id: "env" },
-                    { path: "/mibib.html", labelKey: "nav.mibib", id: "mibib" },
-                    { path: "/reboot.html", labelKey: "nav.reboot", id: "reboot", onClick: () => confirm(t("reboot.confirm")) }
+                    { path: "/mibib.html", labelKey: "nav.mibib", id: "mibib" }
                 ]
             }
         };
@@ -179,10 +194,44 @@ class SidebarManager {
             navContainer.appendChild(this.createNavigationSection(sectionKey, sectionConfig));
         });
 
+        navContainer.appendChild(this.createRebootSection());
+
         this.sidebarElement.appendChild(navContainer);
 
         // 初始化折叠状态 - 只展开当前页面所在section
         this.initCollapsibleSections();
+    }
+
+    /**
+     * 渲染重启区域（独立一级菜单，无子项）
+     */
+    createRebootSection() {
+        // 创建重启按钮（作为一级菜单）
+        const sectionElement = document.createElement("div");
+        sectionElement.className = "nav-section reboot-section";
+        sectionElement.dataset.section = "reboot";
+
+        const rebootButton = document.createElement("div");
+        rebootButton.className = "nav-section-title";
+        rebootButton.setAttribute("data-i18n", this.rebootItem.titleKey);
+        rebootButton.textContent = t(this.rebootItem.titleKey);
+
+        // 添加点击事件 - 弹出确认框，确认后跳转到 reboot.html
+        rebootButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // 弹出确认框
+            if (this.rebootItem.onClick && this.rebootItem.onClick()) {
+                // 用户确认，跳转到 reboot.html
+                window.location.href = this.rebootItem.path;
+            }
+            // 用户取消，什么都不做
+        });
+
+        sectionElement.appendChild(rebootButton);
+
+        return sectionElement;
     }
 
     /**
@@ -223,15 +272,6 @@ class SidebarManager {
         link.href = item.path;
         link.setAttribute("data-nav-id", item.id);
 
-        // 设置点击事件（如果有）
-        if (item.onClick) {
-            link.onclick = (e) => {
-                if (!item.onClick()) {
-                    e.preventDefault();
-                }
-            };
-        }
-
         // 文本标签
         const label = document.createElement("span");
         label.setAttribute("data-i18n", item.labelKey);
@@ -246,7 +286,7 @@ class SidebarManager {
      * 规则：只展开当前页面所在的section，其他全部折叠
      */
     initCollapsibleSections() {
-        const sections = this.sidebarElement.querySelectorAll('.nav-section');
+        const sections = this.sidebarElement.querySelectorAll('.nav-section:not(.reboot-section)');
 
         // 先找出当前页面所在的section
         const activeSectionKey = this.findActiveSection();
@@ -285,6 +325,8 @@ class SidebarManager {
      */
     findActiveSection() {
         if (!this.currentPageId) return null;
+
+        if (this.currentPageId === 'reboot') return 'reboot';
 
         for (const [sectionKey, sectionConfig] of Object.entries(this.navigationSections)) {
             const found = sectionConfig.items.some(item => item.id === this.currentPageId);
@@ -372,7 +414,7 @@ class SidebarManager {
      * 规则：只展开当前页面所在section，其他全部折叠
      */
     refreshCollapsibleState() {
-        const sections = this.sidebarElement.querySelectorAll('.nav-section');
+        const sections = this.sidebarElement.querySelectorAll('.nav-section:not(.reboot-section)');
         const activeSectionKey = this.findActiveSection();
 
         sections.forEach((section) => {

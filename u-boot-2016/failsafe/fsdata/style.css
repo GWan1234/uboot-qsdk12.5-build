@@ -348,6 +348,12 @@ html[data-theme="dark"] .sidebar-toggle {
     -webkit-mask: var(--dropdown-arrow-icon) no-repeat center / contain;
 }
 
+/* 移除重启菜单的箭头图标 */
+.reboot-section .nav-section-title::after {
+    display: none !important;
+    content: none !important;
+}
+
 /* 悬停和激活状态下的图标颜色 */
 .nav-section[data-section].active-section > .nav-section-title::after,
 .nav-section-title:hover::after {
