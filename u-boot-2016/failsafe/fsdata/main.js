@@ -1161,6 +1161,64 @@ const versionRenderer = (() => {
 // ==============================
 
 /**
+ * 页面配置映射
+ */
+const pageConfigs = {
+    index: {
+        needUpload: true,
+        formDataKey: 'firmware'
+    },
+    uboot: {
+        needUpload: true,
+        formDataKey: 'uboot'
+    },
+    art: {
+        needUpload: true,
+        formDataKey: 'art'
+    },
+    cdt: {
+        needUpload: true,
+        formDataKey: 'cdt'
+    },
+    ptable: {
+        needUpload: true,
+        formDataKey: 'ptable'
+    },
+    simg: {
+        needUpload: true,
+        formDataKey: 'simg'
+    },
+    initramfs: {
+        needUpload: true,
+        formDataKey: 'initramfs'
+    },
+    env: {
+        needUpload: false,
+        init: () => envManager.init()
+    },
+    backup: {
+        needUpload: false,
+        init: () => backupManager.init()
+    },
+    network: {
+        needUpload: false,
+        init: () => networkManager.init()
+    },
+    console: {
+        needUpload: false,
+        init: () => consoleManager.init()
+    },
+    sysinfo: {
+        needUpload: false,
+        init: () => sysinfoManager.init()
+    },
+    mibib: {
+        needUpload: false,
+        init: () => mibibManager.init()
+    }
+};
+
+/**
  * 应用初始化
  */
 function appInit(pageName) {
@@ -1185,35 +1243,27 @@ function appInit(pageName) {
     // 更新文档标题
     updateDocumentTitle();
 
+    // 获取页面配置
+    const config = pageConfigs[pageName] || { needUpload: false };
+
+    // 初始化上传组件（如果需要）
+    if (config.needUpload) {
+        const uploadManager = getUnifiedUploadManager();
+        uploadManager.initForPage(pageName, {
+            formDataKey: config.formDataKey || pageName,
+            successPage: config.successPage || 'flashing.html'
+        });
+    }
+
+    // 执行页面特定的初始化
+    if (config.init && typeof config.init === 'function') {
+        config.init();
+    }
+
     // 添加准备完成的类
     setTimeout(function() {
         document.body.classList.add("ready");
     }, 0);
-
-    // 根据页面初始化对应模块
-    switch (pageName) {
-        case "env":
-            envManager.init();
-            break;
-        case "backup":
-            backupManager.init();
-            break;
-        case "network":
-            networkManager.init();
-            break;
-        case "console":
-            consoleManager.init();
-            break;
-        case "sysinfo":
-            sysinfoManager.init();
-            break;
-        case "mibib":
-            mibibManager.init();
-            break;
-        default:
-            sysinfoManager.fetchAndStore();
-            break;
-    }
 
     // 获取并渲染版本信息
     versionRenderer.loadAndRender();
@@ -1465,106 +1515,398 @@ const messageBuilder = (() => {
 })();
 
 // ==============================
-// 文件上传模块
+// 统一的上传管理器
 // ==============================
 
-/**
- * 文件上传管理器
- * 负责处理所有文件上传操作，包括进度跟踪、响应解析和错误处理
- */
-const uploadManager = (() => {
-    let elements = null;
+class UnifiedUploadManager {
+    constructor() {
+        this.instances = new Map();   // 存储每个页面的上传实例
+        this.currentPage = null;
+    }
 
     /**
-     * 获取或缓存 DOM 元素
+     * 为指定页面初始化上传组件
+     * @param {string} pageName - 页面名称
+     * @param {object} options - 配置选项
      */
-    function getElements() {
-        if (elements) return elements;
+    initForPage(pageName, options = {}) {
+        // 如果已经初始化过，先销毁
+        if (this.instances.has(pageName)) {
+            this.destroyPage(pageName);
+        }
 
-        elements = {
-            title: document.getElementById("title"),
-            hint: document.getElementById("hint"),
-            form: document.getElementById("form"),
-            fileInput: document.getElementById("file"),
-            progressCircle: document.getElementById("bar-circle"),
-            successInfo: document.getElementById("success-info"),
-            errorInfo: document.getElementById("error-info"),
-            upgrade: document.getElementById("upgrade"),
+        // 获取容器
+        const container = document.getElementById('upload-container');
+        if (!container) {
+            console.warn(`Upload container not found for page: ${pageName}`);
+            return null;
+        }
+
+        // 创建上传组件实例
+        const instance = new FileUploadComponent(container, {
+            formDataKey: options.formDataKey || pageName,
+            pageName: pageName,
+            successPage: pageName === 'initramfs' ? 'booting.html' : 'flashing.html',
+            onUploadStart: () => this.handleUploadStart(pageName),
+            onUploadComplete: (result) => this.handleUploadComplete(pageName, result),
+            onUploadError: (error) => this.handleUploadError(pageName, error)
+        });
+
+        // 存储实例
+        this.instances.set(pageName, instance);
+
+        // 渲染组件
+        instance.render();
+
+        return instance;
+    }
+
+    /**
+     * 销毁指定页面的上传组件
+     */
+    destroyPage(pageName) {
+        const instance = this.instances.get(pageName);
+        if (instance) {
+            instance.destroy();
+            this.instances.delete(pageName);
+        }
+    }
+
+    /**
+     * 上传开始回调
+     */
+    handleUploadStart(pageName) {
+        console.log(`[${pageName}] Upload started`);
+    }
+
+    /**
+     * 上传完成回调
+     */
+    handleUploadComplete(pageName, result) {
+        console.log(`[${pageName}] Upload completed:`, result);
+    }
+
+    /**
+     * 上传错误回调
+     */
+    handleUploadError(pageName, error) {
+        console.error(`[${pageName}] Upload error:`, error);
+    }
+}
+
+// ==============================
+// 文件上传组件类
+// ==============================
+
+class FileUploadComponent {
+    constructor(container, options) {
+        this.container = container;
+        this.options = {
+            formDataKey: 'file',
+            pageName: 'unknown',
+            successPage: 'flashing.html',
+            onUploadStart: null,
+            onUploadComplete: null,
+            onUploadError: null,
+            ...options
         };
 
-        return elements;
+        this.selectedFile = null;
+        this.elements = {};
+        this.isUploading = false;
     }
 
     /**
-     * 隐藏所有信息显示区域
+     * 渲染上传组件
      */
-    function hideAll() {
-        const els = getElements();
+    render() {
+        const html = `
+            <div class="upload-card">
+                <div class="upload-area" id="uploadArea">
+                    <!-- 文件选择区域（正常状态） -->
+                    <div class="upload-selector" id="uploadSelector">
+                        <div class="drop-zone" id="dropZone">
+                            <div class="drop-zone-content">
+                                <svg class="drop-zone-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="17 8 12 3 7 8"/>
+                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                </svg>
+                                <p id="dropZoneText" class="drop-zone-text" data-i18n="file.dropzone.text"></p>
+                                <p class="drop-zone-hint" data-i18n="file.dropzone.hint"></p>
+                            </div>
+                        </div>
 
-        if (els.form) els.form.style.display = "none";
-        if (els.successInfo) els.successInfo.style.display = "none";
-        if (els.errorInfo) els.errorInfo.style.display = "none";
-        if (els.upgrade) els.upgrade.style.display = "none";
+                        <div class="upload-actions">
+                            <input type="file" id="fileInput" name="${this.options.formDataKey}" style="display: none;">
+                            <button type="button" id="uploadBtn" class="button" data-i18n="common.upload"></button>
+                        </div>
+                    </div>
+
+                    <!-- 上传进度区域（上传时显示） -->
+                    <div class="upload-progress" id="uploadProgress" style="display: none;">
+                        <div class="progress-container">
+                            <div class="bar-circle" id="bar-circle" style="--percent: 0;"></div>
+                            <div class="progress-text">
+                                <p class="progress-filename" id="progressFilename"></p>
+                                <p class="progress-percent" id="progressPercent"></p>
+                            </div>
+                        </div>
+                        <p class="progress-status" id="progressStatus" data-i18n="file.uploading"></p>
+                    </div>
+
+                    <!-- 成功信息区域 -->
+                    <div class="upload-success" id="uploadSuccess" style="display: none;">
+                        <div id="success-info"></div>
+                        <div class="continue-hint" data-i18n=${this.options.pageName === "initramfs" ? "initramfs.boot_hint" : "common.upgrade_hint"}></div>
+                        <button class="button" id="continueBtn" data-i18n=${this.options.pageName === "initramfs" ? "common.boot" : "common.update"}></button>
+                    </div>
+
+                    <!-- 错误信息区域 -->
+                    <div class="upload-error" id="uploadError" style="display: none;">
+                        <div id="error-info" class="error-message"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        this.container.innerHTML = html;
+        this.cacheElements();
+        this.bindEvents();
+        this.applyI18n();
     }
 
     /**
-     * 显示进度条
-     * @param {number} percent - 进度百分比 (0-100)
+     * 缓存 DOM 元素
      */
-    function showProgress(percent) {
-        const els = getElements();
-        hideAll();
-        if (els.progressCircle) {
-            els.progressCircle.style.display = "block";
-            els.progressCircle.style.setProperty("--percent", Math.max(0, Math.min(100, percent)));
+    cacheElements() {
+        this.elements = {
+            title: document.getElementById('title'),
+            hint: document.getElementById('hint'),
+            uploadArea: document.getElementById('uploadArea'),
+            uploadSelector: document.getElementById('uploadSelector'),
+            uploadProgress: document.getElementById('uploadProgress'),
+            uploadSuccess: document.getElementById('uploadSuccess'),
+            uploadError: document.getElementById('uploadError'),
+            dropZone: document.getElementById('dropZone'),
+            fileInput: document.getElementById('fileInput'),
+            uploadBtn: document.getElementById('uploadBtn'),
+            progressCircle: document.getElementById('bar-circle'),
+            progressPercent: document.getElementById('progressPercent'),
+            progressFilename: document.getElementById('progressFilename'),
+            progressStatus: document.getElementById('progressStatus'),
+            successInfo: document.getElementById('success-info'),
+            errorInfo: document.getElementById('error-info'),
+            continueBtn: document.getElementById('continueBtn')
+        };
+    }
+
+    /**
+     * 绑定事件
+     */
+    bindEvents() {
+        // 拖拽区域点击
+        if (this.elements.dropZone) {
+            this.elements.dropZone.addEventListener('click', () => this.openFileSelector());
+            this.bindDragEvents();
+        }
+
+        // 文件输入变化
+        if (this.elements.fileInput) {
+            this.elements.fileInput.addEventListener('change', (e) => {
+                this.handleFileSelect(e.target.files[0]);
+            });
+        }
+
+        // 上传按钮
+        if (this.elements.uploadBtn) {
+            this.elements.uploadBtn.addEventListener('click', () => {
+                this.upload();
+            });
+        }
+
+        // 继续按钮（跳转到成功页面）
+        if (this.elements.continueBtn) {
+            this.elements.continueBtn.addEventListener('click', () => {
+                window.location.href = this.options.successPage;
+            });
         }
     }
 
     /**
-     * 隐藏进度条
+     * 绑定拖拽事件
      */
-    function hideProgress() {
-        const els = getElements();
-        if (els.progressCircle) els.progressCircle.style.display = "none";
+    bindDragEvents() {
+        const dropZone = this.elements.dropZone;
+        if (!dropZone) return;
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+        });
+
+        dropZone.addEventListener('dragenter', () => {
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragover', () => {
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            dropZone.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files && files.length > 0) {
+                this.handleFileSelect(files[0]);
+            }
+        });
     }
 
     /**
-     * 设置标题和提示文本
-     * @param {string} titleKey - 标题国际化 key
-     * @param {string} hintKey - 提示国际化 key
+     * 打开文件选择器
      */
-    function setTitleAndHint(titleKey, hintKey) {
-        const els = getElements();
-        if (els.title && titleKey) els.title.innerHTML = t(titleKey);
-        if (els.hint && hintKey) els.hint.innerHTML = t(hintKey);
+    openFileSelector() {
+        if (this.elements.fileInput && !this.isUploading) {
+            this.elements.fileInput.click();
+        }
     }
 
     /**
-     * 处理上传成功
-     * @param {object} info - 成功信息对象
+     * 处理文件选择
      */
-    function handleSuccess(info) {
-        const els = getElements();
+    handleFileSelect(file) {
+        if (!file) return;
 
-        hideProgress();
+        this.selectedFile = file;
 
-        if (els.successInfo) {
-            els.successInfo.style.display = "block";
-            els.successInfo.innerHTML = messageBuilder.buildSuccessTable(info);
+        // 更新拖拽区域样式
+        if (this.elements.dropZone) {
+            this.elements.dropZone.classList.add('has-file');
         }
 
-        if (els.upgrade) els.upgrade.style.display = "block";
+        // 更新显示文本
+        this.updateDropZoneText(file.name);
     }
 
     /**
-     * 处理上传失败
-     * @param {object} info - 错误信息对象
+     * 更新拖拽区域文本
      */
-    function handleError(info) {
-        const els = getElements();
+    updateDropZoneText(filename) {
+        const textElement = document.getElementById('dropZoneText');
+        if (!textElement) return;
 
-        setTitleAndHint("fail.title", "fail.hint");
-        hideProgress();
+        if (filename) {
+            const maxLength = 105;
+            const displayName = filename.length > maxLength
+                ? filename.substring(0, maxLength) + '...'
+                : filename;
+            textElement.innerHTML = `📄 ${escapeHtml(displayName)}`;
+            textElement.style.fontWeight = '600';
+            textElement.style.color = 'var(--primary)';
+        } else {
+            textElement.innerHTML = t('file.dropzone.text');
+            textElement.style.fontWeight = '500';
+            textElement.style.color = '';
+        }
+    }
+
+    /**
+     * 显示上传进度界面
+     */
+    showProgress() {
+        // 隐藏选择器，显示进度条
+        if (this.elements.uploadSelector) {
+            this.elements.uploadSelector.style.display = 'none';
+        }
+        if (this.elements.uploadProgress) {
+            this.elements.uploadProgress.style.display = 'block';
+        }
+        if (this.elements.uploadSuccess) {
+            this.elements.uploadSuccess.style.display = 'none';
+        }
+        if (this.elements.uploadError) {
+            this.elements.uploadError.style.display = 'none';
+        }
+
+        // 更新文件名显示
+        if (this.elements.progressFilename && this.selectedFile) {
+            this.elements.progressFilename.textContent = this.selectedFile.name;
+        }
+    }
+
+    /**
+     * 更新进度百分比
+     */
+    updateProgress(percent) {
+        const p = Math.max(0, Math.min(100, percent));
+
+        if (this.elements.progressCircle) {
+            this.elements.progressCircle.style.setProperty('--percent', p);
+        }
+
+        if (this.elements.progressPercent) {
+            this.elements.progressPercent.textContent = `${p}%`;
+        }
+
+        if (this.elements.progressStatus) {
+            if (p < 100) {
+                this.elements.progressStatus.textContent = t('file.uploading');
+            } else {
+                this.elements.progressStatus.textContent = t('file.processing');
+            }
+        }
+    }
+
+    /**
+     * 显示成功界面
+     */
+    showSuccess(info) {
+        this.isUploading = false;
+
+        if (this.elements.uploadProgress) {
+            this.elements.uploadProgress.style.display = 'none';
+        }
+
+        if (this.elements.uploadSuccess) {
+            this.elements.uploadSuccess.style.display = 'block';
+        }
+
+        if (this.elements.successInfo) {
+            this.elements.successInfo.innerHTML = messageBuilder.buildSuccessTable(info);
+        }
+
+        if (this.options.onUploadComplete) {
+            this.options.onUploadComplete({ status: 'success', info });
+        }
+    }
+
+    /**
+     * 显示错误界面
+     */
+    showError(info) {
+        this.isUploading = false;
+
+        if (this.elements.uploadProgress) {
+            this.elements.uploadProgress.style.display = 'none';
+        }
+
+        if (this.elements.uploadError) {
+            this.elements.uploadError.style.display = 'block';
+        }
+
+        if (this.elements.title) {
+            this.elements.title.innerHTML = t('fail.title');
+        }
+
+        if (this.elements.hint) {
+            this.elements.hint.innerHTML = t('fail.hint');
+        }
 
         let errorMessage = "";
 
@@ -1585,83 +1927,114 @@ const uploadManager = (() => {
                 errorMessage = messageBuilder.buildUnknownErrorMessage(info);
         }
 
-        if (els.errorInfo) {
-            els.errorInfo.style.display = "block";
-            els.errorInfo.innerHTML = errorMessage;
+        if (this.elements.errorInfo) {
+            this.elements.errorInfo.innerHTML = errorMessage;
         }
-    }
 
-    /**
-     * 处理无效响应
-     * @param {string} rawResponse - 原始响应文本
-     */
-    function handleInvalidResponse(rawResponse) {
-        const els = getElements();
-
-        setTitleAndHint("fail.title", "fail.hint");
-        hideProgress();
-
-        if (els.errorInfo) {
-            els.errorInfo.style.display = "block";
-            els.errorInfo.innerHTML = messageBuilder.buildInvalidResponseMessage(rawResponse);
+        if (this.options.onUploadError) {
+            this.options.onUploadError(info);
         }
     }
 
     /**
      * 执行上传
-     * @param {string} formDataKey - FormData中的键名（如 'firmware'、'uboot'）
      */
-    function upload(formDataKey) {
-        const els = getElements();
-        const file = els.fileInput?.files[0];
-
-        if (!file) {
-            alert(t("file.select"));
+    upload() {
+        if (!this.selectedFile) {
+            alert(t('file.select'));
             return;
         }
 
-        showProgress(0);
+        if (this.isUploading) {
+            alert(t('file.uploading'));
+            return;
+        }
+
+        this.isUploading = true;
+        this.showProgress();
+        this.updateProgress(0);
+
+        if (this.options.onUploadStart) {
+            this.options.onUploadStart();
+        }
 
         const formData = new FormData();
-        formData.append(formDataKey, file);
+        formData.append(this.options.formDataKey, this.selectedFile);
 
-        ajax({
-            url: "/upload",
-            data: formData,
-            done: function(responseText) {
-                let response;
+        const xhr = new XMLHttpRequest();
 
-                try {
-                    response = JSON.parse(responseText);
-                } catch (e) {
-                    handleInvalidResponse(responseText || t("error.invalid_response"));
-                    return;
-                }
-
-                switch (response.status) {
-                    case "success":
-                        handleSuccess(response.info);
-                        break;
-                    case "fail":
-                        handleError(response.info);
-                        break;
-                    default:
-                        handleInvalidResponse(responseText || t("error.unknown_status"));
-                }
-            },
-            progress: function(event) {
-                if (event.lengthComputable && event.total > 0) {
-                    const percent = parseInt((event.loaded / event.total) * 100);
-                    showProgress(percent);
-                }
+        xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable && event.total > 0) {
+                const percent = parseInt((event.loaded / event.total) * 100);
+                this.updateProgress(percent);
             }
         });
+
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200) {
+                    let response;
+                    try {
+                        response = JSON.parse(xhr.responseText);
+                    } catch (e) {
+                        this.showError({ type: 'invalid_response', message: xhr.responseText });
+                        return;
+                    }
+
+                    switch (response.status) {
+                        case 'success':
+                            this.showSuccess(response.info);
+                            break;
+                        case 'fail':
+                            this.showError(response.info);
+                            break;
+                        default:
+                            this.showError({ type: 'unknown_status', message: xhr.responseText });
+                    }
+                } else {
+                    this.showError({ type: 'http_error', message: `HTTP ${xhr.status}` });
+                }
+            }
+        };
+
+        xhr.open('POST', '/upload');
+        xhr.send(formData);
     }
 
-    return {
-        upload
-    };
-})();
+    /**
+     * 应用国际化
+     */
+    applyI18n() {
+        if (typeof applyI18n === 'function') {
+            applyI18n(this.container);
+        }
+    }
+
+    /**
+     * 销毁组件
+     */
+    destroy() {
+        if (this.container) {
+            this.container.innerHTML = '';
+        }
+        this.elements = {};
+        this.selectedFile = null;
+        this.isUploading = false;
+    }
+}
+
+// 全局统一上传管理器实例
+let unifiedUploadManager = null;
+
+/**
+ * 获取统一上传管理器实例
+ */
+function getUnifiedUploadManager() {
+    if (!unifiedUploadManager) {
+        unifiedUploadManager = new UnifiedUploadManager();
+    }
+    return unifiedUploadManager;
+}
 
 // ==============================
 // 结果处理模块
@@ -4754,6 +5127,10 @@ const I18N = (() => {
             "theme.dark": "Dark",
             "title.author": "View Author Profile",
             "title.project": "View Project",
+            "file.dropzone.text": "Drag & drop a file here or click to select a file",
+            "file.dropzone.hint": "Maximum file size: depends on partition",
+            "file.uploading": "Uploading",
+            "file.processing": "Processing",
             "common.upload": "Upload",
             "common.update": "Update",
             "common.boot": "Boot",
@@ -5021,6 +5398,10 @@ const I18N = (() => {
             "theme.dark": "暗色",
             "title.author": "查看作者主页",
             "title.project": "查看项目",
+            "file.dropzone.text": "将文件拖拽到此处，或点击以选择文件",
+            "file.dropzone.hint": "最大文件大小：取决于分区大小",
+            "file.uploading": "正在上传",
+            "file.processing": "处理中",
             "common.upload": "上传",
             "common.update": "更新",
             "common.boot": "启动",

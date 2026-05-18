@@ -767,141 +767,6 @@ button.button:disabled {
     transform: none !important;
 }
 
-/* 圆环进度条 */
-.bar-circle {
-    --percent: 0;
-    --size: 100px;
-    --stroke-width: 6px; /* 从8px减小到6px，稍细但不要太细 */
-    position: relative;
-    width: var(--size);
-    height: var(--size);
-    margin: 2rem auto;
-    display: none;
-}
-
-.bar-circle::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    background: conic-gradient(var(--primary) calc(var(--percent) * 3.6deg),
-                              rgba(49, 161, 161, 0.1) 0deg); /* 使用主题色 */
-    mask: radial-gradient(circle, transparent calc(50% - var(--stroke-width)), white calc(50% - var(--stroke-width)));
-    -webkit-mask: radial-gradient(circle, transparent calc(50% - var(--stroke-width)), white calc(50% - var(--stroke-width)));
-}
-
-.bar-circle::after {
-    content: counter(progress) '%';
-    counter-reset: progress var(--percent);
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: var(--primary); /* 使用主题色 */
-    background: var(--panel);
-    width: calc(var(--size) - var(--stroke-width) * 2 - 10px);
-    height: calc(var(--size) - var(--stroke-width) * 2 - 10px);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-#success-info {
-    width: 100%;
-}
-
-/* 信息项样式 */
-.info-item {
-    font-size: 14px;
-    color: var(--text);
-    max-width: 520px;
-    margin: 0.5rem auto;
-    text-align: left;
-    padding: 0.75rem 1rem;
-    background: var(--panel-2);
-    border-radius: 0.375rem;
-    border: 1px solid var(--border);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-}
-
-.info-item strong {
-    color: var(--primary);
-    font-weight: 600;
-    margin-right: 0.5rem;
-}
-
-/* 文件信息显示 */
-#size, #md5 {
-    font-size: 14px;
-    color: var(--text);
-    max-width: 520px;
-    margin: 0.5rem auto;
-    text-align: left;
-    padding: 0.75rem 1rem;
-    background: var(--panel-2);
-    border-radius: 0.375rem;
-    border: 1px solid var(--border);
-    display: none;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-}
-
-#size strong,
-#md5 strong {
-    color: var(--primary); /* 标签使用主题色 */
-    font-weight: 600;
-    margin-right: 0.5rem;
-}
-
-/* 错误信息样式 */
-.error-message {
-    background-color: var(--err-bg);
-    border: 1px solid var(--err-border);
-    border-radius: var(--radius-sm);
-    padding: 1.25rem;
-    margin: 1rem 0;
-    color: var(--text);
-}
-
-.error-title {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--danger);
-    margin-bottom: 0.75rem;
-}
-
-.error-detail {
-    font-size: 0.95rem;
-    line-height: 1.6;
-}
-
-.error-detail p {
-    margin: 0.5rem 0;
-}
-
-.error-detail strong {
-    color: var(--danger);
-}
-
-/* 升级区域 */
-#upgrade {
-    text-align: center;
-    padding: 1rem 0;
-    display: none;
-}
-
-#upgrade p {
-    color: #31a1a1; /* 直接使用主题色，保持醒目 */
-    font-size: 0.9rem;
-    font-weight: 600;
-    margin-bottom: 1rem;
-}
-
 /* ====== 信息表格样式 ====== */
 
 /* 成功/错误信息表格 */
@@ -932,6 +797,7 @@ button.button:disabled {
 
 /* 标签列 */
 .info-label {
+    text-align: center;
     padding: 0.65rem 0.75rem;
     width: 20%;
     min-width: 100px;
@@ -946,6 +812,7 @@ button.button:disabled {
 
 /* 值列 */
 .info-value {
+    text-align: left;
     padding: 0.65rem 0.75rem;
     color: var(--text);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -960,7 +827,26 @@ button.button:disabled {
     letter-spacing: 0.5px;
 }
 
-/* 错误表格变体 */
+/* 错误信息样式 */
+.error-message {
+    background-color: var(--err-bg);
+    border: 1px solid var(--err-border);
+    border-radius: var(--radius-sm);
+    padding: 1.25rem;
+    margin: 0;
+    color: var(--text);
+}
+
+/* 错误信息容器内的错误标题 */
+.error-message .error-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--danger);
+    margin-bottom: 0.75rem;
+    text-align: center;
+}
+
+/* 错误表格 */
 .error-table {
     border-color: var(--err-border);
     background: var(--err-bg);
@@ -983,13 +869,6 @@ button.button:disabled {
     margin: 0.75rem 0 0;
     padding: 0.5rem;
     line-height: 1.5;
-}
-
-/* 错误信息容器内的错误标题调整 */
-.error-message .error-title {
-    text-align: center;
-    margin-bottom: 0.75rem;
-    font-size: 1.05rem;
 }
 
 /* ====== 命令执行失败样式 ====== */
@@ -1077,6 +956,319 @@ html[data-theme="dark"] .error-output-title {
 
 html[data-theme="dark"] .cmd-value {
     color: #f87171;
+}
+
+/* ====== 上传组件样式 ====== */
+
+/* 上传组件包装器 */
+.upload-wrapper {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+/* 上传卡片容器 */
+.upload-card {
+    width: 100%;
+    background: var(--panel);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    box-shadow: var(--shadow-soft);
+    transition: all 0.3s ease;
+}
+
+.upload-area {
+    padding: 1.5rem;
+}
+
+/* ===== 文件选择区域 ===== */
+.upload-selector {
+    width: 100%;
+    transition: opacity 0.3s ease;
+}
+
+/* 拖拽区域 */
+.drop-zone {
+    width: 100%;
+    min-width: 280px;
+    height: auto;
+    min-height: 165px;
+    padding: 2rem 1.5rem;
+    border: 2px dotted var(--border);
+    border-radius: var(--radius);
+    background: var(--panel-2);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    position: relative;
+    margin-bottom: 1.5rem;
+}
+
+/* 拖拽区域悬停效果 */
+.drop-zone:hover {
+    border-color: var(--primary);
+    background: var(--panel);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-soft);
+}
+
+/* 拖拽区域激活状态（文件正在拖拽） */
+.drop-zone.drag-over {
+    border-color: var(--primary);
+    background: rgba(49, 161, 161, 0.05);
+    transform: scale(1.01);
+    box-shadow: 0 0 0 3px rgba(49, 161, 161, 0.1);
+}
+
+/* 文件已选中时的样式 */
+.drop-zone.has-file {
+    border-color: var(--primary);
+    background: rgba(49, 161, 161, 0.05);
+    border-style: solid;
+}
+
+.drop-zone.has-file .drop-zone-icon {
+    color: var(--primary-2);
+    opacity: 1;
+}
+
+/* 拖拽区域内容容器 */
+.drop-zone-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* 拖拽区域图标 */
+.drop-zone-icon {
+    width: 48px;
+    height: 48px;
+    color: var(--primary);
+    opacity: 0.7;
+    transition: all 0.3s ease;
+}
+
+.drop-zone:hover .drop-zone-icon {
+    opacity: 1;
+    transform: translateY(-3px);
+}
+
+/* 拖拽区域主文本 */
+.drop-zone-text {
+    font-size: 1rem;
+    color: var(--text);
+    margin: 0;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+/* 拖拽区域提示文本 */
+.drop-zone-hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin: 0;
+}
+
+/* 操作按钮区域 */
+.upload-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* ===== 上传进度区域 ===== */
+.upload-progress {
+    text-align: center;
+    padding: 1rem;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.progress-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+/* 圆环进度条 */
+.bar-circle {
+    --percent: 0;
+    --size: 100px;
+    --stroke-width: 6px;
+    position: relative;
+    width: var(--size);
+    height: var(--size);
+    margin: 0;
+    display: block;
+    flex-shrink: 0;
+}
+
+.bar-circle::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: conic-gradient(var(--primary) calc(var(--percent) * 3.6deg),
+                              rgba(49, 161, 161, 0.1) 0deg);
+    mask: radial-gradient(circle, transparent calc(50% - var(--stroke-width)), white calc(50% - var(--stroke-width)));
+    -webkit-mask: radial-gradient(circle, transparent calc(50% - var(--stroke-width)), white calc(50% - var(--stroke-width)));
+}
+
+.bar-circle::after {
+    content: counter(progress) '%';
+    counter-reset: progress var(--percent);
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--primary);
+    background: var(--panel);
+    width: calc(var(--size) - var(--stroke-width) * 2 - 10px);
+    height: calc(var(--size) - var(--stroke-width) * 2 - 10px);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 进度文本区域 */
+.progress-text {
+    text-align: left;
+    flex: 1;
+    min-width: 150px;
+}
+
+.progress-filename {
+    font-size: 0.9rem;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+    word-break: break-all;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.progress-percent {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--primary);
+    margin: 0;
+}
+
+.progress-status {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 0.5rem;
+    text-align: center;
+}
+
+/* ===== 信息区域 ===== */
+.upload-success,
+.upload-error {
+    text-align: center;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.3s ease;
+}
+
+/* 成功信息表格 */
+#success-info {
+    width: 100%;
+}
+
+.continue-hint {
+    color: var(--primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin: 0.95rem auto 0.65rem;
+}
+
+/* ===== 暗色主题适配 ===== */
+html[data-theme="dark"] .drop-zone {
+    background: rgba(17, 28, 51, 0.6);
+}
+
+html[data-theme="dark"] .drop-zone.drag-over {
+    background: rgba(26, 137, 137, 0.1);
+}
+
+html[data-theme="dark"] .drop-zone.has-file {
+    background: rgba(26, 137, 137, 0.1);
+}
+
+html[data-theme="dark"] .bar-circle::after {
+    background: var(--panel);
+}
+
+/* ===== 动画效果 ===== */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 0.7;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.05);
+    }
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+}
+
+/* 上传中的动画效果 */
+.upload-progress .bar-circle {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* 错误时的抖动效果 */
+.drop-zone.error {
+    animation: shake 0.3s ease-in-out;
+    border-color: var(--danger);
+}
+
+/* 成功时的闪烁效果 */
+.upload-success {
+    animation: fadeIn 0.5s ease;
+}
+
+/* 加载状态 */
+.upload-progress .progress-status::after {
+    content: '...';
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    margin-left: 4px;
+    animation: blink 1s infinite;
 }
 
 /* ========== 警告区域 - 独立卡片 ========== */
@@ -2357,20 +2549,17 @@ html[data-theme="dark"] .card-main-section .table .tr:has(.td[style*="font-weigh
     }
 
     .env-col-name {
-        width: 25%;
-        min-width: 95px;
+        min-width: 80px;
         max-width: 150px;
     }
 
     .env-col-value {
-        width: 60%;
         min-width: 100px;
         max-width: 200px;
     }
 
     .env-col-actions {
-        width: 15%;
-        min-width: 75px;
+        min-width: 110px;
     }
 
     .env-action-btn {
@@ -2556,6 +2745,55 @@ html[data-theme="dark"] .card-main-section .table .tr:has(.td[style*="font-weigh
     .suggestions-list {
         max-height: 150px;
     }
+
+    .upload-area {
+        padding: 1rem;
+    }
+
+    .drop-zone {
+        min-height: 160px;
+        padding: 1.5rem 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .drop-zone-icon {
+        width: 36px;
+        height: 36px;
+    }
+
+    .drop-zone-text {
+        font-size: 0.9rem;
+    }
+
+    .drop-zone-hint {
+        font-size: 0.7rem;
+    }
+
+    .progress-container {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .progress-text {
+        text-align: center;
+    }
+
+    .progress-filename {
+        font-size: 0.8rem;
+    }
+
+    .progress-percent {
+        font-size: 1.2rem;
+    }
+
+    .bar-circle {
+        --size: 80px;
+        --stroke-width: 5px;
+    }
+
+    .bar-circle::after {
+        font-size: 1rem;
+    }
 }
 
 /* 平板端优化 */
@@ -2571,6 +2809,18 @@ html[data-theme="dark"] .card-main-section .table .tr:has(.td[style*="font-weigh
 
     .env-table-scroll {
         max-height: 400px;
+    }
+
+    .upload-area {
+        padding: 1.25rem;
+    }
+
+    .drop-zone {
+        min-height: 180px;
+    }
+
+    .progress-container {
+        gap: 1.5rem;
     }
 }
 

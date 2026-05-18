@@ -24,21 +24,7 @@
                     <p id="hint" data-i18n-html="index.hint"></p>
                 </div>
 
-                <div class="card-main-section">
-                    <div class="card-main-inner">
-                        <form id="form">
-                            <input id="file" type="file" name="firmware">
-                            <input type="button" value="Upload" data-i18n-attr="value:common.upload" onclick="uploadManager.upload('firmware')">
-                        </form>
-                        <div class="bar-circle" id="bar-circle" style="display: none; --percent: 0;"></div>
-                        <div id="success-info" style="display: none;"></div>
-                        <div id="error-info" class="error-message" style="display: none;"></div>
-                        <div id="upgrade" style="display: none;">
-                            <p data-i18n="common.upgrade_hint"></p>
-                            <button class="button" data-i18n="common.update" onclick="location = '/flashing.html'"></button>
-                        </div>
-                    </div>
-                </div>
+                <div id="upload-container" class="upload-wrapper"></div>
 
                 <div class="card-foot-section">
                     <div class="card-foot-inner">
