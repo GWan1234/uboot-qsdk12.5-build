@@ -1093,6 +1093,15 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
+/**
+ * 检查是否处于 9008 模式
+ * @returns {boolean}
+ */
+function is9008Mode() {
+    const sysinfo = APP_STATE.sysinfo;
+    return sysinfo && sysinfo.is_9008_mode;
+}
+
 // ==============================
 // 版本信息模块
 // ==============================
@@ -1192,6 +1201,10 @@ const pageConfigs = {
         needUpload: true,
         formDataKey: 'initramfs'
     },
+    mibib: {
+        needUpload: true,
+        formDataKey: 'mibib'
+    },
     env: {
         needUpload: false,
         init: () => envManager.init()
@@ -1211,10 +1224,6 @@ const pageConfigs = {
     sysinfo: {
         needUpload: false,
         init: () => sysinfoManager.init()
-    },
-    mibib: {
-        needUpload: false,
-        init: () => mibibManager.init()
     }
 };
 
@@ -1250,14 +1259,15 @@ function appInit(pageName) {
     if (config.needUpload) {
         const uploadManager = getUnifiedUploadManager();
         uploadManager.initForPage(pageName, {
-            formDataKey: config.formDataKey || pageName,
-            successPage: config.successPage || 'flashing.html'
+            formDataKey: config.formDataKey || pageName
         });
     }
 
     // 执行页面特定的初始化
     if (config.init && typeof config.init === 'function') {
         config.init();
+    } else if (!APP_STATE.sysinfo) {
+        sysinfoManager.fetchAndStore();
     }
 
     // 添加准备完成的类
@@ -1545,11 +1555,7 @@ class UnifiedUploadManager {
         // 创建上传组件实例
         const instance = new FileUploadComponent(container, {
             formDataKey: options.formDataKey || pageName,
-            pageName: pageName,
-            successPage: pageName === 'initramfs' ? 'booting.html' : 'flashing.html',
-            onUploadStart: () => this.handleUploadStart(pageName),
-            onUploadComplete: (result) => this.handleUploadComplete(pageName, result),
-            onUploadError: (error) => this.handleUploadError(pageName, error)
+            pageName: pageName
         });
 
         // 存储实例
@@ -1571,27 +1577,6 @@ class UnifiedUploadManager {
             this.instances.delete(pageName);
         }
     }
-
-    /**
-     * 上传开始回调
-     */
-    handleUploadStart(pageName) {
-        console.log(`[${pageName}] Upload started`);
-    }
-
-    /**
-     * 上传完成回调
-     */
-    handleUploadComplete(pageName, result) {
-        console.log(`[${pageName}] Upload completed:`, result);
-    }
-
-    /**
-     * 上传错误回调
-     */
-    handleUploadError(pageName, error) {
-        console.error(`[${pageName}] Upload error:`, error);
-    }
 }
 
 // ==============================
@@ -1604,10 +1589,6 @@ class FileUploadComponent {
         this.options = {
             formDataKey: 'file',
             pageName: 'unknown',
-            successPage: 'flashing.html',
-            onUploadStart: null,
-            onUploadComplete: null,
-            onUploadError: null,
             ...options
         };
 
@@ -1620,6 +1601,26 @@ class FileUploadComponent {
      * 渲染上传组件
      */
     render() {
+        let uploadBtnKey, continueHintKey, continueBtnKey;
+
+        switch (this.options.pageName) {
+            case 'initramfs' :
+                uploadBtnKey = 'common.upload';
+                continueHintKey = 'initramfs.boot_hint';
+                continueBtnKey = 'common.boot';
+                break;
+            case 'mibib' :
+                uploadBtnKey = 'mibib.reload';
+                continueHintKey = 'mibib.reload_success_hint';
+                continueBtnKey = 'mibib.reload_success';
+                break;
+            default:
+                uploadBtnKey = 'common.upload';
+                continueHintKey = 'common.upgrade_hint';
+                continueBtnKey = 'common.update';
+                break;
+        }
+
         const html = `
             <div class="upload-card">
                 <div class="upload-area" id="uploadArea">
@@ -1639,7 +1640,7 @@ class FileUploadComponent {
 
                         <div class="upload-actions">
                             <input type="file" id="fileInput" name="${this.options.formDataKey}" style="display: none;">
-                            <button type="button" id="uploadBtn" class="button" data-i18n="common.upload"></button>
+                            <button type="button" id="uploadBtn" class="button" data-i18n="${uploadBtnKey}"></button>
                         </div>
                     </div>
 
@@ -1658,8 +1659,8 @@ class FileUploadComponent {
                     <!-- 成功信息区域 -->
                     <div class="upload-success" id="uploadSuccess" style="display: none;">
                         <div id="success-info"></div>
-                        <div class="continue-hint" data-i18n=${this.options.pageName === "initramfs" ? "initramfs.boot_hint" : "common.upgrade_hint"}></div>
-                        <button class="button" id="continueBtn" data-i18n=${this.options.pageName === "initramfs" ? "common.boot" : "common.update"}></button>
+                        <div class="continue-hint" data-i18n="${continueHintKey}"></div>
+                        <button class="button" id="continueBtn" data-i18n="${continueBtnKey}"></button>
                     </div>
 
                     <!-- 错误信息区域 -->
@@ -1725,10 +1726,10 @@ class FileUploadComponent {
             });
         }
 
-        // 继续按钮（跳转到成功页面）
+        // 继续按钮
         if (this.elements.continueBtn) {
             this.elements.continueBtn.addEventListener('click', () => {
-                window.location.href = this.options.successPage;
+                this.continue();
             });
         }
     }
@@ -1877,12 +1878,8 @@ class FileUploadComponent {
             this.elements.uploadSuccess.style.display = 'block';
         }
 
-        if (this.elements.successInfo) {
+        if (this.elements.successInfo && this.options.pageName !== 'mibib') {
             this.elements.successInfo.innerHTML = messageBuilder.buildSuccessTable(info);
-        }
-
-        if (this.options.onUploadComplete) {
-            this.options.onUploadComplete({ status: 'success', info });
         }
     }
 
@@ -1930,16 +1927,17 @@ class FileUploadComponent {
         if (this.elements.errorInfo) {
             this.elements.errorInfo.innerHTML = errorMessage;
         }
-
-        if (this.options.onUploadError) {
-            this.options.onUploadError(info);
-        }
     }
 
     /**
      * 执行上传
      */
     upload() {
+        if (this.options.pageName === 'mibib' && !is9008Mode()) {
+            alert(t("mibib.not_9008"));
+            return;
+        }
+
         if (!this.selectedFile) {
             alert(t('file.select'));
             return;
@@ -1953,10 +1951,6 @@ class FileUploadComponent {
         this.isUploading = true;
         this.showProgress();
         this.updateProgress(0);
-
-        if (this.options.onUploadStart) {
-            this.options.onUploadStart();
-        }
 
         const formData = new FormData();
         formData.append(this.options.formDataKey, this.selectedFile);
@@ -1997,8 +1991,26 @@ class FileUploadComponent {
             }
         };
 
-        xhr.open('POST', '/upload');
+        const url = this.options.pageName === 'mibib' ? '/mibib/reload' : '/upload';
+        xhr.open('POST', url);
         xhr.send(formData);
+    }
+
+    /**
+     * 执行后续操作
+     */
+    continue() {
+        switch (this.options.pageName) {
+            case 'initramfs':
+                window.location.href = 'booting.html'
+                break;
+            case 'mibib':
+                window.location.href = 'sysinfo.html';
+                break;
+            default:
+                window.location.href = 'flashing.html'
+                break;
+        }
     }
 
     /**
@@ -4897,191 +4909,6 @@ const sysinfoManager = (() => {
 })();
 
 // ==============================
-// MIBIB 重载模块
-// ==============================
-
-/**
- * MIBIB 重载管理器
- * 负责处理 9008 模式下的 MIBIB 重载操作
- */
-const mibibManager = (() => {
-    let elements = null;
-
-    /**
-     * 获取或缓存 DOM 元素
-     */
-    function getElements() {
-        if (elements) return elements;
-
-        elements = {
-            form: document.getElementById("form"),
-            fileInput: document.getElementById("file"),
-            progressCircle: document.getElementById("bar-circle"),
-            successInfo: document.getElementById("success-info"),
-            errorInfo: document.getElementById("error-info"),
-        };
-
-        return elements;
-    }
-
-    /**
-     * 检查是否处于 9008 模式
-     * @returns {boolean}
-     */
-    function is9008Mode() {
-        const sysinfo = APP_STATE.sysinfo;
-        return sysinfo && sysinfo.is_9008_mode;
-    }
-
-    /**
-     * 显示进度
-     * @param {number} percent - 进度百分比
-     */
-    function showProgress(percent) {
-        const els = getElements();
-        if (els.form) els.form.style.display = "none";
-        if (els.successInfo) els.successInfo.style.display = "none";
-        if (els.errorInfo) els.errorInfo.style.display = "none";
-        if (els.progressCircle) {
-            els.progressCircle.style.display = "block";
-            els.progressCircle.style.setProperty("--percent", percent);
-        }
-    }
-
-    /**
-     * 隐藏进度
-     */
-    function hideProgress() {
-        const els = getElements();
-        if (els.progressCircle) els.progressCircle.style.display = "none";
-    }
-
-    /**
-     * 处理重载成功
-     */
-    function handleSuccess() {
-        const els = getElements();
-        hideProgress();
-        if (els.successInfo) {
-            els.successInfo.style.display = "block";
-        }
-    }
-
-    /**
-     * 处理重载失败
-     * @param {object} info - 错误信息对象
-     */
-    function handleError(info) {
-        const els = getElements();
-        hideProgress();
-
-        let errorMessage = "";
-
-        switch (info?.type) {
-            case "wrong_file_type":
-                errorMessage = messageBuilder.buildWrongFileTypeMessage(info);
-                break;
-            case "flash_not_found":
-                errorMessage = messageBuilder.buildFlashNotFoundMessage(info);
-                break;
-            default:
-                errorMessage = messageBuilder.buildUnknownErrorMessage(info);
-        }
-
-        if (els.errorInfo) {
-            els.errorInfo.style.display = "block";
-            els.errorInfo.innerHTML = errorMessage;
-        }
-    }
-
-    /**
-     * 处理无效响应
-     * @param {string} message - 原始响应消息
-     */
-    function handleInvalidResponse(message) {
-        const els = getElements();
-        hideProgress();
-
-        if (els.errorInfo) {
-            els.errorInfo.style.display = "block";
-            els.errorInfo.innerHTML = messageBuilder.buildInvalidResponseMessage(message);
-        }
-    }
-
-    /**
-     * 执行重载操作
-     */
-    function reload() {
-        const els = getElements();
-
-        // 检查 9008 模式
-        if (!is9008Mode()) {
-            alert(t("mibib.not_9008"));
-            return;
-        }
-
-        const file = els.fileInput?.files[0];
-
-        if (!file) {
-            alert(t("file.select"));
-            return;
-        }
-
-        showProgress(0);
-
-        const formData = new FormData();
-        formData.append("mibib", file);
-
-        ajax({
-            url: "/mibib/reload",
-            data: formData,
-            done: function(responseText) {
-                let response;
-
-                try {
-                    response = JSON.parse(responseText);
-                } catch (e) {
-                    handleInvalidResponse(responseText || t("error.invalid_response"));
-                    return;
-                }
-
-                switch (response.status) {
-                    case "success":
-                        handleSuccess();
-                        break;
-                    case "fail":
-                        handleError(response.info);
-                        break;
-                    default:
-                        handleInvalidResponse(responseText || t("error.unknown_status"));
-                }
-            },
-            progress: function(event) {
-                if (event.lengthComputable && event.total > 0) {
-                    const percent = parseInt((event.loaded / event.total) * 100);
-                    showProgress(percent);
-                }
-            }
-        });
-    }
-
-    /**
-     * 初始化 MIBIB 管理器
-     */
-    function init() {
-        // 确保有系统信息
-        if (!APP_STATE.sysinfo) {
-            sysinfoManager.fetchAndStore();
-        }
-    }
-
-    return {
-        init,
-        reload,
-    };
-})();
-
-// ==============================
 // 国际化数据
 // ==============================
 
@@ -5259,8 +5086,9 @@ const I18N = (() => {
             "mibib.title": "MIBIB RELOAD",
             "mibib.hint": "In <strong>9008</strong> mode, reloading <strong>MIBIB</strong> to initialize <strong>SMEM (Shared Memory) Partition Info</strong>. <br>Please choose a file from your local hard drive and click <strong>Reload</strong> button.",
             "mibib.reload": "Reload",
+            "mibib.reload_success_hint": "MIBIB reloaded successfully. Please click the button below to go to the \"System Info\" page to check if the SMEM information is correct.",
+            "mibib.reload_success": "View system info",
             "mibib.not_9008": "Not in 9008 mode, MIBIB reload is not allowed!",
-            "mibib.success": "MIBIB reloaded successfully. Please open the \"System Info\" page to check if the SMEM information is correct.",
             "mibib.warn.1": "Use only in 9008 emergency download mode.",
             "mibib.warn.2": "After successful reload, please check if the SMEM information is correct.",
             "network.title": "NETWORK SETTINGS",
@@ -5529,8 +5357,9 @@ const I18N = (() => {
             "mibib.title": "MIBIB 重载",
             "mibib.hint": "在 <strong>9008</strong> 模式下，通过重载 <strong>MIBIB</strong> 来初始化 <strong>SMEM (Shared Memory) 分区信息</strong>。<br>请选择本地文件并点击 <strong>重载</strong> 按钮。",
             "mibib.reload": "重载",
+            "mibib.reload_success_hint": "MIBIB 重载成功，请点击下方按钮跳转到 “系统信息” 页面查看 SMEM 相关信息是否正确。",
+            "mibib.reload_success": "查看系统信息",
             "mibib.not_9008": "非 9008 启动模式，无法进行 MIBIB 重载！",
-            "mibib.success": "MIBIB 重载成功，请打开 “系统信息” 页面查看 SMEM 相关信息是否正确。",
             "mibib.warn.1": "仅限于 9008 模式下使用。",
             "mibib.warn.2": "重载成功后，请检查 SMEM 相关信息是否正确。",
             "network.title": "网络设置",
