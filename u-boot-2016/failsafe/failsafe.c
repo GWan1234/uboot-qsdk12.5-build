@@ -526,24 +526,28 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/", &index_handler, NULL);
 	httpd_register_uri_handler(inst, "/cgi-bin/luci", &index_handler, NULL);
 	httpd_register_uri_handler(inst, "/cgi-bin/luci/", &index_handler, NULL);
+	httpd_register_uri_handler(inst, "/index.html", &index_handler, NULL);
 
-	httpd_register_uri_handler(inst, "/booting.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/flashing.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/firmware.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/art.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/cdt.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/initramfs.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/ptable.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/simg.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/initramfs.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/reboot.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/uboot.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/booting.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/flashing.html", &html_handler, NULL);
 
 	httpd_register_uri_handler(inst, "/main.js", &js_handler, NULL);
 	httpd_register_uri_handler(inst, "/style.css", &style_handler, NULL);
 
-	httpd_register_uri_handler(inst, "/reboot", &reboot_handler, NULL);
 	httpd_register_uri_handler(inst, "/result", &result_handler, NULL);
+	httpd_register_uri_handler(inst, "/sysinfo", &sysinfo_handler, NULL);
 	httpd_register_uri_handler(inst, "/upload", &upload_handler, NULL);
 	httpd_register_uri_handler(inst, "/version", &version_handler, NULL);
+
+	httpd_register_uri_handler(inst, "/reboot.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/reboot", &reboot_handler, NULL);
 
 	httpd_register_uri_handler(inst, "/mibib.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/mibib/reload", &mibib_reload_handler, NULL);
@@ -552,9 +556,6 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/network/info", &network_info_handler, NULL);
 	httpd_register_uri_handler(inst, "/network/set", &network_set_handler, NULL);
 	httpd_register_uri_handler(inst, "/network/reset", &network_reset_handler, NULL);
-
-	httpd_register_uri_handler(inst, "/sysinfo.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/sysinfo", &sysinfo_handler, NULL);
 
 	httpd_register_uri_handler(inst, "/backup.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/backup", &backup_handler, NULL);

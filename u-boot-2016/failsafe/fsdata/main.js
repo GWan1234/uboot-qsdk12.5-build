@@ -52,25 +52,25 @@ class SidebarManager {
 
         // 映射路径到页面ID
         const pathMap = {
-            '/': 'firmware',
-            '/cgi-bin/luci': 'firmware',
-            '/cgi-bin/luci/': 'firmware',
-            '/index.html': 'firmware',
-            '/uboot.html': 'uboot',
+            '/': 'sysinfo',
+            '/cgi-bin/luci': 'sysinfo',
+            '/cgi-bin/luci/': 'sysinfo',
+            '/index.html': 'sysinfo',
+            '/firmware.html': 'firmware',
             '/art.html': 'art',
-            '/backup.html': 'backup',
             '/cdt.html': 'cdt',
-            '/console.html': 'console',
-            '/env.html': 'env',
-            '/mibib.html': 'mibib',
-            '/network.html': 'network',
             '/ptable.html': 'ptable',
             '/simg.html': 'simg',
-            '/sysinfo.html': 'sysinfo',
+            '/uboot.html': 'uboot',
             '/initramfs.html': 'initramfs',
-            '/reboot.html': 'reboot',
+            '/mibib.html': 'mibib',
+            '/backup.html': 'backup',
+            '/env.html': 'env',
+            '/console.html': 'console',
+            '/network.html': 'network',
             '/flashing.html': 'flashing',
             '/booting.html': 'booting',
+            '/reboot.html': 'reboot',
         };
 
         return pathMap[path] || null;
@@ -96,32 +96,37 @@ class SidebarManager {
      */
     getNavigationConfig() {
         return {
-            basic: {
-                titleKey: "nav.basic",
+            overview: {
+                titleKey: "nav.overview",
                 items: [
-                    { path: "/", labelKey: "nav.firmware", id: "firmware" },
-                    { path: "/uboot.html", labelKey: "nav.uboot", id: "uboot" }
+                    { path: "/", labelKey: "nav.sysinfo", id: "sysinfo" }
                 ]
             },
-            advanced: {
-                titleKey: "nav.advanced",
+            update: {
+                titleKey: "nav.update",
                 items: [
+                    { path: "/firmware.html", labelKey: "nav.firmware", id: "firmware" },
                     { path: "/art.html", labelKey: "nav.art", id: "art" },
                     { path: "/cdt.html", labelKey: "nav.cdt", id: "cdt" },
                     { path: "/ptable.html", labelKey: "nav.ptable", id: "ptable" },
                     { path: "/simg.html", labelKey: "nav.simg", id: "simg" },
+                    { path: "/uboot.html", labelKey: "nav.uboot", id: "uboot" }
+                ]
+            },
+            debrick: {
+                titleKey: "nav.debrick",
+                items: [
+                    { path: "/mibib.html", labelKey: "nav.mibib", id: "mibib" },
                     { path: "/initramfs.html", labelKey: "nav.initramfs", id: "initramfs" }
                 ]
             },
             system: {
                 titleKey: "nav.system",
                 items: [
-                    { path: "/sysinfo.html", labelKey: "nav.sysinfo", id: "sysinfo" },
                     { path: "/network.html", labelKey: "nav.network", id: "network" },
-                    { path: "/backup.html", labelKey: "nav.backup", id: "backup" },
-                    { path: "/console.html", labelKey: "nav.console", id: "console" },
                     { path: "/env.html", labelKey: "nav.env", id: "env" },
-                    { path: "/mibib.html", labelKey: "nav.mibib", id: "mibib" }
+                    { path: "/backup.html", labelKey: "nav.backup", id: "backup" },
+                    { path: "/console.html", labelKey: "nav.console", id: "console" }
                 ]
             }
         };
@@ -2044,13 +2049,13 @@ class FileUploadComponent {
     continue() {
         switch (this.options.pageName) {
             case 'initramfs':
-                window.location.href = 'booting.html'
+                window.location.href = '/booting.html'
                 break;
             case 'mibib':
-                window.location.href = 'sysinfo.html';
+                window.location.href = '/';
                 break;
             default:
-                window.location.href = 'flashing.html'
+                window.location.href = '/flashing.html'
                 break;
         }
     }
@@ -4971,22 +4976,23 @@ const I18N = (() => {
     return {
         en: {
             "app.name": "uBootKit",
-            "nav.basic": "Basic",
-            "nav.advanced": "Advanced",
+            "nav.overview": "Overview",
+            "nav.sysinfo": "System Info",
+            "nav.update": "Update",
             "nav.firmware": "Firmware Update",
-            "nav.uboot": "U-Boot Update",
             "nav.art": "ART Update",
             "nav.cdt": "CDT Update",
             "nav.ptable": "PTABLE Update",
             "nav.simg": "SIMG Update",
+            "nav.uboot": "U-Boot Update",
+            "nav.debrick": "Debrick",
+            "nav.mibib": "MIBIB Reload",
             "nav.initramfs": "Load Initramfs",
             "nav.system": "System",
-            "nav.sysinfo": "System Info",
             "nav.network": "Network Settings",
             "nav.backup": "Flash Backup",
             "nav.console": "Web Console",
-            "nav.env": "Environment Management",
-            "nav.mibib": "MIBIB Reload",
+            "nav.env": "Env Manage",
             "nav.reboot": "Reboot",
             "control.language": "🌐 Language",
             "control.theme": "🌓 Theme",
@@ -5243,22 +5249,23 @@ const I18N = (() => {
         },
         "zh-cn": {
             "app.name": "uBootKit",
-            "nav.basic": "基础",
+            "nav.overview": "概览",
+            "nav.sysinfo": "系统信息",
+            "nav.update": "更新",
             "nav.firmware": "固件更新",
-            "nav.uboot": "U-Boot 更新",
-            "nav.advanced": "高级",
             "nav.art": "ART 更新",
             "nav.cdt": "CDT 更新",
             "nav.ptable": "分区表更新",
             "nav.simg": "闪存镜像更新",
-            "nav.initramfs": "启动内存固件",
+            "nav.uboot": "U-Boot 更新",
+            "nav.debrick": "救砖",
+            "nav.mibib": "MIBIB 重载",
+            "nav.initramfs": "Initramfs 启动",
             "nav.system": "系统",
-            "nav.sysinfo": "系统信息",
             "nav.network": "网络设置",
             "nav.backup": "闪存备份",
             "nav.console": "网页终端",
-            "nav.env": "环境变量管理",
-            "nav.mibib": "MIBIB 重载",
+            "nav.env": "环境变量",
             "nav.reboot": "重启",
             "control.language": "🌐 语言",
             "control.theme": "🌓 主题",
@@ -5287,7 +5294,7 @@ const I18N = (() => {
             "index.title": "固件更新",
             "index.hint": t["zh-cn"].updateHint("固件"),
             "index.warn.1": t["zh-cn"].warnChoose("固件"),
-            "uboot.title": "U-Boot 更新",
+            "uboot.title": "U-BOOT 更新",
             "uboot.hint": t["zh-cn"].updateHint("U-Boot（引导程序）"),
             "uboot.warn.1": t["zh-cn"].warnChoose("U-Boot"),
             "uboot.warn.2": t["zh-cn"].warnDanger("U-Boot "),
@@ -5355,7 +5362,7 @@ const I18N = (() => {
             "console.upload.failed": "上传失败",
             "console.warn.1": "该终端可执行任意 U-Boot 命令。",
             "console.warn.2": "不要在不可信网络中暴露此页面。",
-            "env.title": "U-Boot 环境变量",
+            "env.title": "U-BOOT 环境变量",
             "env.hint": "管理 <strong>U-Boot 环境变量</strong>。更改将保存到存储设备。",
             "env.count": "变量数:",
             "env.status.loading": "加载中...",
@@ -5470,8 +5477,8 @@ const I18N = (() => {
             "reboot.confirm": "确认立即重启设备？",
             "reboot.title.in_progress": "正在重启设备",
             "reboot.hint.in_progress": "已发送重启请求，请稍候…<br>该页面短时间可能显示无响应，这是正常现象。",
-            "initramfs.title": "启动内存固件",
-            "initramfs.hint": "你将要在此设备上启动 <strong>内存固件<\/strong>。<br>请选择本地文件并点击 <strong>上传<\/strong> 按钮。",
+            "initramfs.title": "INITRAMFS 启动",
+            "initramfs.hint": "你将要在此设备上启动 <strong>Initramfs（内存固件）<\/strong>。<br>请选择本地文件并点击 <strong>上传<\/strong> 按钮。",
             "initramfs.boot_hint": "如果以上信息确认无误，请点击 “启动”。",
             "initramfs.warn.1": "如果一切顺利，设备将启动至内存固件。",
             "initramfs.warn.2": t["zh-cn"].warnChoose("内存固件"),

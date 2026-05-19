@@ -9,35 +9,28 @@
 	<script src="/main.js"></script>
 </head>
 
-<body onload="appInit('index')" data-page="index">
+<body onload="appInit('sysinfo')" data-page="sysinfo">
 	<div class="app">
 		<aside id="sidebar" class="sidebar"></aside>
-        <div class="sidebar-overlay" id="sidebarOverlay"></div>
-        <button class="sidebar-toggle" id="sidebarToggle"></button>
+		<div class="sidebar-overlay" id="sidebarOverlay"></div>
+		<button class="sidebar-toggle" id="sidebarToggle"></button>
 		<div class="main">
 			<div id="m">
-                <div class="card-title-section">
-                    <h1 id="title" data-i18n="index.title"></h1>
-                </div>
+				<div class="card-title-section">
+					<h1 id="title" data-i18n="sysinfo.title"></h1>
+				</div>
 
-                <div class="card-hint-section">
-                    <p id="hint" data-i18n-html="index.hint"></p>
-                </div>
+				<div class="card-main-section" id="board_info">
+					<div class="card-main-inner"></div>
+				</div>
 
-                <div id="upload-container" class="upload-wrapper"></div>
+				<div class="card-main-section" id="flash_info">
+					<div class="card-main-inner"></div>
+				</div>
 
-                <div class="card-foot-section">
-                    <div class="card-foot-inner">
-                        <div class="i w">
-                            <strong data-i18n="common.warnings"></strong>
-                            <ul>
-                                <li data-i18n="common.warn.1"></li>
-                                <li data-i18n="common.warn.2"></li>
-                                <li data-i18n="index.warn.1"></li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
+				<div class="card-main-section" id="partitions_info">
+					<div class="card-main-inner"></div>
+				</div>
 			</div>
 			<div id="version"></div>
 		</div>
