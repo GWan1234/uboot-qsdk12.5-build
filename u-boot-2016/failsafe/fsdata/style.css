@@ -1192,15 +1192,16 @@ html[data-theme="dark"] .cmd-value {
 
 /* ===== 信息区域 ===== */
 .upload-success,
-.upload-error {
+.result-success,
+.error-area {
     text-align: center;
     align-items: center;
     justify-content: center;
     animation: fadeIn 0.3s ease;
 }
 
-/* 成功信息表格 */
-#success-info {
+/* 上传成功信息表格 */
+#upload-success-info {
     width: 100%;
 }
 
@@ -1263,7 +1264,8 @@ html[data-theme="dark"] .bar-circle::after {
 }
 
 /* 成功时的闪烁效果 */
-.upload-success {
+.upload-success,
+.result-success {
     animation: fadeIn 0.5s ease;
 }
 
@@ -1384,8 +1386,8 @@ html[data-theme="dark"] .separator {
     opacity: 0.6;
 }
 
-/* 刷写页面的加载动画 */
-#l {
+/* 旋转加载动画 */
+.loading-spinner {
     height: 50px;
     width: 50px;
     margin: 2rem auto;

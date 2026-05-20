@@ -1061,18 +1061,8 @@ function updateDocumentTitle() {
     }
 
     // 处理特殊页面
-    switch (APP_STATE.page) {
-        case "flashing":
-            document.title = t("flashing.title.in_progress");
-            break;
-        case "booting":
-            document.title = t("booting.title.in_progress");
-            break;
-        case "reboot":
-            document.title = t("reboot.title.in_progress");
-            break;
-        default:
-            break;
+    if (APP_STATE.page === "reboot") {
+        document.title = t("reboot.title.in_progress");
     }
 }
 
@@ -1333,7 +1323,6 @@ function appInit(pageName) {
 /**
  * 信息构建器
  * 提供成功信息与各种错误类型信息的结构化 HTML 生成函数
- * 被 uploadManager、resultManager、mibibManager 等模块共享使用
  */
 const messageBuilder = (() => {
     /**
@@ -1703,15 +1692,23 @@ class FileUploadComponent {
                         <p class="progress-status" id="progressStatus" data-i18n="file.uploading"></p>
                     </div>
 
-                    <!-- 成功信息区域 -->
+                    <!-- 上传成功信息区域 -->
                     <div class="upload-success" id="uploadSuccess" style="display: none;">
-                        <div id="success-info"></div>
+                        <div id="upload-success-info"></div>
                         <div class="continue-hint" data-i18n="${continueHintKey}"></div>
                         <button class="button" id="continueBtn" data-i18n="${continueBtnKey}"></button>
                     </div>
 
+                    <!-- 结果成功信息区域 -->
+                    <div class="result-success" id="resultSuccess">
+                        <div id="result-success-info"></div>
+                    </div>
+
+                    <!-- 刷写/启动过程中的的加载动画 -->
+                    <div class="loading-spinner" id="loadingSpinner" style="display: none;"></div>
+
                     <!-- 错误信息区域 -->
-                    <div class="upload-error" id="uploadError" style="display: none;">
+                    <div class="error-area" id="errorArea" style="display: none;">
                         <div id="error-info" class="error-message"></div>
                     </div>
                 </div>
@@ -1735,7 +1732,9 @@ class FileUploadComponent {
             uploadSelector: document.getElementById('uploadSelector'),
             uploadProgress: document.getElementById('uploadProgress'),
             uploadSuccess: document.getElementById('uploadSuccess'),
-            uploadError: document.getElementById('uploadError'),
+            resultSuccess: document.getElementById('resultSuccess'),
+            loadingSpinner: document.getElementById('loadingSpinner'),
+            errorArea: document.getElementById('errorArea'),
             dropZone: document.getElementById('dropZone'),
             fileInput: document.getElementById('fileInput'),
             uploadBtn: document.getElementById('uploadBtn'),
@@ -1743,7 +1742,8 @@ class FileUploadComponent {
             progressPercent: document.getElementById('progressPercent'),
             progressFilename: document.getElementById('progressFilename'),
             progressStatus: document.getElementById('progressStatus'),
-            successInfo: document.getElementById('success-info'),
+            uploadSuccessInfo: document.getElementById('upload-success-info'),
+            resultSuccessInfo: document.getElementById('result-success-info'),
             errorInfo: document.getElementById('error-info'),
             continueBtn: document.getElementById('continueBtn')
         };
@@ -1865,22 +1865,33 @@ class FileUploadComponent {
     }
 
     /**
+     * 显示指定元素，隐藏其他无关元素
+     */
+    showElementAndHideOthers(id) {
+        if (!id) return;
+
+        const els = this.elements;
+        const elements = [
+            { id: 'uploadSelector', el: els.uploadSelector },
+            { id: 'uploadProgress', el: els.uploadProgress },
+            { id: 'uploadSuccess', el: els.uploadSuccess },
+            { id: 'resultSuccess', el: els.resultSuccess },
+            { id: 'loadingSpinner', el: els.loadingSpinner },
+            { id: 'errorArea', el: els.errorArea }
+        ];
+
+        elements.forEach(element => {
+            if (element.el) {
+                element.el.style.display = element.id === id ? 'block' : 'none';
+            }
+        });
+    }
+
+    /**
      * 显示上传进度界面
      */
     showProgress() {
-        // 隐藏选择器，显示进度条
-        if (this.elements.uploadSelector) {
-            this.elements.uploadSelector.style.display = 'none';
-        }
-        if (this.elements.uploadProgress) {
-            this.elements.uploadProgress.style.display = 'block';
-        }
-        if (this.elements.uploadSuccess) {
-            this.elements.uploadSuccess.style.display = 'none';
-        }
-        if (this.elements.uploadError) {
-            this.elements.uploadError.style.display = 'none';
-        }
+        this.showElementAndHideOthers('uploadProgress');
 
         // 更新文件名显示
         if (this.elements.progressFilename && this.selectedFile) {
@@ -1912,21 +1923,35 @@ class FileUploadComponent {
     }
 
     /**
+     * 设置标题和提示文本
+     * @param {string} titleKey - 标题国际化 key
+     * @param {string} hintKey - 提示国际化 key
+     */
+    setTitleAndHint(titleKey, hintKey) {
+        if (this.elements.title && titleKey) {
+            this.elements.title.innerHTML = t(titleKey);
+        }
+        if (this.elements.hint && hintKey) {
+            this.elements.hint.innerHTML = t(hintKey);
+        }
+    }
+
+    /**
      * 显示成功界面
      */
-    showSuccess(info) {
+    showSuccess(type, info) {
+        const isUpload = type === 'upload';
+
         this.isUploading = false;
 
-        if (this.elements.uploadProgress) {
-            this.elements.uploadProgress.style.display = 'none';
+        this.showElementAndHideOthers(isUpload ? 'uploadSuccess' : 'resultSuccess');
+
+        if (isUpload && this.elements.uploadSuccessInfo && this.options.pageName !== 'mibib') {
+            this.elements.uploadSuccessInfo.innerHTML = messageBuilder.buildSuccessTable(info);
         }
 
-        if (this.elements.uploadSuccess) {
-            this.elements.uploadSuccess.style.display = 'block';
-        }
-
-        if (this.elements.successInfo && this.options.pageName !== 'mibib') {
-            this.elements.successInfo.innerHTML = messageBuilder.buildSuccessTable(info);
+        if (!isUpload && this.elements.resultSuccessInfo) {
+            this.elements.resultSuccessInfo.innerHTML = info;
         }
     }
 
@@ -1936,21 +1961,8 @@ class FileUploadComponent {
     showError(info) {
         this.isUploading = false;
 
-        if (this.elements.uploadProgress) {
-            this.elements.uploadProgress.style.display = 'none';
-        }
-
-        if (this.elements.uploadError) {
-            this.elements.uploadError.style.display = 'block';
-        }
-
-        if (this.elements.title) {
-            this.elements.title.innerHTML = t('fail.title');
-        }
-
-        if (this.elements.hint) {
-            this.elements.hint.innerHTML = t('fail.hint');
-        }
+        this.setTitleAndHint('fail.title', 'fail.hint');
+        this.showElementAndHideOthers('errorArea');
 
         let errorMessage = "";
 
@@ -1966,6 +1978,9 @@ class FileUploadComponent {
                 break;
             case "flash_not_found":
                 errorMessage = messageBuilder.buildFlashNotFoundMessage(info);
+                break;
+            case "run_cmd_failed":
+                errorMessage = messageBuilder.buildRunCmdFailedMessage(info);
                 break;
             default:
                 errorMessage = messageBuilder.buildUnknownErrorMessage(info);
@@ -2024,7 +2039,7 @@ class FileUploadComponent {
 
                     switch (response.status) {
                         case 'success':
-                            this.showSuccess(response.info);
+                            this.showSuccess('upload', response.info);
                             break;
                         case 'fail':
                             this.showError(response.info);
@@ -2047,17 +2062,56 @@ class FileUploadComponent {
      * 执行后续操作
      */
     continue() {
-        switch (this.options.pageName) {
-            case 'initramfs':
-                window.location.href = '/booting.html'
-                break;
-            case 'mibib':
-                window.location.href = '/';
-                break;
-            default:
-                window.location.href = '/flashing.html'
-                break;
+        if (this.options.pageName === 'mibib') {
+            window.location.href = '/';
+            return;
         }
+
+        const action = this.options.pageName === 'initramfs' ? 'booting' : 'flashing';
+        const titleStart = action + '.title.in_progress';
+        const hintStart = action + '.hint.in_progress';
+        const titleDone = action + '.title.done';
+        const hintDone = action + '.hint.done';
+
+        this.setTitleAndHint(titleStart, hintStart);
+        this.showElementAndHideOthers('loadingSpinner');
+
+        const xhr = new XMLHttpRequest();
+
+        xhr.timeout = 600000; // 10分钟
+
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200) {
+                    let response;
+                    try {
+                        response = JSON.parse(xhr.responseText);
+                    } catch (e) {
+                        this.showError({ type: 'invalid_response', message: xhr.responseText });
+                        return;
+                    }
+
+                    switch (response.status) {
+                        case 'success':
+                            this.setTitleAndHint(titleDone, hintDone);
+                            // showSuccess('result', response.info);
+                            this.showSuccess('result', xhr.responseText);
+                            break;
+                        case 'fail':
+                            this.showError(response.info);
+                            break;
+                        default:
+                            this.showError({ type: 'unknown_status', message: xhr.responseText });
+                    }
+                } else {
+                    this.showError({ type: 'http_error', message: `HTTP ${xhr.status}` });
+                }
+            }
+        };
+
+        xhr.open('POST', '/result');
+        // xhr.send(formData);
+        xhr.send();
     }
 
     /**
@@ -2094,192 +2148,6 @@ function getUnifiedUploadManager() {
     }
     return unifiedUploadManager;
 }
-
-// ==============================
-// 结果处理模块
-// ==============================
-
-/**
- * 结果处理管理器
- */
-const resultManager = (() => {
-    let elements = null;
-
-    /**
-     * 页面配置映射
-     */
-    const pageConfig = {
-        flashing: {
-            titleDone: "flashing.title.done",
-            hintDone: "flashing.hint.done",
-            timeout: 1800000,
-        },
-        booting: {
-            titleDone: "booting.title.done",
-            hintDone: "booting.hint.done",
-            timeout: 300000,
-        },
-    };
-
-    /**
-     * 获取或缓存 DOM 元素
-     */
-    function getElements() {
-        if (elements) return elements;
-
-        elements = {
-            title: document.getElementById("title"),
-            hint: document.getElementById("hint"),
-            loading: document.getElementById("l"),
-            errorInfo: document.getElementById("error-info"),
-        };
-
-        return elements;
-    }
-
-    /**
-     * 隐藏加载动画
-     */
-    function hideLoading() {
-        const els = getElements();
-        if (els.loading) els.loading.style.display = "none";
-    }
-
-    /**
-     * 显示加载动画
-     */
-    function showLoading() {
-        const els = getElements();
-        if (els.loading) els.loading.style.display = "block";
-    }
-
-    /**
-     * 设置标题和提示文本
-     * @param {string} titleKey - 标题国际化 key
-     * @param {string} hintKey - 提示国际化 key
-     */
-    function setTitleAndHint(titleKey, hintKey) {
-        const els = getElements();
-        if (els.title && titleKey) els.title.innerHTML = t(titleKey);
-        if (els.hint && hintKey) els.hint.innerHTML = t(hintKey);
-    }
-
-    /**
-     * 处理成功结果
-     * @param {string} pageName - 页面名称
-     */
-    function handleSuccess(pageName) {
-        const config = pageConfig[pageName];
-        const els = getElements();
-
-        showLoading()
-
-        if (els.errorInfo) els.errorInfo.style.display = "none";
-        if (config.titleDone) setTitleAndHint(config.titleDone, config.hintDone);
-    }
-
-    /**
-     * 处理失败结果
-     * @param {object} info - 错误信息对象
-     */
-    function handleError(info) {
-        const els = getElements();
-
-        setTitleAndHint("fail.title", "fail.hint");
-        hideLoading();
-
-        let errorMessage = "";
-
-        switch (info?.type) {
-            case "wrong_file_type":
-                errorMessage = messageBuilder.buildWrongFileTypeMessage(info);
-                break;
-            case "flash_not_found":
-                errorMessage = messageBuilder.buildFlashNotFoundMessage(info);
-                break;
-            case "run_cmd_failed":
-                errorMessage = messageBuilder.buildRunCmdFailedMessage(info);
-                break;
-            default:
-                errorMessage = messageBuilder.buildUnknownErrorMessage(info);
-        }
-
-        if (els.errorInfo) {
-            els.errorInfo.style.display = "block";
-            els.errorInfo.innerHTML = errorMessage;
-        }
-    }
-
-    /**
-     * 处理无效响应
-     * @param {string} rawResponse - 原始响应文本
-     */
-    function handleInvalidResponse(rawResponse) {
-        const els = getElements();
-
-        setTitleAndHint("fail.title", "fail.hint");
-        hideLoading();
-
-        if (els.errorInfo) {
-            els.errorInfo.style.display = "block";
-            els.errorInfo.innerHTML = messageBuilder.buildInvalidResponseMessage(rawResponse);
-        }
-    }
-
-    /**
-     * 处理响应解析失败
-     * @param {string} rawResponse - 原始响应文本
-     */
-    function handleParseError(rawResponse) {
-        handleInvalidResponse(rawResponse || t("error.invalid_response"));
-    }
-
-    /**
-     * 初始化结果页面
-     * @param {string} pageName - 页面名称 (flashing/booting)
-     */
-    function init(pageName) {
-        const config = pageConfig[pageName];
-
-        if (!config) {
-            console.error("Unknown result page:", pageName);
-            return;
-        }
-
-        appInit(pageName);
-
-        ajax({
-            url: "/result",
-            done: function(responseText) {
-                let response;
-
-                try {
-                    response = JSON.parse(responseText);
-                } catch (e) {
-                    handleParseError(responseText);
-                    return;
-                }
-
-                switch (response.status) {
-                    case "success":
-                        handleSuccess(pageName);
-                        break;
-                    case "fail":
-                        handleError(response.info);
-                        break;
-                    default:
-                        handleInvalidResponse(responseText || t("error.unknown_status"));
-                        break;
-                }
-            },
-            timeout: config.timeout
-        });
-    }
-
-    return {
-        init
-    };
-})();
 
 // ==============================
 // 备份功能模块
