@@ -1210,37 +1210,69 @@ const versionRenderer = (() => {
  * 页面配置映射
  */
 const pageConfigs = {
-    index: {
+    firmware: {
         needUpload: true,
-        formDataKey: 'firmware'
+        formDataKey: 'firmware',
+        warningItems: {
+            common: true,
+            custom: 1
+        }
     },
     uboot: {
         needUpload: true,
-        formDataKey: 'uboot'
+        formDataKey: 'uboot',
+        warningItems: {
+            common: true,
+            custom: 2
+        }
     },
     art: {
         needUpload: true,
-        formDataKey: 'art'
+        formDataKey: 'art',
+        warningItems:  {
+            common: true,
+            custom: 1
+        }
     },
     cdt: {
         needUpload: true,
-        formDataKey: 'cdt'
+        formDataKey: 'cdt',
+        warningItems:  {
+            common: true,
+            custom: 2
+        }
     },
     ptable: {
         needUpload: true,
-        formDataKey: 'ptable'
+        formDataKey: 'ptable',
+        warningItems:  {
+            common: true,
+            custom: 2
+        }
     },
     simg: {
         needUpload: true,
-        formDataKey: 'simg'
+        formDataKey: 'simg',
+        warningItems:  {
+            common: true,
+            custom: 2
+        }
     },
     initramfs: {
         needUpload: true,
-        formDataKey: 'initramfs'
+        formDataKey: 'initramfs',
+        warningItems:  {
+            common: false,
+            custom: 2
+        }
     },
     mibib: {
         needUpload: true,
-        formDataKey: 'mibib'
+        formDataKey: 'mibib',
+        warningItems:  {
+            common: false,
+            custom: 2
+        }
     },
     env: {
         needUpload: false,
@@ -1273,6 +1305,18 @@ function appInit(pageName) {
     APP_STATE.lang = detectLang();
     APP_STATE.theme = detectTheme();
 
+    // 获取页面配置
+    const config = pageConfigs[pageName] || { needUpload: false };
+
+    // 初始化上传组件（如果需要）
+    if (config.needUpload) {
+        const uploadManager = getUnifiedUploadManager();
+        uploadManager.initForPage(pageName, {
+            formDataKey: config.formDataKey || pageName,
+            warningItems : config.warningItems || null
+        });
+    }
+
     // 应用主题和语言
     setTheme(APP_STATE.theme);
     setLang(APP_STATE.lang);
@@ -1288,17 +1332,6 @@ function appInit(pageName) {
 
     // 更新文档标题
     updateDocumentTitle();
-
-    // 获取页面配置
-    const config = pageConfigs[pageName] || { needUpload: false };
-
-    // 初始化上传组件（如果需要）
-    if (config.needUpload) {
-        const uploadManager = getUnifiedUploadManager();
-        uploadManager.initForPage(pageName, {
-            formDataKey: config.formDataKey || pageName
-        });
-    }
 
     // 执行页面特定的初始化
     if (config.init && typeof config.init === 'function') {
@@ -1578,15 +1611,16 @@ class UnifiedUploadManager {
         }
 
         // 获取容器
-        const container = document.getElementById('upload-container');
+        const container = document.body;
         if (!container) {
-            console.warn(`Upload container not found for page: ${pageName}`);
+            console.warn(`Body element not found for page: ${pageName}`);
             return null;
         }
 
         // 创建上传组件实例
         const instance = new FileUploadComponent(container, {
             formDataKey: options.formDataKey || pageName,
+            warningItems: options.warningItems || null,
             pageName: pageName
         });
 
@@ -1620,6 +1654,7 @@ class FileUploadComponent {
         this.container = container;
         this.options = {
             formDataKey: 'file',
+            warningItems: null,
             pageName: 'unknown',
             ...options
         };
@@ -1633,83 +1668,95 @@ class FileUploadComponent {
      * 渲染上传组件
      */
     render() {
-        let uploadBtnKey, continueHintKey, continueBtnKey;
-
-        switch (this.options.pageName) {
-            case 'initramfs' :
-                uploadBtnKey = 'common.upload';
-                continueHintKey = 'initramfs.boot_hint';
-                continueBtnKey = 'common.boot';
-                break;
-            case 'mibib' :
-                uploadBtnKey = 'mibib.reload';
-                continueHintKey = 'mibib.reload_success_hint';
-                continueBtnKey = 'mibib.reload_success';
-                break;
-            default:
-                uploadBtnKey = 'common.upload';
-                continueHintKey = 'common.upgrade_hint';
-                continueBtnKey = 'common.update';
-                break;
-        }
+        const pageName = this.options.pageName;
+        const keys = this.getHintAndBtnKey();
 
         const html = `
-            <div class="upload-card">
-                <div class="upload-area" id="uploadArea">
-                    <!-- 文件选择区域（正常状态） -->
-                    <div class="upload-selector" id="uploadSelector">
-                        <div class="drop-zone" id="dropZone">
-                            <div class="drop-zone-content">
-                                <svg class="drop-zone-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                    <polyline points="17 8 12 3 7 8"/>
-                                    <line x1="12" y1="3" x2="12" y2="15"/>
-                                </svg>
-                                <p id="dropZoneText" class="drop-zone-text" data-i18n="file.dropzone.text"></p>
-                                <p class="drop-zone-hint" data-i18n="file.dropzone.hint"></p>
+            <div class="app">
+                <aside id="sidebar" class="sidebar"></aside>
+                <div class="sidebar-overlay" id="sidebarOverlay"></div>
+                <button class="sidebar-toggle" id="sidebarToggle"></button>
+                <div class="main">
+                    <div id="m">
+                        <div class="card-title-section">
+                            <h1 id="title" data-i18n="${pageName}.title"></h1>
+                        </div>
+
+                        <div class="card-hint-section">
+                            <p id="hint" data-i18n-html="${pageName}.hint"></p>
+                        </div>
+
+                        <div id="upload-container" class="upload-wrapper">
+                            <div class="upload-card">
+                                <div class="upload-area" id="uploadArea">
+                                    <!-- 文件选择区域（正常状态） -->
+                                    <div class="upload-selector" id="uploadSelector">
+                                        <div class="drop-zone" id="dropZone">
+                                            <div class="drop-zone-content">
+                                                <svg class="drop-zone-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                                    <polyline points="17 8 12 3 7 8"/>
+                                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                                </svg>
+                                                <p id="dropZoneText" class="drop-zone-text" data-i18n="file.dropzone.text"></p>
+                                                <p class="drop-zone-hint" data-i18n="file.dropzone.hint"></p>
+                                            </div>
+                                        </div>
+
+                                        <div class="upload-actions">
+                                            <input type="file" id="fileInput" name="${this.options.formDataKey}" style="display: none;">
+                                            <button type="button" id="uploadBtn" class="button" data-i18n="${keys.uploadBtn}"></button>
+                                        </div>
+                                    </div>
+
+                                    <!-- 上传进度区域（上传时显示） -->
+                                    <div class="upload-progress" id="uploadProgress" style="display: none;">
+                                        <div class="progress-container">
+                                            <div class="bar-circle" id="bar-circle" style="--percent: 0;"></div>
+                                            <div class="progress-text">
+                                                <p class="progress-filename" id="progressFilename"></p>
+                                                <p class="progress-percent" id="progressPercent"></p>
+                                            </div>
+                                        </div>
+                                        <p class="progress-status" id="progressStatus" data-i18n="file.uploading"></p>
+                                    </div>
+
+                                    <!-- 上传成功信息区域 -->
+                                    <div class="upload-success" id="uploadSuccess" style="display: none;">
+                                        <div id="upload-success-info"></div>
+                                        <div class="continue-hint" data-i18n="${keys.continueHint}"></div>
+                                        <div class="upload-success-actions">
+                                            <button class="button" id="continueBtn" data-i18n="${keys.continueBtn}"></button>
+                                            <button class="button" id="updateRebootBtn" data-i18n="common.update_reboot" style="display: none;"></button>
+                                        </div>
+                                    </div>
+
+                                    <!-- 结果成功信息区域 -->
+                                    <div class="result-success" id="resultSuccess" style="display: none;">
+                                        <div id="result-success-info"></div>
+                                    </div>
+
+                                    <!-- 刷写/启动过程中的的加载动画 -->
+                                    <div class="loading-spinner" id="loadingSpinner" style="display: none;"></div>
+
+                                    <!-- 错误信息区域 -->
+                                    <div class="error-area" id="errorArea" style="display: none;">
+                                        <div id="error-info" class="error-message"></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="upload-actions">
-                            <input type="file" id="fileInput" name="${this.options.formDataKey}" style="display: none;">
-                            <button type="button" id="uploadBtn" class="button" data-i18n="${uploadBtnKey}"></button>
-                        </div>
-                    </div>
-
-                    <!-- 上传进度区域（上传时显示） -->
-                    <div class="upload-progress" id="uploadProgress" style="display: none;">
-                        <div class="progress-container">
-                            <div class="bar-circle" id="bar-circle" style="--percent: 0;"></div>
-                            <div class="progress-text">
-                                <p class="progress-filename" id="progressFilename"></p>
-                                <p class="progress-percent" id="progressPercent"></p>
+                        <div class="card-foot-section">
+                            <div class="card-foot-inner">
+                                <div class="i w">
+                                    <strong data-i18n="common.warnings"></strong>
+                                    <ul>${this.generateWarningList()}</ul>
+                                </div>
                             </div>
                         </div>
-                        <p class="progress-status" id="progressStatus" data-i18n="file.uploading"></p>
                     </div>
-
-                    <!-- 上传成功信息区域 -->
-                    <div class="upload-success" id="uploadSuccess" style="display: none;">
-                        <div id="upload-success-info"></div>
-                        <div class="continue-hint" data-i18n="${continueHintKey}"></div>
-                        <div class="upload-success-actions">
-                            <button class="button" id="continueBtn" data-i18n="${continueBtnKey}"></button>
-                            <button class="button" id="updateRebootBtn" data-i18n="common.update_reboot" style="display: none;"></button>
-                        </div>
-                    </div>
-
-                    <!-- 结果成功信息区域 -->
-                    <div class="result-success" id="resultSuccess" style="display: none;">
-                        <div id="result-success-info"></div>
-                    </div>
-
-                    <!-- 刷写/启动过程中的的加载动画 -->
-                    <div class="loading-spinner" id="loadingSpinner" style="display: none;"></div>
-
-                    <!-- 错误信息区域 -->
-                    <div class="error-area" id="errorArea" style="display: none;">
-                        <div id="error-info" class="error-message"></div>
-                    </div>
+                    <div id="version"></div>
                 </div>
             </div>
         `;
@@ -1718,6 +1765,57 @@ class FileUploadComponent {
         this.cacheElements();
         this.bindEvents();
         this.applyI18n();
+    }
+
+    /**
+     * 生成页面底部的警告信息列表
+     */
+    generateWarningList() {
+        const warningItems = this.options.warningItems;
+
+        let warningList = '';
+
+        if (warningItems) {
+            if (warningItems.common) {
+                for (let i = 1; i <= 2; i++) {
+                    warningList += `<li data-i18n="common.warn.${i}"></li>`;
+                }
+            }
+            if (warningItems.custom && warningItems.custom > 0) {
+                for (let i = 1; i <= warningItems.custom; i++) {
+                    warningList += `<li data-i18n="${this.options.pageName}.warn.${i}"></li>`;
+                }
+            }
+        }
+
+        return warningList;
+    }
+
+    /**
+     * 获取上传按钮、继续按钮、继续提示的国际化 key
+     */
+    getHintAndBtnKey() {
+        const keys = {};
+
+        switch (this.options.pageName) {
+            case 'initramfs' :
+                keys.uploadBtn = 'common.upload';
+                keys.continueHint = 'initramfs.boot_hint';
+                keys.continueBtn = 'common.boot';
+                break;
+            case 'mibib' :
+                keys.uploadBtn = 'mibib.reload';
+                keys.continueHint = 'mibib.reload_success_hint';
+                keys.continueBtn = 'mibib.reload_success';
+                break;
+            default:
+                keys.uploadBtn = 'common.upload';
+                keys.continueHint = 'common.upgrade_hint';
+                keys.continueBtn = 'common.update';
+                break;
+        }
+
+        return keys;
     }
 
     /**
@@ -4913,9 +5011,9 @@ const I18N = (() => {
             "label.type": "Type",
             "label.size": "Size",
             "label.md5": "MD5",
-            "index.title": "FIRMWARE UPDATE",
-            "index.hint": t.en.updateHint("firmware"),
-            "index.warn.1": t.en.warnChoose("firmware image"),
+            "firmware.title": "FIRMWARE UPDATE",
+            "firmware.hint": t.en.updateHint("firmware"),
+            "firmware.warn.1": t.en.warnChoose("firmware image"),
             "uboot.title": "U-BOOT UPDATE",
             "uboot.hint": t.en.updateHint("U-Boot (bootloader)"),
             "uboot.warn.1": t.en.warnChoose("U-Boot image"),
@@ -5189,9 +5287,9 @@ const I18N = (() => {
             "label.type": "类型",
             "label.size": "大小",
             "label.md5": "MD5",
-            "index.title": "固件更新",
-            "index.hint": t["zh-cn"].updateHint("固件"),
-            "index.warn.1": t["zh-cn"].warnChoose("固件"),
+            "firmware.title": "固件更新",
+            "firmware.hint": t["zh-cn"].updateHint("固件"),
+            "firmware.warn.1": t["zh-cn"].warnChoose("固件"),
             "uboot.title": "U-BOOT 更新",
             "uboot.hint": t["zh-cn"].updateHint("U-Boot（引导程序）"),
             "uboot.warn.1": t["zh-cn"].warnChoose("U-Boot"),

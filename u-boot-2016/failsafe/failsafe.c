@@ -196,6 +196,51 @@ static void index_handler(enum httpd_uri_handler_status status,
 		output_plain_file(response, "index.html");
 }
 
+/**
+ * 负责处理上传类 HTML 页面内容的生成。包括以下页面：
+ * art.html, cdt.html, firmware.html, initramfs.html,
+ * mibib.html, ptable.html, simg.html, uboot.html
+ */
+static void upload_html_handler(enum httpd_uri_handler_status status,
+		struct httpd_request *request,
+		struct httpd_response *response)
+{
+	static char resp[512];
+	char page_name[32];
+	int cpy_len;
+
+	if (status != HTTP_CB_NEW)
+		return;
+
+	/* 5 == strlen(".html") */
+	cpy_len = strlen(request->urih->uri + 1) - 5;
+
+	/* page_name 只包含去掉 / 和 .html 后的内容 */
+	memcpy(page_name, request->urih->uri + 1, cpy_len);
+
+	page_name[cpy_len] = '\0';
+
+	snprintf(resp, sizeof(resp),
+		"<!DOCTYPE HTML>"
+		"<html>"
+		"<head>"
+		"	<meta charset='utf-8'>"
+		"	<meta name='viewport' content='width=device-width, initial-scale=1'>"
+		"	<title></title>"
+		"	<link rel='stylesheet' href='/style.css'>"
+		"	<script src='/main.js'></script>"
+		"</head>"
+		"<body onload='appInit(\"%s\")' data-page='%s'></body>"
+		"</html>", page_name, page_name);
+
+	response->status = HTTP_RESP_STD;
+	response->data = resp;
+	response->size = strlen(response->data);
+	response->info.code = 200;
+	response->info.connection_close = 1;
+	response->info.content_type = "text/html";
+}
+
 static void html_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response)
@@ -545,13 +590,13 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/cgi-bin/luci/", &index_handler, NULL);
 	httpd_register_uri_handler(inst, "/index.html", &index_handler, NULL);
 
-	httpd_register_uri_handler(inst, "/firmware.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/art.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/cdt.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/initramfs.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/ptable.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/simg.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/uboot.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/firmware.html", &upload_html_handler, NULL);
+	httpd_register_uri_handler(inst, "/art.html", &upload_html_handler, NULL);
+	httpd_register_uri_handler(inst, "/cdt.html", &upload_html_handler, NULL);
+	httpd_register_uri_handler(inst, "/initramfs.html", &upload_html_handler, NULL);
+	httpd_register_uri_handler(inst, "/ptable.html", &upload_html_handler, NULL);
+	httpd_register_uri_handler(inst, "/simg.html", &upload_html_handler, NULL);
+	httpd_register_uri_handler(inst, "/uboot.html", &upload_html_handler, NULL);
 	httpd_register_uri_handler(inst, "/booting.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/flashing.html", &html_handler, NULL);
 
@@ -566,7 +611,7 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/reboot.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/reboot", &reboot_handler, NULL);
 
-	httpd_register_uri_handler(inst, "/mibib.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/mibib.html", &upload_html_handler, NULL);
 	httpd_register_uri_handler(inst, "/mibib/reload", &mibib_reload_handler, NULL);
 
 	httpd_register_uri_handler(inst, "/network.html", &html_handler, NULL);
