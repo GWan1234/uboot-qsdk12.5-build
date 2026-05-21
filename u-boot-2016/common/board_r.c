@@ -299,8 +299,9 @@ static int initr_malloc(void)
 static int initr_console_record(void)
 {
 #if defined(CONFIG_CONSOLE_RECORD)
-	if (!console_record_init())
-		console_record_reset_enable();
+	if (!gd->console_out.start || !gd->console_in.start)
+		if (!console_record_init())
+			gd->flags |= GD_FLG_RECORD;
 #endif
 	return 0;
 }

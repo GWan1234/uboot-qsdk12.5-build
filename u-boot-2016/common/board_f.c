@@ -813,20 +813,17 @@ static int mark_bootstage(void)
 static int initf_console_record(void)
 {
 	/*
-	 * initf_console_record 的调用时间过早，
-	 * 在 IPQ 平台上，此时内存系统尚未完全初始化（DRAM 在 dram_init 中才配置）。
-	 * console_record_init 中 membuff_new 调用 malloc 时失败，导致启动序列中止在 hang()。
-	 * 这里选择不进行 console_record_init。
+	 * 需要确保 CONFIG_SYS_MALLOC_F_LEN 不小于 console record 需要的缓冲区大小，
+	 * 即 CONFIG_CONSOLE_RECORD_IN_SIZE + CONFIG_CONSOLE_RECORD_OUT_SIZE，
+	 * 否则 malloc 失败，console record 无法在此阶段启用。
 	 *
-	 * 注：尝试将 initf_console_record 移到 init_sequence_f[] 的末尾，console_record_init 依然失败。
+	 * 这里不管 console record 是否成功启用，都返回 0，防止启用失败时 U-Boot 卡死在这一步。
 	 */
+#if defined(CONFIG_CONSOLE_RECORD) && defined(CONFIG_SYS_MALLOC_F_LEN)
+	if (!console_record_init())
+		gd->flags |= GD_FLG_RECORD;
+#endif
 	return 0;
-
-// #if defined(CONFIG_CONSOLE_RECORD) && defined(CONFIG_SYS_MALLOC_F_LEN)
-// 	return console_record_init();
-// #else
-// 	return 0;
-// #endif
 }
 
 static int initf_dm(void)
