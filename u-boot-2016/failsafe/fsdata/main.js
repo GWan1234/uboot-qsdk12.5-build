@@ -1440,14 +1440,10 @@ const messageBuilder = (() => {
     function buildRunCmdFailedMessage(info) {
         let html = `
             <div class="error-title">❌ ${t("error.run_cmd_failed")}</div>
-            <table class="info-table error-table">
-                <tbody>
-                    <tr>
-                        <td class="info-label">${t("error.label.cmd")}</td>
-                        <td class="info-value cmd-value">${escapeHtml(info.cmd || t("unknown"))}</td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="error-cmd-section">
+                <div class="error-cmd-title">${t("error.label.cmd")}</div>
+                <pre class="error-cmd-content">${escapeHtml(info.cmd || t("unknown"))}</pre>
+            </div>
             <div class="error-output-section">
                 <div class="error-output-title">${t("error.label.cmd_output")}</div>
                 <pre class="error-output-content">${escapeHtml(info.output || t("error.no_output"))}</pre>
