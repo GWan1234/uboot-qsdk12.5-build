@@ -1696,11 +1696,14 @@ class FileUploadComponent {
                     <div class="upload-success" id="uploadSuccess" style="display: none;">
                         <div id="upload-success-info"></div>
                         <div class="continue-hint" data-i18n="${continueHintKey}"></div>
-                        <button class="button" id="continueBtn" data-i18n="${continueBtnKey}"></button>
+                        <div class="upload-success-actions">
+                            <button class="button" id="continueBtn" data-i18n="${continueBtnKey}"></button>
+                            <button class="button" id="updateRebootBtn" data-i18n="common.update_reboot" style="display: none;"></button>
+                        </div>
                     </div>
 
                     <!-- 结果成功信息区域 -->
-                    <div class="result-success" id="resultSuccess">
+                    <div class="result-success" id="resultSuccess" style="display: none;">
                         <div id="result-success-info"></div>
                     </div>
 
@@ -1745,7 +1748,8 @@ class FileUploadComponent {
             uploadSuccessInfo: document.getElementById('upload-success-info'),
             resultSuccessInfo: document.getElementById('result-success-info'),
             errorInfo: document.getElementById('error-info'),
-            continueBtn: document.getElementById('continueBtn')
+            continueBtn: document.getElementById('continueBtn'),
+            updateRebootBtn: document.getElementById('updateRebootBtn')
         };
     }
 
@@ -1776,7 +1780,14 @@ class FileUploadComponent {
         // 继续按钮
         if (this.elements.continueBtn) {
             this.elements.continueBtn.addEventListener('click', () => {
-                this.continue();
+                this.continue(false);
+            });
+        }
+
+        // 更新并重启按钮
+        if (this.elements.updateRebootBtn) {
+            this.elements.updateRebootBtn.addEventListener('click', () => {
+                this.continue(true);
             });
         }
     }
@@ -1940,18 +1951,30 @@ class FileUploadComponent {
      * 显示成功界面
      */
     showSuccess(type, info) {
-        const isUpload = type === 'upload';
+        const els = this.elements;
+        const pageName = this.options.pageName;
+        const isMibibPage = pageName === 'mibib';
+        const isInitramfsPage = pageName === 'initramfs';
 
         this.isUploading = false;
 
-        this.showElementAndHideOthers(isUpload ? 'uploadSuccess' : 'resultSuccess');
-
-        if (isUpload && this.elements.uploadSuccessInfo && this.options.pageName !== 'mibib') {
-            this.elements.uploadSuccessInfo.innerHTML = messageBuilder.buildSuccessTable(info);
-        }
-
-        if (!isUpload && this.elements.resultSuccessInfo) {
-            this.elements.resultSuccessInfo.innerHTML = info;
+        if (type === 'upload') {
+            this.showElementAndHideOthers('uploadSuccess');
+            if (els.uploadSuccessInfo && !isMibibPage) {
+                els.uploadSuccessInfo.innerHTML = messageBuilder.buildSuccessTable(info);
+            }
+            if (els.updateRebootBtn) {
+                els.updateRebootBtn.style.display = (isMibibPage || isInitramfsPage) ? 'none' : 'inline-block';
+            }
+        } else {
+            if (info.reboot) {
+                this.showElementAndHideOthers('loadingSpinner');
+            } else {
+                this.showElementAndHideOthers('resultSuccess');
+                if (els.resultSuccessInfo) {
+                    els.resultSuccessInfo.innerHTML = t('flashing.msg.continue');
+                }
+            }
         }
     }
 
@@ -2060,21 +2083,30 @@ class FileUploadComponent {
 
     /**
      * 执行后续操作
+     * @param {boolean} autoRebootAfterSuccess - 操作成功后是否自动重启（仅对刷写更新类操作有效）
      */
-    continue() {
-        if (this.options.pageName === 'mibib') {
+    continue(autoRebootAfterSuccess) {
+        const pageName = this.options.pageName;
+        const isMibibPage = pageName === 'mibib';
+        const isInitramfsPage = pageName === 'initramfs';
+
+        if (isMibibPage) {
             window.location.href = '/';
             return;
         }
 
-        const action = this.options.pageName === 'initramfs' ? 'booting' : 'flashing';
+        const action = isInitramfsPage ? 'booting' : 'flashing';
         const titleStart = action + '.title.in_progress';
         const hintStart = action + '.hint.in_progress';
         const titleDone = action + '.title.done';
         const hintDone = action + '.hint.done';
+        const hintContinue = 'flashing.hint.continue';
 
         this.setTitleAndHint(titleStart, hintStart);
         this.showElementAndHideOthers('loadingSpinner');
+
+        const formData = new FormData();
+        formData.append('auto_reboot', autoRebootAfterSuccess ? 'true' : 'false');
 
         const xhr = new XMLHttpRequest();
 
@@ -2093,9 +2125,8 @@ class FileUploadComponent {
 
                     switch (response.status) {
                         case 'success':
-                            this.setTitleAndHint(titleDone, hintDone);
-                            // showSuccess('result', response.info);
-                            this.showSuccess('result', xhr.responseText);
+                            this.setTitleAndHint(titleDone, response.info.reboot ? hintDone : hintContinue);
+                            this.showSuccess('result', response.info);
                             break;
                         case 'fail':
                             this.showError(response.info);
@@ -2110,8 +2141,7 @@ class FileUploadComponent {
         };
 
         xhr.open('POST', '/result');
-        // xhr.send(formData);
-        xhr.send();
+        xhr.send(formData);
     }
 
     /**
@@ -4876,8 +4906,9 @@ const I18N = (() => {
             "file.processing": "Processing",
             "common.upload": "Upload",
             "common.update": "Update",
+            "common.update_reboot": "Update & Reboot",
             "common.boot": "Boot",
-            "common.upgrade_hint": 'If all information above is correct, click "Update".',
+            "common.upgrade_hint": 'If all information above is correct, click "Update" or "Update & Reboot".',
             "common.warnings": "WARNINGS",
             "common.warn.1": "Do not power off the device during update.",
             "common.warn.2": "If everything goes well, the device will restart.",
@@ -5082,6 +5113,8 @@ const I18N = (() => {
             "flashing.hint.in_progress": "Your file was successfully uploaded! Update is in progress and you should wait for automatic reset of the device.<br>Update time depends on image size and may take up to a few minutes.",
             "flashing.title.done": "UPDATE COMPLETED",
             "flashing.hint.done": "Your device was successfully updated! Now rebooting...",
+            "flashing.hint.continue": "Your device was successfully updated!",
+            "flashing.msg.continue": "You are currently still in U-Boot Web recovery mode. Please continue with other operations or manually restart your device.",
             "booting.title.in_progress": "BOOTING INITRAMFS",
             "booting.hint.in_progress": "Your file was successfully uploaded! Booting is in progress, please wait...<br>This page may be in not responding status for a short time.",
             "booting.title.done": "BOOT SUCCESS",
@@ -5149,8 +5182,9 @@ const I18N = (() => {
             "file.processing": "处理中",
             "common.upload": "上传",
             "common.update": "更新",
+            "common.update_reboot": "更新并重启",
             "common.boot": "启动",
-            "common.upgrade_hint": "如果以上信息确认无误，请点击 “更新”。",
+            "common.upgrade_hint": "如果以上信息确认无误，请点击 “更新” 或 “更新并重启”。",
             "common.warnings": "注意事项",
             "common.warn.1": "刷写过程中请勿断电。",
             "common.warn.2": "如果更新成功，设备将自动重启。",
@@ -5353,7 +5387,9 @@ const I18N = (() => {
             "flashing.title.in_progress": "正在刷写",
             "flashing.hint.in_progress": "文件上传成功！正在执行刷写，请等待设备自动重启。<br>刷写时间取决于镜像大小，可能需要几分钟。",
             "flashing.title.done": "刷写完成",
-            "flashing.hint.done": "设备已成功更新！即将重启…",
+            "flashing.hint.done": "设备已成功更新！正在重启…",
+            "flashing.hint.continue": "设备已成功更新！",
+            "flashing.msg.continue": "当前仍处于 U-Boot Web 恢复模式，请继续执行其他操作或手动重启设备。",
             "booting.title.in_progress": "正在启动内存固件",
             "booting.hint.in_progress": "文件上传成功！正在启动，请稍候…<br>该页面短时间可能显示无响应，这是正常现象。",
             "booting.title.done": "启动成功",

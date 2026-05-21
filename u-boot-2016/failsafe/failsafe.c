@@ -43,7 +43,7 @@ static u32 fs_upload_id;
 static u32 upload_data_id;
 static const void *upload_data;
 static size_t upload_size;
-static bool upgrade_success;
+static bool httpd_done;
 static int upgrade_type;
 
 struct reboot_session {
@@ -396,6 +396,7 @@ struct flashing_status {
 	char buf[4096];
 	int ret;
 	int body_sent;
+	bool auto_reboot;
 };
 
 static void result_handler(enum httpd_uri_handler_status status,
@@ -403,6 +404,7 @@ static void result_handler(enum httpd_uri_handler_status status,
 				struct httpd_response *response)
 {
 	static char resp[256];
+	struct httpd_form_value *auto_reboot;
 	struct flashing_status *st;
 	u32 size;
 
@@ -414,6 +416,13 @@ static void result_handler(enum httpd_uri_handler_status status,
 		}
 
 		handle_start_led_state();
+
+		auto_reboot = httpd_request_find_value(request, "auto_reboot");
+
+		if (!auto_reboot || !auto_reboot->data || strcmp(auto_reboot->data, "true"))
+			st->auto_reboot = false;
+		else
+			st->auto_reboot = true;
 
 		st->ret = RET_FAILURE;
 
@@ -445,11 +454,13 @@ static void result_handler(enum httpd_uri_handler_status status,
 		}
 
 		if (upload_data_id == fs_upload_id) {
-			if (upgrade_type == WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS)
+			if (upgrade_type == WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS) {
+				st->auto_reboot = true; /* 启动 Initramfs 等同于自动重启 */
 				st->ret = RET_SUCCESS;
-			else
+			} else {
 				st->ret = failsafe_write_image(upgrade_type, (ulong)upload_data,
-								(ulong)upload_size, response);
+					(ulong)upload_size, response);
+			}
 		} else {
 			snprintf(resp, sizeof(resp),
 				"{\"status\":\"fail\","
@@ -463,8 +474,12 @@ static void result_handler(enum httpd_uri_handler_status status,
 		/* invalidate upload identifier */
 		upload_data_id = rand();
 
-		if (st->ret == RET_SUCCESS)
-			response->data = "{\"status\":\"success\"}";
+		if (st->ret == RET_SUCCESS) {
+			snprintf(resp, sizeof(resp),
+				"{\"status\":\"success\",\"info\":{\"reboot\":%s}}",
+				st->auto_reboot ? "true" : "false");
+			response->data = resp;
+		}
 
 		response->size = strlen(response->data);
 		st->body_sent = 1;
@@ -475,19 +490,21 @@ static void result_handler(enum httpd_uri_handler_status status,
 	}
 
 	if (status == HTTP_CB_CLOSED) {
-		st = response->session_data;
+		bool upgrade_success;
 
-		if (st->ret == RET_SUCCESS)
-			upgrade_success = true;
-		else
-			upgrade_success = false;
+		st = response->session_data;
+		upgrade_success = st->ret == RET_SUCCESS ? true : false;
+		httpd_done = st->auto_reboot && upgrade_success;
 
 		free(response->session_data);
 
 		if (upgrade_success)
-			tcp_close_all_conn();
+			handle_success_led_state();
 		else
 			handle_fail_led_state();
+
+		if (httpd_done)
+			tcp_close_all_conn();
 	}
 }
 
@@ -618,7 +635,7 @@ static int do_httpd(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 
 	ret = start_web_failsafe();
 
-	if (upgrade_success) {
+	if (httpd_done) {
 		handle_success_led_state();
 		mdelay(1000);
 		if (upgrade_type == WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS)
