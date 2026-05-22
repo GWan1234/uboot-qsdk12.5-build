@@ -1,0 +1,86 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title></title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/main.js"></script>
+</head>
+
+<body onload="appInit('settings')" data-page="settings">
+    <div class="app">
+        <aside id="sidebar" class="sidebar"></aside>
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+        <button class="sidebar-toggle" id="sidebarToggle"></button>
+        <div class="main">
+            <div id="m">
+                <div class="card-title-section">
+                    <h1 id="title" data-i18n="settings.title"></h1>
+                </div>
+
+                <div class="card-hint-section">
+                    <p id="hint" data-i18n-html="settings.hint"></p>
+                </div>
+
+                <div class="card-main-section">
+                    <div class="card-main-inner">
+                        <div class="settings-table-wrapper">
+                            <table class="settings-table">
+                                <tbody>
+                                    <!-- 语言设置 -->
+                                    <tr>
+                                        <td class="settings-label-cell">
+                                            <label>
+                                                <span>🌐</span>
+                                                <span data-i18n="settings.label.language"></span>
+                                            </label>
+                                        </td>
+                                        <td class="settings-value-cell">
+                                            <select id="settings_lang" class="settings-select">
+                                                <option value="en">English</option>
+                                                <option value="zh-cn">简体中文</option>
+                                            </select>
+                                        </td>
+                                    </tr>
+                                    <!-- 主题设置 -->
+                                    <tr>
+                                        <td class="settings-label-cell">
+                                            <label>
+                                                <span>🌓</span>
+                                                <span data-i18n="settings.label.theme"></span>
+                                            </label>
+                                        </td>
+                                        <td class="settings-value-cell">
+                                            <select id="settings_theme" class="settings-select">
+                                                <option value="auto" data-i18n="settings.theme.auto"></option>
+                                                <option value="light" data-i18n="settings.theme.light"></option>
+                                                <option value="dark" data-i18n="settings.theme.dark"></option>
+                                            </select>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-foot-section">
+                    <div class="card-foot-inner">
+                        <div class="i w">
+                            <strong data-i18n="common.warnings"></strong>
+                            <ul>
+                                <li data-i18n="settings.warn.1"></li>
+                                <li data-i18n="settings.warn.2"></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="version"></div>
+        </div>
+    </div>
+</body>
+
+</html>

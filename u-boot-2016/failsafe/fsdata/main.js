@@ -68,6 +68,7 @@ class SidebarManager {
             '/env.html': 'env',
             '/console.html': 'console',
             '/network.html': 'network',
+            '/settings.html': 'settings',
             '/flashing.html': 'flashing',
             '/booting.html': 'booting',
             '/reboot.html': 'reboot',
@@ -123,6 +124,7 @@ class SidebarManager {
             system: {
                 titleKey: "nav.system",
                 items: [
+                    { path: "/settings.html", labelKey: "nav.settings", id: "settings" },
                     { path: "/network.html", labelKey: "nav.network", id: "network" },
                     { path: "/env.html", labelKey: "nav.env", id: "env" },
                     { path: "/backup.html", labelKey: "nav.backup", id: "backup" },
@@ -688,215 +690,6 @@ function updateSidebarI18n() {
 }
 
 // ==============================
-// 设置面板管理
-// ==============================
-
-/**
- * 设置面板管理器
- * 负责右下角的设置按钮和弹出面板
- */
-class SettingsManager {
-    constructor() {
-        this.isOpen = false;
-        this.button = null;
-        this.panel = null;
-    }
-
-    /**
-     * 初始化设置面板
-     */
-    init() {
-        this.createSettingsButton();
-        this.createSettingsPanel();
-        this.bindEvents();
-    }
-
-    /**
-     * 创建设置按钮
-     */
-    createSettingsButton() {
-        this.button = document.createElement('button');
-        this.button.id = 'settingsButton';
-        this.button.className = 'settings-button';
-        this.button.innerHTML = '⚙️';
-        this.button.setAttribute('title', t('control.settings'));
-        document.body.appendChild(this.button);
-    }
-
-    /**
-     * 创建设置面板
-     */
-    createSettingsPanel() {
-        this.panel = document.createElement('div');
-        this.panel.id = 'settingsPanel';
-        this.panel.className = 'settings-panel';
-
-        // 语言选择器
-        const langRow = document.createElement('div');
-        langRow.className = 'settings-row';
-
-        const langLabel = document.createElement('span');
-        langLabel.className = 'settings-label';
-        langLabel.setAttribute('data-i18n', 'control.language');
-        langLabel.textContent = t('control.language');
-        langRow.appendChild(langLabel);
-
-        const langSelect = document.createElement('select');
-        langSelect.id = 'lang_select_settings';
-        langSelect.innerHTML = `
-            <option value="en">English</option>
-            <option value="zh-cn">简体中文</option>
-        `;
-        langSelect.value = APP_STATE.lang;
-        langSelect.onchange = () => setLang(langSelect.value);
-        langRow.appendChild(langSelect);
-
-        this.panel.appendChild(langRow);
-
-        // 主题选择器
-        const themeRow = document.createElement('div');
-        themeRow.className = 'settings-row';
-
-        const themeLabel = document.createElement('span');
-        themeLabel.className = 'settings-label';
-        themeLabel.setAttribute('data-i18n', 'control.theme');
-        themeLabel.textContent = t('control.theme');
-        themeRow.appendChild(themeLabel);
-
-        const themeSelect = document.createElement('select');
-        themeSelect.id = 'theme_select_settings';
-
-        const options = [
-            { value: "auto", key: "theme.auto" },
-            { value: "light", key: "theme.light" },
-            { value: "dark", key: "theme.dark" }
-        ];
-
-        options.forEach(option => {
-            const optElement = document.createElement('option');
-            optElement.value = option.value;
-            optElement.setAttribute('data-i18n', option.key);
-            optElement.textContent = t(option.key);
-            themeSelect.appendChild(optElement);
-        });
-
-        themeSelect.value = APP_STATE.theme;
-        themeSelect.onchange = () => setTheme(themeSelect.value);
-        themeRow.appendChild(themeSelect);
-
-        this.panel.appendChild(themeRow);
-
-        document.body.appendChild(this.panel);
-    }
-
-    /**
-     * 绑定事件
-     */
-    bindEvents() {
-        // 点击按钮切换面板
-        this.button.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.toggle();
-        });
-
-        // 点击外部关闭面板
-        document.addEventListener('click', (e) => {
-            if (this.isOpen &&
-                !this.panel.contains(e.target) &&
-                e.target !== this.button) {
-                this.close();
-            }
-        });
-
-        // ESC 键关闭面板
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.isOpen) {
-                this.close();
-                e.preventDefault();
-            }
-        });
-    }
-
-    /**
-     * 切换面板状态
-     */
-    toggle() {
-        if (this.isOpen) {
-            this.close();
-        } else {
-            this.open();
-        }
-    }
-
-    /**
-     * 打开面板
-     */
-    open() {
-        this.isOpen = true;
-        APP_STATE.settingsOpen = true;
-        this.panel.classList.add('open');
-        this.button.classList.add('active');
-    }
-
-    /**
-     * 关闭面板
-     */
-    close() {
-        this.isOpen = false;
-        APP_STATE.settingsOpen = false;
-        this.panel.classList.remove('open');
-        this.button.classList.remove('active');
-    }
-
-    /**
-     * 更新面板国际化
-     */
-    updateI18n() {
-        // 更新按钮标题
-        this.button.setAttribute('title', t('control.settings'));
-
-        // 更新面板内的文本
-        const labels = this.panel.querySelectorAll('[data-i18n]');
-        labels.forEach(label => {
-            const key = label.getAttribute('data-i18n');
-            label.textContent = t(key);
-        });
-
-        // 更新选择器选项
-        const themeSelect = document.getElementById('theme_select_settings');
-        if (themeSelect) {
-            const options = themeSelect.querySelectorAll('option[data-i18n]');
-            options.forEach(opt => {
-                const key = opt.getAttribute('data-i18n');
-                opt.textContent = t(key);
-            });
-        }
-    }
-}
-
-// 全局设置面板实例
-let settingsManager = null;
-
-/**
- * 初始化设置面板
- */
-function initSettingsPanel() {
-    if (!settingsManager) {
-        settingsManager = new SettingsManager();
-    }
-    settingsManager.init();
-}
-
-/**
- * 更新设置面板国际化
- */
-function updateSettingsI18n() {
-    if (settingsManager) {
-        settingsManager.updateI18n();
-    }
-}
-
-// ==============================
 // 工具函数
 // ==============================
 
@@ -1290,6 +1083,10 @@ const pageConfigs = {
         needUpload: false,
         init: () => consoleManager.init()
     },
+    settings: {
+        needUpload: false,
+        init: () => settingsPageManager.init()
+    },
     sysinfo: {
         needUpload: false,
         init: () => sysinfoManager.init()
@@ -1323,9 +1120,6 @@ function appInit(pageName) {
 
     // 初始化侧边栏（增强版）
     ensureSidebar();
-
-    // 初始化设置面板
-    initSettingsPanel();
 
     // 应用国际化
     applyI18n(document);
@@ -4948,6 +4742,81 @@ const sysinfoManager = (() => {
 })();
 
 // ==============================
+// 设置页面管理器
+// ==============================
+
+const settingsPageManager = (() => {
+    let elements = null;
+
+    function getElements() {
+        if (elements) return elements;
+
+        elements = {
+            langSelect: document.getElementById("settings_lang"),
+            themeSelect: document.getElementById("settings_theme")
+        };
+
+        return elements;
+    }
+
+    /**
+     * 加载当前设置到表单
+     */
+    function loadSettingsToForm() {
+        const els = getElements();
+
+        if (els.langSelect) {
+            els.langSelect.value = APP_STATE.lang || "en";
+        }
+
+        if (els.themeSelect) {
+            els.themeSelect.value = APP_STATE.theme || "auto";
+        }
+    }
+
+    /**
+     * 绑定事件
+     */
+    function bindEvents() {
+        const els = getElements();
+
+        // 实时应用主题（选择即生效）
+        if (els.themeSelect) {
+            els.themeSelect.addEventListener("change", () => {
+                setTheme(els.themeSelect.value);
+            });
+        }
+
+        // 实时应用语言（选择即生效）
+        if (els.langSelect) {
+            els.langSelect.addEventListener("change", () => {
+                setLang(els.langSelect.value);
+                // 更新保存按钮文本（因为语言变了）
+                if (els.saveBtn) {
+                    els.saveBtn.textContent = t("settings.action.save");
+                }
+                if (els.resetBtn) {
+                    els.resetBtn.textContent = t("settings.action.reset");
+                }
+            });
+        }
+    }
+
+    /**
+     * 初始化设置页面
+     */
+    function init() {
+        getElements();
+        loadSettingsToForm();
+        bindEvents();
+    }
+
+    return {
+        init,
+    };
+})();
+
+// ==============================
 // 国际化数据
 // ==============================
 
@@ -4981,17 +4850,12 @@ const I18N = (() => {
             "nav.mibib": "MIBIB Reload",
             "nav.initramfs": "Load Initramfs",
             "nav.system": "System",
+            "nav.settings": "Theme Settings",
             "nav.network": "Network Settings",
             "nav.backup": "Flash Backup",
             "nav.console": "Web Console",
             "nav.env": "Env Manage",
             "nav.reboot": "Reboot",
-            "control.language": "🌐 Language",
-            "control.theme": "🌓 Theme",
-            "control.settings": "Settings",
-            "theme.auto": "Auto",
-            "theme.light": "Light",
-            "theme.dark": "Dark",
             "title.author": "View Author Profile",
             "title.project": "View Project",
             "file.dropzone.text": "Drag & drop a file here or click to select a file",
@@ -5157,6 +5021,15 @@ const I18N = (() => {
             "network.warn.1": "Modifying network settings may affect network connectivity.",
             "network.warn.2": "Do not power off the device during save.",
             "network.warn.3": "Invalid network settings may prevent network access.",
+            "settings.title": "SETTINGS",
+            "settings.hint": "Configure <strong>application preferences</strong> including language and theme.",
+            "settings.label.language": "Language",
+            "settings.label.theme": "Theme",
+            "settings.theme.auto": "Auto",
+            "settings.theme.light": "Light",
+            "settings.theme.dark": "Dark",
+            "settings.warn.1": "Language and theme settings are saved in your browser's local storage.",
+            "settings.warn.2": "Theme changes apply immediately. Auto mode follows your system preference.",
             "sysinfo.title": "SYSTEM INFORMATION",
             "sysinfo.title.board_info": "Board Info",
             "sysinfo.title.flash_info": "Flash Info",
@@ -5257,17 +5130,12 @@ const I18N = (() => {
             "nav.mibib": "MIBIB 重载",
             "nav.initramfs": "Initramfs 启动",
             "nav.system": "系统",
+            "nav.settings": "主题设置",
             "nav.network": "网络设置",
             "nav.backup": "闪存备份",
             "nav.console": "网页终端",
             "nav.env": "环境变量",
             "nav.reboot": "重启",
-            "control.language": "🌐 语言",
-            "control.theme": "🌓 主题",
-            "control.settings": "设置",
-            "theme.auto": "自动",
-            "theme.light": "亮色",
-            "theme.dark": "暗色",
             "title.author": "查看作者主页",
             "title.project": "查看项目",
             "file.dropzone.text": "将文件拖拽到此处，或点击以选择文件",
@@ -5432,6 +5300,15 @@ const I18N = (() => {
             "network.warn.1": "修改网络设置可能影响网络连接。",
             "network.warn.2": "保存过程中请勿断电。",
             "network.warn.3": "无效的网络设置可能导致无法通过网络访问 U-Boot。",
+            "settings.title": "设置",
+            "settings.hint": "配置 <strong>应用偏好</strong>，包括语言和主题。",
+            "settings.label.language": "语言",
+            "settings.label.theme": "主题",
+            "settings.theme.auto": "自动",
+            "settings.theme.light": "亮色",
+            "settings.theme.dark": "暗色",
+            "settings.warn.1": "语言和主题设置保存在浏览器的本地存储中。",
+            "settings.warn.2": "主题更改立即生效，自动模式跟随系统偏好。",
             "sysinfo.title": "系统信息",
             "sysinfo.title.board_info": "设备信息",
             "sysinfo.title.flash_info": "存储信息",
