@@ -245,7 +245,7 @@ static void handle_flash_not_found(const int fw_type, const char *flash_type_str
 		fw_type_str, flash_type_str);
 }
 
-static void handle_invalid_jdc_fw(const char *node_prefix)
+static void handle_invalid_qsdk_fw(const char *node_prefix)
 {
 	snprintf(info, sizeof(info),
 		"{\"type\":\"fit_node_not_found\","
@@ -258,11 +258,8 @@ static int get_gl_fw_node_name(const void *data_addr)
 
 	ret = fit_image_get_node_by_prefix(data_addr, FIT_IMAGES_PATH, "ubi",
                             gl_fw_ubi_name, sizeof(gl_fw_ubi_name));
-    if (ret) {
-        strlcpy(info,
-			"{\"type\":\"fit_node_not_found\","
-			"\"node_prefix\":\"ubi\"}", sizeof(info));
-    }
+    if (ret)
+		handle_invalid_qsdk_fw("ubi");
 
 	return ret ? RET_FAILURE : RET_SUCCESS;
 }
@@ -275,21 +272,21 @@ static int get_jdc_fw_node_name(const void *data_addr)
     ret = fit_image_get_node_by_prefix(fit, FIT_IMAGES_PATH, "hlos",
                             jdc_fw.hlos_name, sizeof(jdc_fw.hlos_name));
     if (ret) {
-        handle_invalid_jdc_fw("hlos");
+        handle_invalid_qsdk_fw("hlos");
 		return RET_FAILURE;
     }
 
     ret = fit_image_get_node_by_prefix(fit, FIT_IMAGES_PATH, "rootfs",
                             jdc_fw.rootfs_name, sizeof(jdc_fw.rootfs_name));
     if (ret) {
-        handle_invalid_jdc_fw("rootfs");
+        handle_invalid_qsdk_fw("rootfs");
 		return RET_FAILURE;
     }
 
     ret = fit_image_get_node_by_prefix(fit, FIT_IMAGES_PATH, "wififw",
                             jdc_fw.wififw_name, sizeof(jdc_fw.wififw_name));
     if (ret) {
-        handle_invalid_jdc_fw("wififw");
+        handle_invalid_qsdk_fw("wififw");
 		return RET_FAILURE;
     }
 

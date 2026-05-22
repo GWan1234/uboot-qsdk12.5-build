@@ -448,7 +448,6 @@ static void result_handler(enum httpd_uri_handler_status status,
 				struct httpd_request *request,
 				struct httpd_response *response)
 {
-	static char resp[256];
 	struct httpd_form_value *auto_reboot;
 	struct flashing_status *st;
 	u32 size;
@@ -507,12 +506,12 @@ static void result_handler(enum httpd_uri_handler_status status,
 					(ulong)upload_size, response);
 			}
 		} else {
-			snprintf(resp, sizeof(resp),
+			snprintf(st->buf, sizeof(st->buf),
 				"{\"status\":\"fail\","
 				"\"info\":{\"type\":\"upload_id_mismatch\","
 				"\"upload_data_id\":\"%u\",\"fs_upload_id\":\"%u\"}}",
 				upload_data_id, fs_upload_id);
-			response->data = resp;
+			response->data = st->buf;
 			st->ret = RET_UPLOAD_ID_MISMATCH;
 		}
 
@@ -520,10 +519,10 @@ static void result_handler(enum httpd_uri_handler_status status,
 		upload_data_id = rand();
 
 		if (st->ret == RET_SUCCESS) {
-			snprintf(resp, sizeof(resp),
+			snprintf(st->buf, sizeof(st->buf),
 				"{\"status\":\"success\",\"info\":{\"reboot\":%s}}",
 				st->auto_reboot ? "true" : "false");
-			response->data = resp;
+			response->data = st->buf;
 		}
 
 		response->size = strlen(response->data);

@@ -79,13 +79,16 @@ void sysinfo_handler(enum httpd_uri_handler_status status,
     char esc_board_hostname[128], esc_board_model[128], esc_board_compat[128];
     char esc_version_string[256];
 
-	if (status == HTTP_CB_CLOSED) {
+	if (status == HTTP_CB_CLOSED && response->session_data) {
 		free(response->session_data);
+		response->session_data = NULL;
 		return;
 	}
 
 	if (status != HTTP_CB_NEW)
 		return;
+
+	response->session_data = NULL;
 
 	buf = malloc(left);
 	if (!buf) {
