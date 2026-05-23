@@ -31,6 +31,8 @@
 #include <nand.h>
 #include <jffs2/jffs2.h>
 
+#include <poller.h>
+
 typedef struct erase_info	erase_info_t;
 typedef struct mtd_info		mtd_info_t;
 
@@ -100,6 +102,7 @@ int nand_erase_opts(nand_info_t *meminfo, const nand_erase_options_t *opts)
 	     erase.addr += meminfo->erasesize) {
 
 		WATCHDOG_RESET();
+		poller_call();
 
 		if (opts->lim && (erase.addr >= (opts->offset + opts->lim))) {
 			puts("Size of erase exceeds limit\n");
@@ -188,7 +191,7 @@ int nand_erase_opts(nand_info_t *meminfo, const nand_erase_options_t *opts)
 
 #define NAND_CMD_LOCK_TIGHT     0x2c
 #define NAND_CMD_LOCK_STATUS    0x7a
- 
+
 /******************************************************************************
  * Support for locking / unlocking operations of some NAND devices
  *****************************************************************************/
@@ -637,6 +640,7 @@ int nand_write_skip_bad(nand_info_t *nand, loff_t offset, size_t *length,
 		size_t write_size, truncated_write_size;
 
 		WATCHDOG_RESET();
+		poller_call();
 
 		if (nand_block_isbad(nand, offset & ~(nand->erasesize - 1))) {
 			printf("Skip bad block 0x%08llx\n",
@@ -753,6 +757,7 @@ int nand_read_skip_bad(nand_info_t *nand, loff_t offset, size_t *length,
 		size_t read_length;
 
 		WATCHDOG_RESET();
+		poller_call();
 
 		if (nand_block_isbad(nand, offset & ~(nand->erasesize - 1))) {
 			printf("Skipping bad block 0x%08llx\n",

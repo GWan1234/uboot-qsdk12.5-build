@@ -17,6 +17,7 @@
 #include <spi_flash.h>
 #include <linux/log2.h>
 #include <linux/sizes.h>
+#include <poller.h>
 
 #include "sf_internal.h"
 
@@ -389,6 +390,8 @@ int spi_flash_cmd_erase_ops(struct spi_flash *flash, u32 offset, size_t len)
 	}
 
 	while (len) {
+		poller_call();
+
 		erase_addr = offset;
 
 #ifdef CONFIG_SPI_FLASH_CYPRESS
@@ -462,6 +465,8 @@ int spi_flash_cmd_write_ops(struct spi_flash *flash, u32 offset,
 
 	cmd[0] = flash->write_cmd;
 	for (actual = 0; actual < len; actual += chunk_len) {
+		poller_call();
+
 		write_addr = offset;
 
 #ifdef CONFIG_SF_DUAL_FLASH
@@ -557,6 +562,8 @@ int spi_flash_cmd_read_ops(struct spi_flash *flash, u32 offset,
 
 	cmd[0] = flash->read_cmd;
 	while (len) {
+		poller_call();
+
 		read_addr = offset;
 
 #ifdef CONFIG_SF_DUAL_FLASH

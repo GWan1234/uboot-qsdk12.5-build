@@ -14,6 +14,7 @@
 #include <linux/math64.h>
 #include <linux/log2.h>
 #include "mmc_private.h"
+#include <poller.h>
 
 static ulong mmc_erase_t(struct mmc *mmc, ulong start, lbaint_t blkcnt, int arg)
 {
@@ -122,6 +123,7 @@ unsigned long mmc_berase(int dev_num, lbaint_t start, lbaint_t blkcnt)
 
 	if (arg != MMC_SECURE_TRIM1_ARG) {
 		while (blk < blkcnt) {
+			poller_call();
 
 			blk_r = ((blkcnt - blk) > mmc->erase_grp_size) ?
 				mmc->erase_grp_size : (blkcnt - blk);
@@ -252,6 +254,7 @@ ulong mmc_bwrite(int dev_num, lbaint_t start, lbaint_t blkcnt, const void *src)
 		    (unsigned long)blkcnt * mmc->write_bl_len);
 #endif
 	do {
+		poller_call();
 		cur = (blocks_todo > mmc->cfg->b_max) ?
 			mmc->cfg->b_max : blocks_todo;
 		if (mmc_write_blocks(mmc, start, cur, src) != cur)

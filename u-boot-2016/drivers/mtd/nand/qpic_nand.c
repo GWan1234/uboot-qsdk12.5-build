@@ -38,6 +38,7 @@
 #include <asm/arch-qca-common/gpio.h>
 #include <fdtdec.h>
 #include <dm.h>
+#include <poller.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 #ifdef READ_ONFI_PAGE_PARA
@@ -3894,6 +3895,8 @@ static int qpic_nand_read_oob(struct mtd_info *mtd, loff_t to,
 	for (i = 0; i < num_pages; i++) {
 		struct mtd_oob_ops page_ops;
 
+		poller_call();
+
 		/*
 		 * If start address is non page alinged then determine the
 		 * column offset
@@ -4086,6 +4089,8 @@ static int qpic_nand_write_oob(struct mtd_info *mtd, loff_t to,
 
 	for (i = 0; i < (int)num_pages; i++) {
 		struct mtd_oob_ops page_ops;
+
+		poller_call();
 
 		page_ops.mode = ops->mode;
 		page_ops.len = mtd->writesize;
@@ -4297,6 +4302,8 @@ qpic_nand_erase(struct mtd_info *mtd, struct erase_info *instr)
 	for (i = start; i < (start + blocks); i++) {
 		offs = i << chip->phys_erase_shift;
 		pageno = offs >> chip->page_shift;
+
+		poller_call();
 
 		/* Erase only if the block is not bad */
 		if (!instr->scrub && qpic_nand_block_isbad(mtd, offs)) {

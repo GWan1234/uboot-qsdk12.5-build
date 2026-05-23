@@ -120,6 +120,7 @@
 #include <mmc.h>
 #include <sdhci.h>
 #include <part.h>
+#include <poller.h>
 
 #ifndef CONFIG_SDHCI_SUPPORT
 extern qca_mmc mmc_host;
@@ -597,6 +598,7 @@ restart:
 	 */
 	for (;;) {
 		WATCHDOG_RESET();
+		poller_call();
 #ifdef CONFIG_SHOW_ACTIVITY
 		show_activity(1);
 #endif

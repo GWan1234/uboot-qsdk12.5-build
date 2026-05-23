@@ -307,5 +307,6 @@ endif
 obj-y += cmd_disk.o
 
 obj-$(CONFIG_NET_ABORT) += net_abort.o
+obj-$(CONFIG_POLLER) += poller.o
 
 CFLAGS_env_embedded.o := -Wa,--no-warn -DENV_CRC=$(shell tools/envcrc 2>/dev/null)

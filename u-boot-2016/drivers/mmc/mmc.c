@@ -19,6 +19,7 @@
 #include <memalign.h>
 #include <linux/list.h>
 #include <div64.h>
+#include <poller.h>
 #include "mmc_private.h"
 
 static struct list_head mmc_devices;
@@ -261,6 +262,7 @@ static ulong mmc_bread(int dev_num, lbaint_t start, lbaint_t blkcnt, void *dst)
 	flush_cache((unsigned long)dst, blkcnt * mmc->read_bl_len);
 #endif
 	do {
+		poller_call();
 		cur = (blocks_todo > mmc->cfg->b_max) ?
 			mmc->cfg->b_max : blocks_todo;
 		if (mmc_read_blocks(mmc, dst, start, cur) != cur) {

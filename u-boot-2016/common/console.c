@@ -16,6 +16,7 @@
 #include <stdio_dev.h>
 #include <exports.h>
 #include <environment.h>
+#include <poller.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -398,6 +399,8 @@ int getc(void)
 
 int tstc(void)
 {
+	poller_call();
+
 #ifdef CONFIG_DISABLE_CONSOLE
 	if (gd->flags & GD_FLG_DISABLE_CONSOLE)
 		return 0;

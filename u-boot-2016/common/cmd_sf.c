@@ -19,6 +19,8 @@
 #include <asm/io.h>
 #include <dm/device-internal.h>
 
+#include <poller.h>
+
 DECLARE_GLOBAL_DATA_PTR;
 
 static struct spi_flash *flash;
@@ -232,6 +234,7 @@ static int spi_flash_update(struct spi_flash *flash, u32 offset,
 		ulong last_update = get_timer(0);
 
 		for (; buf < end && !err_oper; buf += todo, offset += todo) {
+			poller_call();
 			todo = min_t(size_t, end - buf, flash->sector_size);
 			if (get_timer(last_update) > 100) {
 				printf("   \rUpdating, %zu%% %lu B/s",
