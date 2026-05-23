@@ -598,6 +598,7 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/uboot.html", &upload_html_handler, NULL);
 	httpd_register_uri_handler(inst, "/booting.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/flashing.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/settings.html", &html_handler, NULL);
 
 	httpd_register_uri_handler(inst, "/main.js", &js_handler, NULL);
 	httpd_register_uri_handler(inst, "/style.css", &style_handler, NULL);
