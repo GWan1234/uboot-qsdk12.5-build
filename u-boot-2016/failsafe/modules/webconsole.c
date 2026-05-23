@@ -228,17 +228,6 @@ void webconsole_exec_handler(enum httpd_uri_handler_status status,
 		printf("%s%s%s\n", prompt, need_space ? " " : "", cmd);
 	}
 	ret = run_command(cmd, 0);
-	{
-		const char *prompt = failsafe_get_prompt();
-
-		if (!prompt || !prompt[0])
-			prompt = "IPQ# ";
-
-		if (prompt[0] != '\n')
-			printf("\n%s", prompt);
-		else
-			printf("%s", prompt);
-	}
 
 	esc_sz = strlen(cmd) * 2 + 64;
 	esc = malloc(esc_sz);
@@ -352,7 +341,7 @@ void webconsole_upload_handler(enum httpd_uri_handler_status status,
 	printf("[SIZE] 0x%lx (", (ulong)file->size);
 	print_size(file->size, ")\n");
 
-	puts("[MD5 ] ");
+	puts("[ MD5] ");
 	for (int i = 0; i < 16; i++)
 		printf("%02x", md5_sum[i] & 0xFF);
 	putc('\n');
