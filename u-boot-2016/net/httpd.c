@@ -511,7 +511,7 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 
 	if (strcmp(uri_ptr, "/console/poll")) {
 		handle_start_led_state();
-		printf("%s %s\n", pdata->buf, uri_ptr);
+		httpd_debug("%s %s\n", pdata->buf, uri_ptr);
 	}
 
 	/* record URI */
