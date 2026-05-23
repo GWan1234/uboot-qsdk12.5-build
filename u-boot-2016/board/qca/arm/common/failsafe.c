@@ -67,6 +67,7 @@ static struct {
 } jdc_fw;
 
 static char gl_fw_ubi_name[66];
+static ulong factory_fw_kernel_size;
 
 static char info[666];
 static char resp[888];
@@ -293,24 +294,53 @@ static int get_jdc_fw_node_name(const void *data_addr)
 	return RET_SUCCESS;
 }
 
+static void handle_invalid_factory_fw(void)
+{
+	strlcpy(info, "{\"type\":\"squashfs_magic_not_found\"}", sizeof(info));
+}
+
+static int get_factory_fw_kernel_size(const void *data_addr, const ulong data_size)
+{
+	const void *p = data_addr;
+	u32 magic = HEADER_MAGIC_SQUASHFS;
+	size_t magic_len = sizeof(u32);
+	ulong size_remain = data_size;
+
+	if (!p) {
+		handle_invalid_factory_fw();
+		return RET_FAILURE;
+	}
+
+	while (size_remain >= magic_len) {
+		size_remain--;
+		if (!memcmp(p, &magic, magic_len)) {
+			factory_fw_kernel_size = p - data_addr;
+			return RET_SUCCESS;
+		}
+		p++;
+	}
+
+	handle_invalid_factory_fw();
+	return RET_FAILURE;
+}
+
 static int failsafe_validate_firmware(const void *data_addr, const ulong data_size)
 {
     int ret;
 
     switch (fw_type) {
-    case FW_TYPE_FACTORY_KERNEL6M:
-    case FW_TYPE_FACTORY_KERNEL12M:
+    case FW_TYPE_FIT:
 		if (!dfd->mmc) {
 			handle_flash_not_found(fw_type, "EMMC");
 			return RET_FLASH_NOT_FOUND;
 		}
-        ulong factory_kernel_size = 6 * 1024 * 1024;
-        if (fw_type == FW_TYPE_FACTORY_KERNEL12M)
-            factory_kernel_size = 12 * 1024 * 1024;
-        ret = check_file_size_is_valid("firmware kernel", "0:HLOS", factory_kernel_size);
+        ret = get_factory_fw_kernel_size(data_addr, data_size);
+		if (ret)
+			break;
+        ret = check_file_size_is_valid("firmware kernel", "0:HLOS", factory_fw_kernel_size);
         if (ret)
             break;
-        ret = check_file_size_is_valid("firmware rootfs", "rootfs", data_size - factory_kernel_size);
+        ret = check_file_size_is_valid("firmware rootfs", "rootfs", data_size - factory_fw_kernel_size);
         break;
     case FW_TYPE_SYSUPGRADE:
 		if (!dfd->mmc) {
@@ -410,13 +440,11 @@ static int failsafe_validate_art(const void *data_addr, const ulong data_size)
     case FW_TYPE_CDT:
     case FW_TYPE_ELF:
     case FW_TYPE_EMMC:
-    case FW_TYPE_FACTORY_KERNEL6M:
-    case FW_TYPE_FACTORY_KERNEL12M:
-    case FW_TYPE_LEGACY_IMAGE:
     case FW_TYPE_FIT:
 	case FW_TYPE_GLINET_V3:
 	case FW_TYPE_GLINET_V4:
     case FW_TYPE_JDCLOUD:
+    case FW_TYPE_LEGACY_IMAGE:
     case FW_TYPE_MIBIB_NAND:
     case FW_TYPE_MIBIB_NOR:
     case FW_TYPE_NAND:
@@ -692,22 +720,18 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 	print_upgrade_hint("FIRMWARE");
 
 	switch (fw_type) {
-	case FW_TYPE_FACTORY_KERNEL6M:
-	case FW_TYPE_FACTORY_KERNEL12M:
+	case FW_TYPE_FIT:
 		if (!dfd->mmc) {
 			handle_flash_not_found(fw_type, "EMMC");
 			return RET_FLASH_NOT_FOUND;
 		}
-		ulong kernel_size = 6 * 1024 * 1024;
-		if (fw_type == FW_TYPE_FACTORY_KERNEL12M)
-			kernel_size = 12 * 1024 * 1024;
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"flash 0:HLOS 0x%lx 0x%lx",
-			data_addr, kernel_size);
+			data_addr, factory_fw_kernel_size);
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"flash rootfs 0x%lx 0x%lx",
-			data_addr + kernel_size,
-			data_size - kernel_size);
+			data_addr + factory_fw_kernel_size,
+			data_size - factory_fw_kernel_size);
 		strlcpy(runcmd.list[runcmd.count++],
 			"bootconfig set all 0 && bootconfig sync", MAX_CMD_LEN);
 		break;

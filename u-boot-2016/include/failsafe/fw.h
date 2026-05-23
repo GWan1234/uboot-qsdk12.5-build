@@ -7,8 +7,6 @@ enum {
     FW_TYPE_CDT,                /* CDT 文件 */
     FW_TYPE_ELF,                /* ELF 文件*/
     FW_TYPE_EMMC,               /* eMMC 的 GPT 分区表或镜像，只要开头有 GPT 信息即可 */
-    FW_TYPE_FACTORY_KERNEL6M,   /* Factory 格式的固件 (Kernel 大小: 6MB) */
-    FW_TYPE_FACTORY_KERNEL12M,  /* Factory 格式的固件 (Kernel 大小: 12MB) */
     FW_TYPE_FIT,                /* FIT Image，包括 Factory Image 和 FIT Initramfs uImage */
     FW_TYPE_GLINET_V3,          /* GLiNet 官方固件（版本：3.x） */
     FW_TYPE_GLINET_V4,          /* GLiNet 官方固件（版本：4.x） */

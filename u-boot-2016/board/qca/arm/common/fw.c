@@ -30,10 +30,6 @@ int check_fw_type(const void *address) {
 			default: return FW_TYPE_FIT;
 			}
 		}
-		if (*((u32 *)(address + 0x600000)) == HEADER_MAGIC_SQUASHFS)
-			return FW_TYPE_FACTORY_KERNEL6M;
-		if (*((u32 *)(address + 0xC00000)) == HEADER_MAGIC_SQUASHFS)
-			return FW_TYPE_FACTORY_KERNEL12M;
 		return FW_TYPE_FIT;
 	case HEADER_MAGIC_LEGACY_IMAGE:
 		if (*((u32 *)(address + 0x40)) == HEADER_MAGIC_ASUSWRT_EMMC)
@@ -76,10 +72,6 @@ char *fw_type_to_string(const int fw_type) {
 		return "ELF";
 	case FW_TYPE_EMMC:
 		return "GPT (Single Image for eMMC device)";
-	case FW_TYPE_FACTORY_KERNEL6M:
-		return "Factory Firmware (Kernel Size: 6 MiB)";
-	case FW_TYPE_FACTORY_KERNEL12M:
-		return "Factory Firmware (Kernel Size: 12 MiB)";
 	case FW_TYPE_LEGACY_IMAGE:
 		return "Legacy Image";
 	case FW_TYPE_FIT:
