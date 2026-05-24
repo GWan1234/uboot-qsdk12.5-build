@@ -29,6 +29,7 @@
 #include <asm/arch-qca-common/qca_common.h>
 #include <usb.h>
 #include <elf.h>
+#include <cli.h>
 
 #define SEC_AUTH_SW_ID 		0x17
 #define ROOTFS_IMAGE_TYPE       0x13
@@ -205,6 +206,7 @@ static int set_fs_bootargs(int *fs_on_nand)
 			bootargs = boot_args;
 			if (smem_bootconfig_info() == 0) {
 				active_part = get_rootfs_active_partition();
+				// TODO: AP8220 rootfs1 rootfs2
 				if (active_part) {
 					strlcpy(bootargs, "rootfsname=rootfs_1", sizeof(boot_args));
 					if (sfi->rootfs.offset == 0xBAD0FF5E)
@@ -1005,13 +1007,20 @@ static int do_bootipq(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[])
 	}
 
 	if (ret == CMD_RET_FAILURE) {
+#ifdef CONFIG_HTTPD
+	puts("bootipq failed, enter web failsafe mode\n");
+	run_command("httpd", 0);
+	cli_loop();
+#else
 #if !defined(CONFIG_IPQ5332) && !defined(CONFIG_IPQ9574)
 #ifdef CONFIG_IPQ_ETH_INIT_DEFER
 		puts("\nNet:   ");
 		eth_initialize();
-#endif
-#endif
+#endif /* CONFIG_IPQ_ETH_INIT_DEFER */
+#endif /* CONFIG_IPQ5332, CONFIG_IPQ9574 */
+#endif /* CONFIG_HTTPD */
 	}
+
 	return ret;
 }
 
