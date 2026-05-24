@@ -334,7 +334,7 @@ extern loff_t board_env_size;
 /*
  * CRASH DUMP ENABLE
  */
-#define CONFIG_QCA_APPSBL_DLOAD
+/* #define CONFIG_QCA_APPSBL_DLOAD */
 #ifdef CONFIG_QCA_APPSBL_DLOAD
 #define CONFIG_CMD_TFTPPUT
 /* We will be uploading very big files */
@@ -373,7 +373,7 @@ extern loff_t board_env_size;
 #define CONFIG_ARMV7_PSCI
 #define CONFIG_IPQ_ELF_AUTH
 #define IPQ_UBI_VOL_WRITE_SUPPORT
-#define CONFIG_IPQ_TZT
+/* #define CONFIG_IPQ_TZT */
 #define CONFIG_IPQ_FDT_FIXUP
 #define CONFIG_IPQ_XTRACT_N_FLASH
 #define CONFIG_CMD_BOOTCONFIG
@@ -392,6 +392,12 @@ extern loff_t board_env_size;
 #define CONFIG_NAME_MAX_ENTRIES	6
 #define CONFIG_NAME_MAX_LEN	32
 #endif
+
+/*
+ * Disable some modules
+ */
+#define CONFIG_CMD_DISABLE_EXECTZT
+#define CONFIG_DISABLE_SIGNED_BOOT
 
 /*
  * Console record support
