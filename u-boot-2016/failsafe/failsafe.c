@@ -23,6 +23,9 @@
 #if defined(CONFIG_DHCPD)
 #include <net/dhcpd.h>
 #endif
+#if defined(CONFIG_TELNETD)
+#include <net/telnetd.h>
+#endif
 #include "fs.h"
 #include "modules/backup.h"
 #include "modules/env.h"
@@ -644,11 +647,30 @@ int start_web_failsafe(void)
 #if defined(CONFIG_DHCPD)
 	dhcpd_start();
 #endif
+#if defined(CONFIG_TELNETD)
+	{
+		const char *disable_str = getenv("telnet_disable");
+		const char *port_str = getenv("telnet_port");
+		ulong port = 23;
+
+		if (!disable_str) {
+			if (port_str) {
+				port = simple_strtoul(port_str, NULL, 10);
+				if (port < 1 || port > 65535)
+					port = 23;
+			}
+			telnetd_start((u16)port);
+		}
+	}
+#endif
 
 	net_loop(TCP);
 
 #if defined(CONFIG_DHCPD)
 	dhcpd_stop();
+#endif
+#if defined(CONFIG_TELNETD)
+	telnetd_stop();
 #endif
 
 	return 0;

@@ -415,4 +415,9 @@ extern loff_t board_env_size;
 #define CONFIG_CMD_DHCP
 #endif
 
+/*
+ * Telnet Server support
+ */
+#define CONFIG_TELNETD
+
 #endif /* _IPQ6018_H */

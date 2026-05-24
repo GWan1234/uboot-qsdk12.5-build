@@ -23,3 +23,4 @@ obj-$(CONFIG_CMD_NET)  += tftp.o
 obj-$(CONFIG_DHCPD)    += dhcpd.o
 obj-$(CONFIG_HTTPD)    += httpd.o
 obj-$(CONFIG_TCP)      += tcp.o
+obj-$(CONFIG_TELNETD)  += telnetd.o
