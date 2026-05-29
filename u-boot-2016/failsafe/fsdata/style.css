@@ -2396,6 +2396,189 @@ html[data-theme="dark"] .settings-label-cell {
     background: rgba(15, 23, 42, 0.5);
 }
 
+/* ====== MAC 地址管理页面样式 ====== */
+
+/* 分区信息显示 */
+.mac-part-info {
+    text-align: center;
+    padding: 0.5rem 1rem;
+    margin-bottom: 1rem;
+    background: var(--panel-2);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+}
+
+.mac-part-label {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.mac-part-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    color: var(--primary);
+    font-weight: 600;
+    font-size: 1.2rem;
+}
+
+/* 状态条 - 居中显示 */
+.mac-status-bar {
+    text-align: center;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.mac-status {
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+/* 表格容器 - 居中 */
+.mac-table-wrapper {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    overflow-x: auto;
+    margin-bottom: 1.2rem;
+}
+
+/* MAC 地址表格 */
+.mac-table {
+    width: auto;
+    min-width: 400px;
+    max-width: 700px;
+    border-collapse: collapse;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.mac-table td {
+    padding: 0.45rem 0.8rem;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--border);
+}
+
+.mac-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* MAC 名称列 */
+.mac-name-cell {
+    font-weight: 600;
+    color: var(--primary);
+    width: 75px;
+    white-space: nowrap;
+}
+
+/* MAC 输入框列 */
+.mac-input-cell {
+    padding: 0.5rem 0.75rem;
+}
+
+/* MAC 输入组容器 */
+.mac-input-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-wrap: wrap;
+}
+
+/* MAC 字节输入框 */
+.mac-byte-input {
+    width: 45px;
+    height: 30px;
+    text-align: center;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 1.1rem;
+    font-weight: 500;
+    padding: 0.25rem 0;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--panel-2);
+    color: var(--text);
+    transition: all 0.2s ease;
+    outline: none;
+    text-transform: uppercase;
+}
+
+.mac-byte-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(49, 161, 161, 0.2);
+}
+
+.mac-byte-input.valid {
+    border-color: var(--primary);
+    background: rgba(49, 161, 161, 0.05);
+}
+
+.mac-byte-input.invalid {
+    border-color: var(--danger);
+    background: rgba(245, 54, 92, 0.05);
+}
+
+.mac-byte-input:disabled {
+    background: var(--panel);
+    color: var(--muted);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* MAC 分隔符 */
+.mac-separator {
+    font-family: monospace;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--muted);
+    margin: 0 2px;
+}
+
+/* 验证状态图标 */
+.mac-validation-status {
+    margin-left: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    width: 20px;
+    display: inline-block;
+}
+
+.mac-validation-status.valid {
+    color: var(--primary);
+}
+
+.mac-validation-status.invalid {
+    color: var(--danger);
+}
+
+/* 空状态单元格 */
+.mac-empty-cell {
+    text-align: center;
+    padding: 2rem !important;
+    color: var(--muted);
+}
+
+/* 操作按钮栏 - 靠右对齐 */
+.mac-action-bar {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.5rem;
+}
+
+.mac-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* 暗色主题适配 */
+html[data-theme="dark"] .mac-byte-input.valid {
+    background: rgba(26, 137, 137, 0.1);
+}
+
+html[data-theme="dark"] .mac-byte-input.invalid {
+    background: rgba(248, 113, 113, 0.08);
+}
+
 /* 响应式设计 - 移动端显示切换按钮 */
 @media (max-width: 768px) {
     .sidebar-toggle {
@@ -2727,6 +2910,46 @@ html[data-theme="dark"] .settings-label-cell {
 
     .bar-circle::after {
         font-size: 1rem;
+    }
+
+    .mac-table {
+        min-width: 320px;
+        width: 100%;
+    }
+
+    .mac-table td {
+        padding: 0.5rem 0.6rem;
+    }
+
+    .mac-name-cell {
+        width: 60px;
+        font-size: 0.85rem;
+    }
+
+    .mac-byte-input {
+        width: 36px;
+        height: 32px;
+        font-size: 0.8rem;
+    }
+
+    .mac-separator {
+        margin: 0 1px;
+    }
+
+    .mac-input-group {
+        gap: 1px;
+    }
+
+    .mac-part-info {
+        font-size: 0.85rem;
+    }
+
+    .mac-status-bar {
+        font-size: 0.8rem;
+    }
+
+    .mac-action-bar {
+        justify-content: center;
     }
 }
 

@@ -67,6 +67,7 @@ class SidebarManager {
             '/backup.html': 'backup',
             '/env.html': 'env',
             '/console.html': 'console',
+            '/mac.html': 'mac',
             '/network.html': 'network',
             '/settings.html': 'settings',
             '/flashing.html': 'flashing',
@@ -126,6 +127,7 @@ class SidebarManager {
                 items: [
                     { path: "/settings.html", labelKey: "nav.settings", id: "settings" },
                     { path: "/network.html", labelKey: "nav.network", id: "network" },
+                    { path: "/mac.html", labelKey: "nav.mac", id: "mac" },
                     { path: "/env.html", labelKey: "nav.env", id: "env" },
                     { path: "/backup.html", labelKey: "nav.backup", id: "backup" },
                     { path: "/console.html", labelKey: "nav.console", id: "console" }
@@ -1074,6 +1076,10 @@ const pageConfigs = {
     backup: {
         needUpload: false,
         init: () => backupManager.init()
+    },
+    mac: {
+        needUpload: false,
+        init: () => macManager.init()
     },
     network: {
         needUpload: false,
@@ -4817,6 +4823,567 @@ const settingsPageManager = (() => {
 })();
 
 // ==============================
+// MAC 地址管理模块
+// ==============================
+
+/**
+ * MAC 地址管理器
+ * 负责处理设备 MAC 地址的查看、修改等操作
+ */
+const macManager = (() => {
+    let elements = null;
+    let macList = [];           // 存储 MAC 地址数组
+    let partName = "";          // 存储分区名称
+    let refreshTimer = null;    // 延迟刷新定时器
+
+    /**
+     * 获取或缓存 DOM 元素
+     */
+    function getElements() {
+        if (elements) return elements;
+
+        elements = {
+            status: document.getElementById("mac_status"),
+            partNameDisplay: document.getElementById("mac_part_name"),
+            tableBody: document.getElementById("mac_table_body"),
+            tableContainer: document.getElementById("mac_table_container"),
+            modifyBtn: document.getElementById("mac_modify_btn"),
+            saveBtn: document.getElementById("mac_save_btn"),
+            cancelBtn: document.getElementById("mac_cancel_btn"),
+            actionGroup: document.getElementById("mac_action_group"),
+            saveCancelGroup: document.getElementById("mac_save_cancel_group")
+        };
+
+        return elements;
+    }
+
+    /**
+     * 设置状态提示
+     */
+    function setStatus(text, isError) {
+        const el = getElements().status;
+        if (el) {
+            el.textContent = text || "";
+            if (isError) {
+                el.style.color = "var(--danger)";
+            } else {
+                el.style.color = "";
+            }
+        }
+    }
+
+    /**
+     * 设置分区名称显示
+     */
+    function setPartName(name) {
+        const el = getElements().partNameDisplay;
+        if (el) {
+            if (name) {
+                el.textContent = name;
+                el.style.display = "inline";
+            } else {
+                el.textContent = "";
+                el.style.display = "none";
+            }
+        }
+    }
+
+    /**
+     * 格式化错误信息
+     */
+    function formatError(error) {
+        if (!error) return t("error.unknown");
+        if (error.message) return error.message;
+        return String(error);
+    }
+
+    /**
+     * 验证单个 MAC 字节是否为有效的十六进制数（00-FF）
+     * @param {string} byte - 两位十六进制字符串
+     * @returns {boolean}
+     */
+    function isValidHexByte(byte) {
+        if (!byte || byte.length < 1 || byte.length > 2) return false;
+        const hexPattern = /^[0-9A-Fa-f]{1,2}$/;
+        return hexPattern.test(byte);
+    }
+
+    /**
+     * 验证完整的 MAC 地址
+     * @param {Array<string>} bytes - 6个字节的数组
+     * @returns {boolean}
+     */
+    function isValidMac(bytes) {
+        if (!bytes || bytes.length !== 6) return false;
+        return bytes.every(byte => isValidHexByte(byte));
+    }
+
+    /**
+     * 将 MAC 地址字符串转换为字节数组
+     * @param {string} mac - MAC 地址字符串 (格式: XX:XX:XX:XX:XX:XX)
+     * @returns {Array<string>}
+     */
+    function macToBytes(mac) {
+        if (!mac) return Array(6).fill("00");
+        const parts = mac.split(':');
+        if (parts.length === 6) {
+            return parts.map(p => p.toUpperCase().padStart(2, '0'));
+        }
+        return Array(6).fill("00");
+    }
+
+    /**
+     * 将字节数组转换为 MAC 地址字符串
+     * @param {Array<string>} bytes - 6个字节的数组
+     * @returns {string}
+     */
+    function bytesToMac(bytes) {
+        if (!bytes || bytes.length !== 6) return "";
+        return bytes.map(b => b.toUpperCase().padStart(2, '0')).join(':');
+    }
+
+    /**
+     * 创建 MAC 输入框组（6个小框）
+     * @param {string} mac - MAC 地址字符串
+     * @param {number} index - MAC 索引
+     * @returns {HTMLElement}
+     */
+    function createMacInputGroup(mac, index) {
+        const bytes = macToBytes(mac);
+        const container = document.createElement("div");
+        container.className = "mac-input-group";
+        container.dataset.index = index;
+
+        const inputs = [];
+
+        for (let i = 0; i < 6; i++) {
+            const input = document.createElement("input");
+            input.type = "text";
+            input.maxLength = 2;
+            input.size = 2;
+            input.className = "mac-byte-input";
+            input.value = bytes[i];
+            input.dataset.byteIndex = i;
+            input.disabled = true;  // 初始状态为禁用（只读模式）
+            input.readOnly = true;
+
+            // 输入验证和格式化
+            input.addEventListener("input", (e) => {
+                handleByteInput(e, input, inputs, i);
+            });
+
+            input.addEventListener("keydown", (e) => {
+                handleByteKeydown(e, input, inputs, i);
+            });
+
+            input.addEventListener("focus", (e) => {
+                input.select();
+            });
+
+            container.appendChild(input);
+
+            // 添加分隔符（除了最后一个）
+            if (i < 5) {
+                const separator = document.createElement("span");
+                separator.className = "mac-separator";
+                separator.textContent = "-";
+                container.appendChild(separator);
+            }
+
+            inputs.push(input);
+        }
+
+        // 存储输入框引用
+        container.inputs = inputs;
+
+        // 为容器添加验证状态显示
+        const validationStatus = document.createElement("span");
+        validationStatus.className = "mac-validation-status";
+        container.appendChild(validationStatus);
+        container.validationStatus = validationStatus;
+
+        return container;
+    }
+
+    /**
+     * 处理字节输入事件
+     */
+    function handleByteInput(e, currentInput, allInputs, byteIndex) {
+        let value = e.target.value.toUpperCase();
+
+        // 只允许十六进制字符
+        value = value.replace(/[^0-9A-F]/g, "");
+
+        // 限制长度为2
+        if (value.length > 2) {
+            value = value.slice(0, 2);
+        }
+
+        currentInput.value = value;
+
+        // 如果输入了2个字符且不是最后一个输入框，自动跳转到下一个
+        if (value.length === 2 && byteIndex < 5) {
+            const nextInput = allInputs[byteIndex + 1];
+            if (nextInput) {
+                nextInput.focus();
+                nextInput.select();
+            }
+        }
+
+        // 验证当前输入框的MAC组
+        validateMacGroup(currentInput.closest(".mac-input-group"));
+    }
+
+    /**
+     * 处理字节键盘事件
+     */
+    function handleByteKeydown(e, currentInput, allInputs, byteIndex) {
+        // 处理删除键：如果当前输入框为空且按下了 Backspace，跳转到上一个输入框
+        if (e.key === "Backspace" && currentInput.value === "" && byteIndex > 0) {
+            const prevInput = allInputs[byteIndex - 1];
+            if (prevInput) {
+                prevInput.focus();
+                prevInput.select();
+            }
+            e.preventDefault();
+        }
+
+        // 处理左箭头键
+        if (e.key === "ArrowLeft" && byteIndex > 0) {
+            const prevInput = allInputs[byteIndex - 1];
+            if (prevInput) {
+                prevInput.focus();
+                prevInput.select();
+            }
+            e.preventDefault();
+        }
+
+        // 处理右箭头键
+        if (e.key === "ArrowRight" && byteIndex < 5) {
+            const nextInput = allInputs[byteIndex + 1];
+            if (nextInput) {
+                nextInput.focus();
+                nextInput.select();
+            }
+            e.preventDefault();
+        }
+    }
+
+    /**
+     * 验证单个 MAC 输入组
+     * @param {HTMLElement} group - MAC 输入组容器
+     * @returns {boolean}
+     */
+    function validateMacGroup(group) {
+        if (!group || !group.inputs) return false;
+
+        const bytes = group.inputs.map(input => input.value.padStart(2, ''));
+        const isValid = isValidMac(bytes);
+
+        // 更新样式
+        group.inputs.forEach(input => {
+            const byteValue = input.value;
+            const byteValid = isValidHexByte(byteValue);
+            if (byteValid) {
+                input.classList.remove("invalid");
+                input.classList.add("valid");
+            } else if (byteValue.length > 0) {
+                input.classList.remove("valid");
+                input.classList.add("invalid");
+            } else {
+                input.classList.remove("valid", "invalid");
+            }
+        });
+
+        // 更新验证状态图标
+        if (group.validationStatus) {
+            if (isValid) {
+                group.validationStatus.textContent = "✓";
+                group.validationStatus.className = "mac-validation-status valid";
+            } else {
+                group.validationStatus.textContent = "✗";
+                group.validationStatus.className = "mac-validation-status invalid";
+            }
+        }
+
+        return isValid;
+    }
+
+    /**
+     * 获取所有 MAC 地址
+     * @returns {Array<string>}
+     */
+    function getAllMacs() {
+        const groups = document.querySelectorAll(".mac-input-group");
+        const macs = [];
+
+        groups.forEach(group => {
+            if (group.inputs) {
+                const bytes = group.inputs.map(input => input.value.padStart(2, '0'));
+                const mac = bytesToMac(bytes);
+                macs.push(mac);
+            }
+        });
+
+        return macs;
+    }
+
+    /**
+     * 验证所有 MAC 地址
+     * @returns {boolean}
+     */
+    function validateAllMacs() {
+        const groups = document.querySelectorAll(".mac-input-group");
+        let allValid = true;
+
+        groups.forEach(group => {
+            const isValid = validateMacGroup(group);
+            if (!isValid) allValid = false;
+        });
+
+        return allValid;
+    }
+
+    /**
+     * 渲染 MAC 地址表格
+     * @param {Array<string>} macs - MAC 地址数组
+     */
+    function renderTable(macs) {
+        const els = getElements();
+
+        if (!els.tableBody) return;
+
+        els.tableBody.innerHTML = "";
+
+        if (!macs || macs.length === 0) {
+            const row = document.createElement("tr");
+            const cell = document.createElement("td");
+            cell.colSpan = 2;
+            cell.className = "mac-empty-cell";
+            cell.setAttribute("data-i18n", "mac.no_data");
+            cell.textContent = t("mac.no_data");
+            row.appendChild(cell);
+            els.tableBody.appendChild(row);
+            return;
+        }
+
+        macs.forEach((mac, index) => {
+            const row = document.createElement("tr");
+            row.className = "mac-row";
+
+            // 名称列
+            const nameCell = document.createElement("td");
+            nameCell.className = "mac-name-cell";
+            nameCell.textContent = `MAC${index + 1}`;
+            row.appendChild(nameCell);
+
+            // 输入框列
+            const inputCell = document.createElement("td");
+            inputCell.className = "mac-input-cell";
+            const inputGroup = createMacInputGroup(mac, index);
+            inputCell.appendChild(inputGroup);
+            row.appendChild(inputCell);
+
+            els.tableBody.appendChild(row);
+        });
+
+        // 应用国际化
+        applyI18n(els.tableBody);
+    }
+
+    /**
+     * 启用编辑模式
+     */
+    function enableEditMode() {
+        const els = getElements();
+        const inputs = document.querySelectorAll(".mac-byte-input");
+
+        // 启用所有输入框
+        inputs.forEach(input => {
+            input.disabled = false;
+            input.readOnly = false;
+        });
+
+        // 显示保存/取消按钮，隐藏修改按钮
+        if (els.modifyBtn) els.modifyBtn.style.display = "none";
+        if (els.saveCancelGroup) els.saveCancelGroup.style.display = "flex";
+
+        setStatus(t("mac.status.edit_mode"));
+    }
+
+    /**
+     * 禁用编辑模式（取消编辑）
+     */
+    function disableEditMode() {
+        const els = getElements();
+
+        // 重新加载原始数据
+        loadMacInfo();
+
+        // 显示修改按钮，隐藏保存/取消按钮
+        if (els.modifyBtn) els.modifyBtn.style.display = "inline-block";
+        if (els.saveCancelGroup) els.saveCancelGroup.style.display = "none";
+
+        setStatus(t("mac.status.cancelled"));
+    }
+
+    /**
+     * 保存 MAC 地址
+     */
+    async function saveMacs() {
+        // 验证所有 MAC 地址
+        if (!validateAllMacs()) {
+            setStatus(t("mac.error.invalid_mac"), true);
+            return;
+        }
+
+        const macs = getAllMacs();
+
+        if (!macs || macs.length === 0) {
+            setStatus(t("mac.error.no_mac"), true);
+            return;
+        }
+
+        // 将 MAC 地址数组转换为分号分隔的字符串
+        const macsString = macs.join(';');
+
+        try {
+            setStatus(t("mac.status.saving"));
+
+            const formData = new FormData();
+            formData.append("mac_data", macsString);
+
+            const response = await fetch("/mac/set", {
+                method: "POST",
+                body: formData
+            });
+
+            const result = await response.text();
+
+            if (!response.ok) {
+                throw new Error(`${t("mac.status.http")} ${response.status}: ${result}`);
+            }
+
+            if (result === "ok") {
+                setStatus(t("mac.status.saved"));
+                disableEditMode();
+                // delayedRefresh();
+            } else {
+                throw new Error(result || t("mac.status.error"));
+            }
+
+        } catch (error) {
+            setStatus(formatError(error), true);
+        }
+    }
+
+    /**
+     * 取消之前的延迟刷新定时器
+     */
+    function cancelDelayedRefresh() {
+        if (refreshTimer) {
+            clearTimeout(refreshTimer);
+            refreshTimer = null;
+        }
+    }
+
+    /**
+     * 延迟刷新 MAC 列表
+     * @param {number} delay - 延迟时间（毫秒），默认 1500ms
+     */
+    function delayedRefresh(delay) {
+        cancelDelayedRefresh();
+
+        delay = delay || 1500;
+
+        refreshTimer = setTimeout(async () => {
+            refreshTimer = null;
+            await loadMacInfo();
+        }, delay);
+    }
+
+    /**
+     * 加载 MAC 地址信息
+     */
+    async function loadMacInfo() {
+        try {
+            setStatus(t("mac.status.loading"));
+
+            const response = await fetch("/mac/info", {
+                method: "GET",
+                cache: "no-store",
+                headers: {
+                    "Accept": "application/json"
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`${t("mac.status.http")} ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // 解析分区名称
+            if (data && data.part_name) {
+                partName = data.part_name;
+                setPartName(partName);
+            } else {
+                partName = "";
+                setPartName("");
+            }
+
+            // 解析 MAC 列表
+            if (data && data.macs && Array.isArray(data.macs)) {
+                macList = data.macs;
+                renderTable(macList);
+                setStatus(t("mac.status.ready"));
+            } else {
+                throw new Error(t("mac.error.invalid_response"));
+            }
+
+        } catch (error) {
+            setStatus(formatError(error), true);
+            setPartName("");
+            renderTable([]);
+        }
+    }
+
+    /**
+     * 绑定事件
+     */
+    function bindEvents() {
+        const els = getElements();
+
+        if (els.modifyBtn) {
+            els.modifyBtn.addEventListener("click", enableEditMode);
+        }
+
+        if (els.saveBtn) {
+            els.saveBtn.addEventListener("click", saveMacs);
+        }
+
+        if (els.cancelBtn) {
+            els.cancelBtn.addEventListener("click", disableEditMode);
+        }
+    }
+
+    /**
+     * 初始化 MAC 管理器
+     */
+    function init() {
+        getElements();
+        bindEvents();
+        loadMacInfo();
+    }
+
+    return {
+        init,
+        refresh: loadMacInfo,
+        save: saveMacs
+    };
+})();
+
+// ==============================
 // 国际化数据
 // ==============================
 
@@ -4854,6 +5421,7 @@ const I18N = (() => {
             "nav.network": "Network Settings",
             "nav.backup": "Flash Backup",
             "nav.console": "Web Console",
+            "nav.mac": "MAC Manage",
             "nav.env": "Env Manage",
             "nav.reboot": "Reboot",
             "title.author": "View Author Profile",
@@ -4988,6 +5556,28 @@ const I18N = (() => {
             "env.warn.1": "Modifying environment variables may affect boot behavior.",
             "env.warn.2": "Do not power off during save or restore.",
             "env.warn.3": "The RESTORE function supports uploading a previously saved binary U-Boot environment image (CRC + data) to restore.",
+            "mac.title": "MAC ADDRESS MANAGEMENT",
+            "mac.hint": "View and modify device <strong>MAC addresses</strong>.",
+            "mac.no_data": "No MAC address data available",
+            "mac.label.part_name": "MAC Address Partition:",
+            "mac.status.loading": "Loading MAC addresses...",
+            "mac.status.ready": "Ready",
+            "mac.status.saving": "Saving...",
+            "mac.status.saved": "✓ MAC addresses saved",
+            "mac.status.edit_mode": "Edit mode - modify MAC addresses and click Save",
+            "mac.status.cancelled": "Edit cancelled",
+            "mac.status.http": "HTTP error:",
+            "mac.status.error": "Error",
+            "mac.error.invalid_mac": "Invalid MAC address format",
+            "mac.error.no_mac": "No MAC address data to save",
+            "mac.error.invalid_response": "Invalid server response",
+            "mac.action.modify": "Modify",
+            "mac.action.save": "Save",
+            "mac.action.cancel": "Cancel",
+            "mac.warn.1": "Backup MAC address partition before making any changes.",
+            "mac.warn.2": "These are just the raw MAC data in the partition; whether and how they are used is determined by the firmware.",
+            "mac.warn.3": "After modification, the firmware needs to be reset or reflashed for the modified MAC address to be recognized.",
+            "mac.warn.4": "Invalid MAC addresses may cause network issues.",
             "mibib.title": "MIBIB RELOAD",
             "mibib.hint": "In <strong>9008</strong> mode, reloading <strong>MIBIB</strong> to initialize <strong>SMEM (Shared Memory) Partition Info</strong>. <br>Please choose a file from your local hard drive and click <strong>Reload</strong> button.",
             "mibib.reload": "Reload",
@@ -5134,6 +5724,7 @@ const I18N = (() => {
             "nav.network": "网络设置",
             "nav.backup": "闪存备份",
             "nav.console": "网页终端",
+            "nav.mac": "MAC 管理",
             "nav.env": "环境变量",
             "nav.reboot": "重启",
             "title.author": "查看作者主页",
@@ -5165,6 +5756,7 @@ const I18N = (() => {
             "art.title": "ART 更新",
             "art.hint": t["zh-cn"].updateHint("无线芯片频率校准数据 ART (Atheros Radio Test)"),
             "art.warn.1": t["zh-cn"].warnChoose("ART"),
+            "art.warn.2": "ART 识别为 Unknown 是正常的",
             "cdt.title": "CDT 更新",
             "cdt.hint": t["zh-cn"].updateHint("CDT (Configuration Data Table)"),
             "cdt.warn.1": t["zh-cn"].warnChoose("CDT"),
@@ -5267,6 +5859,28 @@ const I18N = (() => {
             "env.warn.1": "修改环境变量可能影响系统启动行为。",
             "env.warn.2": "保存或恢复过程中请勿断电。",
             "env.warn.3": "恢复功能支持上传你之前保存的二进制环境变量镜像文件（含 CRC）进行恢复。",
+            "mac.title": "MAC 地址管理",
+            "mac.hint": "查看和修改设备的 <strong>MAC 地址</strong>。",
+            "mac.no_data": "暂无 MAC 地址数据",
+            "mac.label.part_name": "MAC 地址所在分区：",
+            "mac.status.loading": "正在加载 MAC 地址...",
+            "mac.status.ready": "就绪",
+            "mac.status.saving": "保存中...",
+            "mac.status.saved": "✓ MAC 地址已保存",
+            "mac.status.edit_mode": "编辑模式 - 修改 MAC 地址后点击保存",
+            "mac.status.cancelled": "已取消编辑",
+            "mac.status.http": "HTTP 错误:",
+            "mac.status.error": "错误",
+            "mac.error.invalid_mac": "无效的 MAC 地址格式",
+            "mac.error.no_mac": "没有可保存的 MAC 地址数据",
+            "mac.error.invalid_response": "无效的服务器响应",
+            "mac.action.modify": "修改",
+            "mac.action.save": "保存",
+            "mac.action.cancel": "取消",
+            "mac.warn.1": "修改前请先使用分区备份功能备份 MAC 地址所在分区。",
+            "mac.warn.2": "这些只是分区中的原始 MAC 数据，是否使用及如何使用均由固件决定。",
+            "mac.warn.3": "修改后需重置或重刷固件才能识别修改后的 MAC 地址。",
+            "mac.warn.4": "无效的 MAC 地址可能导致网络问题。",
             "mibib.title": "MIBIB 重载",
             "mibib.hint": "在 <strong>9008</strong> 模式下，通过重载 <strong>MIBIB</strong> 来初始化 <strong>SMEM (Shared Memory) 分区信息</strong>。<br>请选择本地文件并点击 <strong>重载</strong> 按钮。",
             "mibib.reload": "重载",

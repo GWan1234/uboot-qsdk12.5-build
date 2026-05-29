@@ -29,6 +29,7 @@
 #include "fs.h"
 #include "modules/backup.h"
 #include "modules/env.h"
+#include "modules/mac.h"
 #include "modules/mibib.h"
 #include "modules/network.h"
 #include "modules/sysinfo.h"
@@ -613,6 +614,12 @@ int start_web_failsafe(void)
 
 	httpd_register_uri_handler(inst, "/reboot.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/reboot", &reboot_handler, NULL);
+
+	httpd_register_uri_handler(inst, "/mac.html", &html_handler, NULL);
+#if defined(CONFIG_FAILSAFE_MAC_MANAGEMENT)
+	httpd_register_uri_handler(inst, "/mac/info", &mac_info_handler, NULL);
+	httpd_register_uri_handler(inst, "/mac/set", &mac_set_handler, NULL);
+#endif
 
 	httpd_register_uri_handler(inst, "/mibib.html", &upload_html_handler, NULL);
 	httpd_register_uri_handler(inst, "/mibib/reload", &mibib_reload_handler, NULL);

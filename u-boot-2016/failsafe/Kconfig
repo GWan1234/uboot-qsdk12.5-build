@@ -1,0 +1,33 @@
+config FAILSAFE_MAC_MANAGEMENT
+    bool "Enable Web Failsafe MAC management"
+    default n
+
+choice
+    prompt "MAC Address Type"
+    default MAC_TYPE_RAW_HEX
+    depends on FAILSAFE_MAC_MANAGEMENT
+
+config MAC_TYPE_RAW_HEX
+    bool "Raw Hex"
+
+config MAC_TYPE_ASCII
+    bool "ASCII"
+
+endchoice
+
+config MAC_PART_NAME
+    string "MAC address partition name"
+    default "0:ART"
+    depends on FAILSAFE_MAC_MANAGEMENT
+
+config MAC_OFFSET_IN_PART
+    hex "MAC address offset in partition"
+    depends on MAC_TYPE_RAW_HEX
+
+config MAC_LABEL
+    string "MAC ASCII label string"
+    depends on MAC_TYPE_ASCII
+
+config MAC_COUNT
+    int "Number of MAC addresses"
+    depends on FAILSAFE_MAC_MANAGEMENT

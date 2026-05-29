@@ -1,0 +1,75 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title></title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/main.js"></script>
+</head>
+
+<body onload="appInit('mac')" data-page="mac">
+    <div class="app">
+        <aside id="sidebar" class="sidebar"></aside>
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+        <button class="sidebar-toggle" id="sidebarToggle"></button>
+        <div class="main">
+            <div id="m">
+                <div class="card-title-section">
+                    <h1 id="title" data-i18n="mac.title"></h1>
+                </div>
+
+                <div class="card-hint-section">
+                    <p id="hint" data-i18n-html="mac.hint"></p>
+                </div>
+
+                <div class="card-main-section">
+                    <div class="card-main-inner">
+                        <div class="mac-part-info">
+                            <span class="mac-part-label" data-i18n="mac.label.part_name"></span>
+                            <span id="mac_part_name" class="mac-part-value"></span>
+                        </div>
+
+                        <div class="mac-status-bar">
+                            <span id="mac_status" class="mac-status"></span>
+                        </div>
+
+                        <div class="mac-table-wrapper">
+                            <table class="mac-table" id="mac_table">
+                                <tbody id="mac_table_body"></tbody>
+                            </table>
+                        </div>
+
+                        <div class="mac-action-bar">
+                            <div class="mac-actions" id="mac_action_group">
+                                <button type="button" id="mac_modify_btn" class="button" data-i18n="mac.action.modify"></button>
+                                <div id="mac_save_cancel_group" style="display: none;">
+                                    <button type="button" id="mac_save_btn" class="button" data-i18n="mac.action.save"></button>
+                                    <button type="button" id="mac_cancel_btn" class="button button-danger" data-i18n="mac.action.cancel"></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-foot-section">
+                    <div class="card-foot-inner">
+                        <div class="i w">
+                            <strong data-i18n="common.warnings"></strong>
+                            <ul>
+                                <li data-i18n="mac.warn.1"></li>
+                                <li data-i18n="mac.warn.2"></li>
+                                <li data-i18n="mac.warn.3"></li>
+                                <li data-i18n="mac.warn.4"></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="version"></div>
+        </div>
+    </div>
+</body>
+
+</html>
