@@ -143,6 +143,9 @@ static int smem_read_data(struct smem_part *smem_part, u64 offset, size_t size,
 {
 	struct spi_flash *spi;
 	nand_info_t *nand;
+	ulong off, adj_offset;
+    size_t adj_size, tmp_buf_size;
+	void *tmp_buf;
 	int ret;
 
 	*readsize = size;
@@ -152,8 +155,27 @@ static int smem_read_data(struct smem_part *smem_part, u64 offset, size_t size,
 		spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
 				CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
 		ret = spi_flash_read(spi, offset, size, buf);
+
+		return ret;
+	}
+
+	nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
+	off = offset % nand->writesize;
+
+	if (off) {
+		adj_offset = offset - off;
+		adj_size = size + off;
+		tmp_buf_size = adj_size;
+
+		tmp_buf = malloc(tmp_buf_size);
+		if (!tmp_buf)
+			return -ENOMEM;
+
+		ret = nand_read_skip_bad(nand, adj_offset, &adj_size,
+				NULL, tmp_buf_size, (u_char *)tmp_buf);
+		memcpy(buf, tmp_buf + off, size);
+		free(tmp_buf);
 	} else {
-		nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
 		ret = nand_read_skip_bad(nand, offset, readsize,
 				NULL, buf_size, (u_char *)buf);
 	}
