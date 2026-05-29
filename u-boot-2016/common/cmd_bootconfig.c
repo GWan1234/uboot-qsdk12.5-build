@@ -381,16 +381,41 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 			printf("All partitions already have value %u, no change\n", value);
 			return CMD_RET_SUCCESS;
 		}
+	} else if (strcmp(part_name, "firmware") == 0) {
+		/* Handle firmware partitions */
+		const char *fw_parts[3] = {
+			"0:HLOS",
+			"rootfs",
+			"0:WIFIFW"
+		};
+		for (i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
+			for (int j = 0; j < 3; j++) {
+				if (strncmp(bootcfg.info.per_part_entry[i].name, fw_parts[j],
+						ALT_PART_NAME_LENGTH) == 0) {
+					if (bootcfg.info.per_part_entry[i].primaryboot != value) {
+						bootcfg.info.per_part_entry[i].primaryboot = value;
+						modified++;
+						printf("Set %s to %u\n", fw_parts[j], value);
+					} else {
+						printf("%s already %u\n", fw_parts[j], value);
+					}
+					break;
+				}
+			}
+		}
+		if (modified == 0) {
+			printf("All firmware partitions already have value %u, no change\n", value);
+			return CMD_RET_SUCCESS;
+		}
 	} else {
 		/* Handle specific partition */
 		for (i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
 			if (strncmp(bootcfg.info.per_part_entry[i].name, part_name,
 				    ALT_PART_NAME_LENGTH) == 0) {
-				uint32_t old_value = bootcfg.info.per_part_entry[i].primaryboot;
-				if (old_value != value) {
+				if (bootcfg.info.per_part_entry[i].primaryboot != value) {
 					bootcfg.info.per_part_entry[i].primaryboot = value;
 					modified = 1;
-					printf("Set %s from %u to %u\n", part_name, old_value, value);
+					printf("Set %s to %u\n", part_name, value);
 				} else {
 					printf("%s already %u, no change\n", part_name, value);
 					return CMD_RET_SUCCESS;
@@ -442,7 +467,7 @@ static int do_bootconfig(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv
 		return do_bootconfig_get(argv[2]);
 	}
 
-	/* bootconfig set <name|all> <0|1> */
+	/* bootconfig set <name|firmware|all> <0|1> */
 	if (strcmp(argv[1], "set") == 0) {
 		if (argc < 4) {
 			puts("Usage: bootconfig set <partition_name|all> <0|1>\n");
@@ -460,12 +485,13 @@ U_BOOT_CMD(
 	"bootconfig print           - Print all bootconfig information\n"
 	"bootconfig sync            - Compare and sync BOOTCONFIG1 with BOOTCONFIG\n"
 	"bootconfig get <name>      - Get primaryboot value for a partition\n"
-	"bootconfig set <name|all> <0|1> - Set primaryboot value for partition(s)\n"
+	"bootconfig set <name|firmware|all> <0|1> - Set primaryboot value for partition(s)\n"
 	"\n"
 	"Examples:\n"
 	"  bootconfig print                    - Display all bootconfig info\n"
 	"  bootconfig sync                     - Check and sync BOOTCONFIG1 with BOOTCONFIG\n"
 	"  bootconfig get rootfs               - Get rootfs primaryboot value\n"
 	"  bootconfig set rootfs 1             - Set rootfs primaryboot to 1\n"
+	"  bootconfig set firmware 0           - Set firmware partitions (0:HLOS, rootfs, 0:WIFIFW) to 0\n"
 	"  bootconfig set all 0                - Set all partitions to 0\n"
 );
