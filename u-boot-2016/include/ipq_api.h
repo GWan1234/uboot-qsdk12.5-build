@@ -50,6 +50,7 @@ size_t json_escape(const char *input, char *output, size_t output_buffer_size);
 bool mmc_part_exists(const char *part_name);
 const char *flash_type_to_string(const uint32_t flash_type);
 int string_to_flash_type(const char *str);
+void reload_mibib_from_flash_in_9008_mode(void);
 
 static inline void handle_start_led_state(void)
 {

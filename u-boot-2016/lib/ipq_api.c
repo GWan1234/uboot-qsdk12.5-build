@@ -12,6 +12,9 @@
 #include <linux/mtd/mtd.h>
 #include <nand.h>
 #include <ubi_uboot.h>
+#include <failsafe/fw.h>
+#include <mapmem.h>
+#include <flashrw.h>
 
 #ifndef CONFIG_SDHCI_SUPPORT
 extern qca_mmc mmc_host;
@@ -463,4 +466,148 @@ int string_to_flash_type(const char *str)
         return SMEM_BOOT_QSPI_NAND_FLASH;
     else
         return -1;
+}
+
+static const void *get_mibib_ptable_offset(const void *addr, size_t limit,
+		uint32_t ptable_start_in_mibib, uint32_t ptable_end_in_mibib)
+{
+	const void *p = addr;
+	const u64 magic_mbn = HEADER_MAGIC_MBN;
+	const u64 magic_ptable_start = HEADER_MAGIC_PTABLE;
+	const u64 magic_ptable_end = FOOTER_MAGIC_PTABLE;
+	const size_t magic_len = sizeof(u64);
+
+	if (!p)
+		return NULL;
+
+	while (limit >= ptable_end_in_mibib + magic_len) {
+		limit--;
+		if (!memcmp(p, &magic_mbn, magic_len) &&
+			!memcmp(p + ptable_start_in_mibib, &magic_ptable_start, magic_len) &&
+			!memcmp(p + ptable_end_in_mibib, &magic_ptable_end, magic_len)) {
+			return p + ptable_start_in_mibib;
+		}
+		p++;
+	}
+
+	return NULL;
+}
+
+static int reload_mibib_from_spi(void)
+{
+	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+	struct spi_flash *spi;
+	size_t read_size;
+	void *load_addr;
+	const void *mibib_ptable;
+	int ret;
+
+	spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
+			CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
+	if (!spi)
+		return -ENODEV;
+
+	/* 读取 SPI-NOR 的前 2 MiB 数据 */
+	read_size = min_t(size_t, 2 * 1024 * 1024, spi->size);
+
+	load_addr = map_sysmem(CONFIG_SYS_LOAD_ADDR, read_size);
+	if (!load_addr)
+		return -ENOMEM;
+
+	ret = read_data_from_spi(0, read_size, load_addr, read_size);
+	if (ret)
+		goto done;
+
+	mibib_ptable = get_mibib_ptable_offset(load_addr, read_size, 0x100, 0x900);
+	if (!mibib_ptable) {
+		ret = -ENOENT;
+		goto done;
+	}
+
+	ret = mibib_ptable_init((unsigned int *)(mibib_ptable));
+	if (ret)
+		goto done;
+
+	ret = 0;
+
+	sfi->flash_type = SMEM_BOOT_SPI_FLASH;
+	sfi->flash_block_size = spi->erase_size;
+	sfi->flash_density = spi->size;
+
+	get_kernel_fs_part_details();
+
+done:
+	puts("try reloading MIBIB from SPI: ");
+	if (ret)
+		printf("failure (errno: %d)\n", ret);
+	else
+		puts("success\n");
+	unmap_sysmem(load_addr);
+	return ret;
+}
+
+static int reload_mibib_from_nand(void)
+{
+	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+	nand_info_t *nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
+	size_t read_size;
+	void *load_addr;
+	const void *mibib_ptable;
+	int ret;
+
+	/* 读取 NAND 的前 4 MiB 数据 */
+	read_size = min_t(size_t, 4 * 1024 * 1024, nand->size);
+
+	load_addr = map_sysmem(CONFIG_SYS_LOAD_ADDR, read_size);
+	if (!load_addr)
+		return -ENOMEM;
+
+	ret = read_data_from_nand(0, read_size, load_addr, read_size);
+	if (ret)
+		goto done;
+
+	mibib_ptable = get_mibib_ptable_offset(load_addr, read_size, 0x800, 0x1800);
+	if (!mibib_ptable) {
+		ret = -ENOENT;
+		goto done;
+	}
+
+	ret = mibib_ptable_init((unsigned int *)(mibib_ptable));
+	if (ret)
+		goto done;
+
+	ret = 0;
+
+#ifdef CONFIG_QPIC_SERIAL
+	sfi->flash_type = SMEM_BOOT_QSPI_NAND_FLASH;
+#else
+	sfi->flash_type = SMEM_BOOT_NAND_FLASH;
+#endif
+	sfi->flash_block_size = nand->erasesize;
+	sfi->flash_density = nand->size;
+
+	get_kernel_fs_part_details();
+
+done:
+	puts("try reloading MIBIB from NAND: ");
+	if (ret)
+		printf("failure (errno: %d)\n", ret);
+	else
+		puts("success\n");
+	unmap_sysmem(load_addr);
+	return ret;
+}
+
+void reload_mibib_from_flash_in_9008_mode(void)
+{
+	detected_flash_device_t *dfd = &detected_flash_device;
+
+	if (!is_9008_mode)
+		return;
+
+	if (dfd->spi && !reload_mibib_from_spi())
+		return;
+
+	if (dfd->nand)
+		reload_mibib_from_nand();
 }
