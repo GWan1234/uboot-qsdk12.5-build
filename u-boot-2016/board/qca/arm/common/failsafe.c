@@ -184,7 +184,7 @@ static void handle_part_not_found(const char *part_name)
 
 static void handle_invalid_factory_fw(void)
 {
-	strlcpy(info, "{\"type\":\"squashfs_magic_not_found\"}", sizeof(info));
+	strlcpy(info, "{\"type\":\"invalid_factory_firmware\"}", sizeof(info));
 }
 
 static void handle_invalid_sysupgrade_fw(void)
@@ -356,8 +356,8 @@ static int get_jdc_fw_node_name(const void *data_addr)
 static int get_factory_fw_kernel_size(const void *data_addr, const ulong data_size)
 {
 	const void *p = data_addr;
-	u32 magic = HEADER_MAGIC_SQUASHFS;
-	size_t magic_len = sizeof(u32);
+	const u32 magic = HEADER_MAGIC_SQUASHFS;
+	const size_t magic_len = sizeof(u32);
 	ulong size_remain = data_size;
 
 	if (!p) {
@@ -367,7 +367,9 @@ static int get_factory_fw_kernel_size(const void *data_addr, const ulong data_si
 
 	while (size_remain >= magic_len) {
 		size_remain--;
-		if (!memcmp(p, &magic, magic_len)) {
+		if (!memcmp(p, &magic, magic_len) &&
+			((p - data_addr) % (2 * 1024 * 1024) == 0)) {
+			/* 内核大小需为 2 MiB 的整数倍 */
 			factory_fw_kernel_size = p - data_addr;
 			return RET_SUCCESS;
 		}
