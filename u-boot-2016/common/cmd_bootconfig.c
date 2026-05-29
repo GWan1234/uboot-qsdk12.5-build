@@ -32,6 +32,7 @@
 #include <mapmem.h>
 #include <errno.h>
 #include <ipq_api.h>
+#include <flashrw.h>
 
 #ifndef CONFIG_SDHCI_SUPPORT
 extern qca_mmc mmc_host;
@@ -61,17 +62,23 @@ struct bootconfig_info {
 	uint32_t magic_end;
 } __attribute__ ((__packed__));
 
+typedef struct {
+	ulong offset; /* BOOTCONFIG 分区偏移量 */
+	size_t size; /* BOOTCONFIG 有效数据大小 */
+	struct bootconfig_info info;
+} bootconfig_info_t;
+
+static qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+static detected_flash_device_t *dfd = &detected_flash_device;
+
 /**
- * get_bootconfig_partition_info - Get bootconfig partition offset and size
+ * get_bootconfig_part_offset - Get bootconfig partition offset
  */
-static int get_bootconfig_partition_info(const char *part_name,
-				uint32_t *offset, uint32_t *size)
+static int get_bootconfig_part_offset(const char *part_name)
 {
-	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-	detected_flash_device_t *dfd = &detected_flash_device;
 	block_dev_desc_t *mmc_dev;
 	disk_partition_t disk_info = {0};
-	uint32_t offset_in_bytes = 0, size_in_bytes = 0;
+	uint32_t offset_bytes = 0, size_bytes = 0;
 	int ret;
 
 	switch (sfi->flash_type) {
@@ -82,10 +89,10 @@ static int get_bootconfig_partition_info(const char *part_name,
 	case SMEM_BOOT_ONENAND_FLASH:
 	case SMEM_BOOT_QSPI_NAND_FLASH:
 	case SMEM_BOOT_SPI_FLASH:
-		ret = getpart_offset_size((char *)part_name, &offset_in_bytes, &size_in_bytes);
+		ret = getpart_offset_size((char *)part_name, &offset_bytes, &size_bytes);
 		if (ret)
 			return -ENOENT;
-		break;
+		return offset_bytes;
 	case SMEM_BOOT_MMC_FLASH:
 	case SMEM_BOOT_NO_FLASH:
 	case SMEM_BOOT_SDC_FLASH:
@@ -97,121 +104,74 @@ static int get_bootconfig_partition_info(const char *part_name,
 		ret = get_partition_info_efi_by_name(mmc_dev, (char *)part_name, &disk_info);
 		if (ret)
 			return -ENOENT;
-		offset_in_bytes = (uint32_t)(disk_info.start * disk_info.blksz);
-		size_in_bytes = (uint32_t)(disk_info.size * disk_info.blksz);
-		break;
+		return disk_info.start * disk_info.blksz;
 	default:
+		puts("Unsupported flash type\n");
 		return -EINVAL;
 	}
-
-	if (offset)
-		*offset = offset_in_bytes;
-	if (size)
-		*size = size_in_bytes;
-
-	return 0;
 }
 
 /**
- * read_bootconfig - Read bootconfig partition and copy data to bootcfg structure
+ * read_bootconfig - Read bootconfig data to bootcfg structure
  */
-static int read_bootconfig(const char *part_name,
-			struct bootconfig_info *bootcfg, int ignore_error)
+static int read_bootconfig(const char *part_name, bootconfig_info_t *bootcfg, int ignore_error)
 {
-	struct spi_flash *spi;
-	nand_info_t *nand;
-	block_dev_desc_t *mmc_dev;
-	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-	detected_flash_device_t *dfd = &detected_flash_device;
-	uint32_t offset_in_bytes, size_in_bytes;
-	uint32_t offset_in_blocks = 0, size_in_blocks = 0;
-	size_t readsize;
-	ulong readblks;
-	void *buf;
-	int ret;
+	int offset_bytes, ret;
 
-	ret = get_bootconfig_partition_info(part_name, &offset_in_bytes, &size_in_bytes);
-	if (ret) {
+	offset_bytes = get_bootconfig_part_offset(part_name);
+	if (offset_bytes < 0) {
 		printf("Partition %s not found\n", part_name);
-		return ret;
+		return -ENOENT;
 	}
 
-	if (size_in_bytes < sizeof(struct bootconfig_info)) {
-		printf("Partition %s size too small for bootconfig\n", part_name);
-		return -ENOSPC;
-	}
-
-	buf = malloc(size_in_bytes);
-	if (!buf) {
-		printf("Failed to allocate memory\n");
-		return -ENOMEM;
-	}
+	bootcfg->offset = offset_bytes;
 
 	switch (sfi->flash_type) {
 	case SMEM_BOOT_NOR_FLASH:
 	case SMEM_BOOT_NORPLUSEMMC:
 	case SMEM_BOOT_NORPLUSNAND:
 	case SMEM_BOOT_SPI_FLASH:
-		spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
-				CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
-		ret = spi_flash_read(spi, offset_in_bytes, size_in_bytes, buf);
+		ret = read_data_from_spi(bootcfg->offset,
+			bootcfg->size, &bootcfg->info, bootcfg->size);
 		break;
 	case SMEM_BOOT_NAND_FLASH:
 	case SMEM_BOOT_ONENAND_FLASH:
 	case SMEM_BOOT_QSPI_NAND_FLASH:
-		readsize = size_in_bytes;
-		nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
-		ret = nand_read_skip_bad(nand, offset_in_bytes, &readsize,
-				NULL, size_in_bytes, (u_char *)buf);
+		ret = read_data_from_nand(bootcfg->offset,
+			bootcfg->size, &bootcfg->info, bootcfg->size);
 		break;
 	case SMEM_BOOT_MMC_FLASH:
 	case SMEM_BOOT_NO_FLASH:
 	case SMEM_BOOT_SDC_FLASH:
-		if (!dfd->mmc)
-			return -ENODEV;
-		mmc_dev = mmc_get_dev(mmc_host.dev_num);
-		if (!mmc_dev)
-			return -ENODEV;
-		if (mmc_dev->blksz) {
-			offset_in_blocks = offset_in_bytes / mmc_dev->blksz;
-			size_in_blocks = size_in_bytes / mmc_dev->blksz;
-		}
-		readblks = mmc_dev->block_read(mmc_host.dev_num,
-					offset_in_blocks, size_in_blocks, buf);
-		ret = (readblks == size_in_blocks) ? 0 : 1;
+		ret = read_data_from_mmc(bootcfg->offset,
+			bootcfg->size, &bootcfg->info, bootcfg->size);
 		break;
 	default:
-		free(buf);
-		printf("Unsupported flash type\n");
+		puts("Unsupported flash type\n");
 		return -EINVAL;
 	}
 
 	if (ret) {
-		free(buf);
-		printf("Failed to read bootconfig partition %s\n", part_name);
+		printf("Failed to read bootconfig from partition %s\n", part_name);
 		return ret;
 	}
 
-	/* Copy data to bootcfg structure */
-	memcpy(bootcfg, buf, sizeof(struct bootconfig_info));
-	free(buf);
-
 	/* Validate magic numbers */
-	if (!ignore_error && bootcfg->magic_start != BOOTCONFIG_MAGIC_START &&
-	    bootcfg->magic_start != BOOTCONFIG_MAGIC_START_TRYMODE) {
-		printf("Invalid magic_start: 0x%08x in %s\n", bootcfg->magic_start, part_name);
+	if (!ignore_error && bootcfg->info.magic_start != BOOTCONFIG_MAGIC_START &&
+	    bootcfg->info.magic_start != BOOTCONFIG_MAGIC_START_TRYMODE) {
+		printf("Invalid magic_start: 0x%08x in %s\n", bootcfg->info.magic_start, part_name);
 		return -EINVAL;
 	}
 
-	if (!ignore_error && bootcfg->magic_end != BOOTCONFIG_MAGIC_END) {
-		printf("Invalid magic_end: 0x%08x in %s\n", bootcfg->magic_end, part_name);
+	if (!ignore_error && bootcfg->info.magic_end != BOOTCONFIG_MAGIC_END) {
+		printf("Invalid magic_end: 0x%08x in %s\n", bootcfg->info.magic_end, part_name);
 		return -EINVAL;
 	}
 
-	if (bootcfg->numaltpart > NUM_ALT_PARTITION) {
+	if (bootcfg->info.numaltpart > NUM_ALT_PARTITION) {
 		printf("Warning: numaltpart (%u) exceeds maximum (%d), truncating\n",
-		       bootcfg->numaltpart, NUM_ALT_PARTITION);
-		bootcfg->numaltpart = NUM_ALT_PARTITION;
+		       bootcfg->info.numaltpart, NUM_ALT_PARTITION);
+		bootcfg->info.numaltpart = NUM_ALT_PARTITION;
 	}
 
 	return 0;
@@ -220,28 +180,34 @@ static int read_bootconfig(const char *part_name,
 /**
  * write_bootconfig - Write bootconfig data back to partition
  */
-static int write_bootconfig(const char *part_name, struct bootconfig_info *bootcfg)
+static int write_bootconfig(bootconfig_info_t *bootcfg)
 {
-	char buf[128];
-	void *load_addr;
 	int ret;
 
-	load_addr = map_sysmem(CONFIG_SYS_LOAD_ADDR, sizeof(struct bootconfig_info));
-	if (!load_addr) {
-		printf("Failed to map memory\n");
-		return -ENOMEM;
+	switch (sfi->flash_type) {
+	case SMEM_BOOT_NOR_FLASH:
+	case SMEM_BOOT_NORPLUSEMMC:
+	case SMEM_BOOT_NORPLUSNAND:
+	case SMEM_BOOT_SPI_FLASH:
+		ret = write_data_to_spi(bootcfg->offset, bootcfg->size, &bootcfg->info);
+		break;
+	case SMEM_BOOT_NAND_FLASH:
+	case SMEM_BOOT_ONENAND_FLASH:
+	case SMEM_BOOT_QSPI_NAND_FLASH:
+		ret = write_data_to_nand(bootcfg->offset, bootcfg->size, &bootcfg->info);
+		break;
+	case SMEM_BOOT_MMC_FLASH:
+	case SMEM_BOOT_NO_FLASH:
+	case SMEM_BOOT_SDC_FLASH:
+		ret = write_data_to_mmc(bootcfg->offset, bootcfg->size, &bootcfg->info);
+		break;
+	default:
+		puts("Unsupported flash type\n");
+		return -EINVAL;
 	}
 
-	memset(load_addr, 0, 1024 * 1024);
-	memcpy(load_addr, bootcfg, sizeof(struct bootconfig_info));
-
-	sprintf(buf, "flash %s 0x%lx 0x%lx",
-		part_name, (ulong)CONFIG_SYS_LOAD_ADDR, (ulong)sizeof(struct bootconfig_info));
-
-	ret = run_command(buf, 0);
-	unmap_sysmem(load_addr);
 	if (ret) {
-		printf("Failed to write bootconfig partition %s\n", part_name);
+		printf("Failed to write bootconfig partition at offset: 0x%lx\n", bootcfg->offset);
 		return ret;
 	}
 
@@ -251,17 +217,17 @@ static int write_bootconfig(const char *part_name, struct bootconfig_info *bootc
 /**
  * compare_bootconfig - Compare two bootconfig structures
  */
-static int compare_bootconfig(struct bootconfig_info *cfg1, struct bootconfig_info *cfg2)
+static int compare_bootconfig(bootconfig_info_t *cfg1, bootconfig_info_t *cfg2)
 {
-	if (cfg1->magic_start != cfg2->magic_start ||
-	    cfg1->magic_end != cfg2->magic_end ||
-	    cfg1->age != cfg2->age ||
-	    cfg1->numaltpart != cfg2->numaltpart) {
+	if (cfg1->info.magic_start != cfg2->info.magic_start ||
+	    cfg1->info.magic_end != cfg2->info.magic_end ||
+	    cfg1->info.age != cfg2->info.age ||
+	    cfg1->info.numaltpart != cfg2->info.numaltpart) {
 		return 0; /* Not equal */
 	}
 
-	return memcmp(cfg1->per_part_entry, cfg2->per_part_entry,
-		      sizeof(cfg1->per_part_entry)) == 0;
+	return memcmp(cfg1->info.per_part_entry, cfg2->info.per_part_entry,
+		      sizeof(cfg1->info.per_part_entry)) == 0;
 }
 
 /**
@@ -269,16 +235,19 @@ static int compare_bootconfig(struct bootconfig_info *cfg1, struct bootconfig_in
  */
 static int do_bootconfig_sync(void)
 {
-	struct bootconfig_info bootcfg;
-	struct bootconfig_info bootcfg1;
+	bootconfig_info_t bootcfg;
+	bootconfig_info_t bootcfg1;
 	int ret;
 
 	/* Check if BOOTCONFIG1 partition exists */
-	ret = get_bootconfig_partition_info(BOOTCONFIG1_PART_NAME, NULL, NULL);
-	if (ret == -ENOENT) {
+	ret = get_bootconfig_part_offset(BOOTCONFIG1_PART_NAME);
+	if (ret < 0) {
 		printf("Partition %s does not exist, skip sync\n", BOOTCONFIG1_PART_NAME);
 		return CMD_RET_SUCCESS;
 	}
+
+	bootcfg.size = sizeof(struct bootconfig_info);
+	bootcfg1.size = sizeof(struct bootconfig_info);
 
 	/* Read BOOTCONFIG partition */
 	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg, 0);
@@ -297,21 +266,23 @@ static int do_bootconfig_sync(void)
 	/* Compare the two bootconfig structures */
 	ret = compare_bootconfig(&bootcfg, &bootcfg1);
 	if (ret) {
-		printf("✓ BOOTCONFIG and BOOTCONFIG1 are already in sync\n");
+		puts("✓ BOOTCONFIG and BOOTCONFIG1 are already in sync\n\n");
 		return CMD_RET_SUCCESS;
 	}
 
 	/* They are different, need to sync */
-	printf("✗ BOOTCONFIG and BOOTCONFIG1 are inconsistent\n");
-	printf("Syncing BOOTCONFIG1 with BOOTCONFIG...\n\n");
+	puts("✗ BOOTCONFIG and BOOTCONFIG1 are inconsistent\n");
+	puts("Syncing BOOTCONFIG1 with BOOTCONFIG...\n");
+
+	memcpy(&bootcfg1.info, &bootcfg.info, bootcfg.size);
 
 	/* Write BOOTCONFIG data to BOOTCONFIG1 partition */
-	ret = write_bootconfig(BOOTCONFIG1_PART_NAME, &bootcfg);
+	ret = write_bootconfig(&bootcfg1);
 	if (!ret) {
-		printf("\n✓ BOOTCONFIG1 successfully synced with BOOTCONFIG\n\n");
+		puts("✓ BOOTCONFIG1 successfully synced with BOOTCONFIG\n\n");
 		return CMD_RET_SUCCESS;
 	} else {
-		printf("\n✗ Failed to sync BOOTCONFIG1 with BOOTCONFIG\n\n");
+		puts("✗ Failed to sync BOOTCONFIG1 with BOOTCONFIG\n\n");
 		return CMD_RET_FAILURE;
 	}
 }
@@ -321,26 +292,28 @@ static int do_bootconfig_sync(void)
  */
 static int do_bootconfig_print(void)
 {
-	struct bootconfig_info bootcfg;
+	bootconfig_info_t bootcfg;
 	int i, ret;
+
+	bootcfg.size = sizeof(struct bootconfig_info);
 
 	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg, 0);
 	if (ret)
 		return CMD_RET_FAILURE;
 
 	printf("\n========== Bootconfig Information ==========\n");
-	printf("Magic Start:      0x%08x %s\n", bootcfg.magic_start,
-	       bootcfg.magic_start == BOOTCONFIG_MAGIC_START ? "(Normal)" :
-	       bootcfg.magic_start == BOOTCONFIG_MAGIC_START_TRYMODE ? "(Try Mode)" : "(Unknown)");
-	printf("Magic End:        0x%08x\n", bootcfg.magic_end);
-	printf("Age:              0x%08x\n", bootcfg.age);
-	printf("Number of Alt Partitions: %u\n", bootcfg.numaltpart);
+	printf("Magic Start:      0x%08x %s\n", bootcfg.info.magic_start,
+	       bootcfg.info.magic_start == BOOTCONFIG_MAGIC_START ? "(Normal)" :
+	       bootcfg.info.magic_start == BOOTCONFIG_MAGIC_START_TRYMODE ? "(Try Mode)" : "(Unknown)");
+	printf("Magic End:        0x%08x\n", bootcfg.info.magic_end);
+	printf("Age:              0x%08x\n", bootcfg.info.age);
+	printf("Number of Alt Partitions: %u\n", bootcfg.info.numaltpart);
 	printf("\n%-3s %-16s %s\n", "Idx", "Partition Name", "Primary Boot");
 	printf("--------------------------------------------\n");
 
-	for (i = 0; i < bootcfg.numaltpart && i < NUM_ALT_PARTITION; i++) {
-		printf("%3d: %-16s %u\n", i, bootcfg.per_part_entry[i].name,
-		       bootcfg.per_part_entry[i].primaryboot);
+	for (i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
+		printf("%3d: %-16s %u\n", i, bootcfg.info.per_part_entry[i].name,
+		       bootcfg.info.per_part_entry[i].primaryboot);
 	}
 	printf("============================================\n\n");
 
@@ -352,17 +325,19 @@ static int do_bootconfig_print(void)
  */
 static int do_bootconfig_get(char *part_name)
 {
-	struct bootconfig_info bootcfg;
+	bootconfig_info_t bootcfg;
 	int i, ret;
+
+	bootcfg.size = sizeof(struct bootconfig_info);
 
 	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg, 0);
 	if (ret)
 		return CMD_RET_FAILURE;
 
-	for (i = 0; i < bootcfg.numaltpart && i < NUM_ALT_PARTITION; i++) {
-		if (strncmp(bootcfg.per_part_entry[i].name, part_name,
+	for (i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
+		if (strncmp(bootcfg.info.per_part_entry[i].name, part_name,
 			    ALT_PART_NAME_LENGTH) == 0) {
-			printf("%s = %u\n", part_name, bootcfg.per_part_entry[i].primaryboot);
+			printf("%s = %u\n", part_name, bootcfg.info.per_part_entry[i].primaryboot);
 			return CMD_RET_SUCCESS;
 		}
 	}
@@ -376,7 +351,7 @@ static int do_bootconfig_get(char *part_name)
  */
 static int do_bootconfig_set(char *part_name, uint32_t value)
 {
-	struct bootconfig_info bootcfg;
+	bootconfig_info_t bootcfg;
 	int i, modified = 0;
 	int ret;
 
@@ -385,17 +360,21 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 		return CMD_RET_FAILURE;
 	}
 
+	bootcfg.size = sizeof(struct bootconfig_info);
+
 	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg, 0);
 	if (ret)
 		return CMD_RET_FAILURE;
 
 	/* Handle "all" special case */
 	if (strcmp(part_name, "all") == 0) {
-		for (i = 0; i < bootcfg.numaltpart && i < NUM_ALT_PARTITION; i++) {
-			if (bootcfg.per_part_entry[i].primaryboot != value) {
-				bootcfg.per_part_entry[i].primaryboot = value;
+		for (i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
+			if (bootcfg.info.per_part_entry[i].primaryboot != value) {
+				bootcfg.info.per_part_entry[i].primaryboot = value;
 				modified++;
-				printf("Set %s to %u\n", bootcfg.per_part_entry[i].name, value);
+				printf("Set %s to %u\n", bootcfg.info.per_part_entry[i].name, value);
+			} else {
+				printf("%s already %u\n", bootcfg.info.per_part_entry[i].name, value);
 			}
 		}
 		if (modified == 0) {
@@ -404,12 +383,12 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 		}
 	} else {
 		/* Handle specific partition */
-		for (i = 0; i < bootcfg.numaltpart && i < NUM_ALT_PARTITION; i++) {
-			if (strncmp(bootcfg.per_part_entry[i].name, part_name,
+		for (i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
+			if (strncmp(bootcfg.info.per_part_entry[i].name, part_name,
 				    ALT_PART_NAME_LENGTH) == 0) {
-				uint32_t old_value = bootcfg.per_part_entry[i].primaryboot;
+				uint32_t old_value = bootcfg.info.per_part_entry[i].primaryboot;
 				if (old_value != value) {
-					bootcfg.per_part_entry[i].primaryboot = value;
+					bootcfg.info.per_part_entry[i].primaryboot = value;
 					modified = 1;
 					printf("Set %s from %u to %u\n", part_name, old_value, value);
 				} else {
@@ -419,22 +398,20 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 				break;
 			}
 		}
-		if (i >= bootcfg.numaltpart || i >= NUM_ALT_PARTITION) {
-			printf("Partition '%s' not found\n", part_name);
+		if (i >= bootcfg.info.numaltpart || i >= NUM_ALT_PARTITION) {
+			printf("Partition entry '%s' not found\n", part_name);
 			return CMD_RET_FAILURE;
 		}
 	}
 
 	/* Only write back if modifications were made */
 	if (modified) {
-		ret = write_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg);
+		ret = write_bootconfig(&bootcfg);
 		if (!ret) {
-			printf("\nBootconfig updated successfully\n\n");
-			return CMD_RET_SUCCESS;
-		} else {
-			printf("\nFailed to write bootconfig\n\n");
-			return CMD_RET_FAILURE;
+			puts("\nBootconfig updated successfully\n\n");
+			ret = do_bootconfig_sync();
 		}
+		return ret ? CMD_RET_FAILURE : CMD_RET_SUCCESS;
 	}
 
 	return CMD_RET_SUCCESS;
@@ -459,7 +436,7 @@ static int do_bootconfig(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv
 	/* bootconfig get <name> */
 	if (strcmp(argv[1], "get") == 0) {
 		if (argc < 3) {
-			printf("Usage: bootconfig get <partition_name>\n");
+			puts("Usage: bootconfig get <partition_name>\n");
 			return CMD_RET_USAGE;
 		}
 		return do_bootconfig_get(argv[2]);
@@ -468,7 +445,7 @@ static int do_bootconfig(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv
 	/* bootconfig set <name|all> <0|1> */
 	if (strcmp(argv[1], "set") == 0) {
 		if (argc < 4) {
-			printf("Usage: bootconfig set <partition_name|all> <0|1>\n");
+			puts("Usage: bootconfig set <partition_name|all> <0|1>\n");
 			return CMD_RET_USAGE;
 		}
 		return do_bootconfig_set(argv[2], simple_strtoul(argv[3], NULL, 0));
