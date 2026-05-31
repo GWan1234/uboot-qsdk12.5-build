@@ -116,7 +116,7 @@ int boot_from_mem(const ulong data_addr)
 	puts("\n"
         "********************************\n"
         " INITRAMFS BOOTING\n"
-        " DO NOT POWER OFF DEVICE!\n"
+        " DO NOT POWER OFF DEVICE\n"
         "********************************\n");
 
     ret = config_select((unsigned int)data_addr, bootm_arg, sizeof(bootm_arg));
@@ -729,7 +729,7 @@ static void print_upgrade_hint(const char *upgrade_type_str)
 	printf("\n"
 		"********************************\n"
 		" %s UPGRADING\n"
-		" DO NOT POWER OFF DEVICE!\n"
+		" DO NOT POWER OFF DEVICE\n"
 		"********************************\n", upgrade_type_str);
 }
 
