@@ -1026,7 +1026,7 @@ const pageConfigs = {
         formDataKey: 'art',
         warningItems:  {
             common: true,
-            custom: 1
+            custom: 2
         }
     },
     cdt: {
@@ -5452,7 +5452,8 @@ const I18N = (() => {
             "uboot.warn.2": t.en.warnDanger("U-Boot"),
             "art.title": "ART UPDATE",
             "art.hint": t.en.updateHint("ART (Atheros Radio Test)"),
-            "art.warn.1": t.en.warnChoose("ART image"),
+            "art.warn.1": "ART has no fixed magic number, so its file type will be recognized as Unknown.",
+            "art.warn.2": t.en.warnChoose("ART image"),
             "cdt.title": "CDT UPDATE",
             "cdt.hint": t.en.updateHint("CDT (Configuration Data Table)"),
             "cdt.warn.1": t.en.warnChoose("CDT image"),
@@ -5755,8 +5756,8 @@ const I18N = (() => {
             "uboot.warn.2": t["zh-cn"].warnDanger("U-Boot "),
             "art.title": "ART 更新",
             "art.hint": t["zh-cn"].updateHint("无线芯片频率校准数据 ART (Atheros Radio Test)"),
-            "art.warn.1": t["zh-cn"].warnChoose("ART"),
-            "art.warn.2": "ART 识别为 Unknown 是正常的",
+            "art.warn.1": "ART 无固定魔数，故其文件类型会被识别为 Unknown。",
+            "art.warn.2": t["zh-cn"].warnChoose("ART"),
             "cdt.title": "CDT 更新",
             "cdt.hint": t["zh-cn"].updateHint("CDT (Configuration Data Table)"),
             "cdt.warn.1": t["zh-cn"].warnChoose("CDT"),
