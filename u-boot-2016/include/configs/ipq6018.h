@@ -368,7 +368,6 @@ extern loff_t board_env_size;
  * Other commands
  */
 
-#define CONFIG_CMD_FLASHWRITE
 #define CONFIG_CMD_RUN
 #define CONFIG_ARMV7_PSCI
 #define CONFIG_IPQ_ELF_AUTH
@@ -379,7 +378,6 @@ extern loff_t board_env_size;
 #define CONFIG_CMD_BOOTCONFIG
 #define CONFIG_CMD_BOOTFLASH
 #define CONFIG_CMD_IMI
-#define CONFIG_CMD_FLASHREAD
 #define CONFIG_HTTPD
 #define CONFIG_TCP
 #define CONFIG_LIB_RAND
@@ -392,6 +390,15 @@ extern loff_t board_env_size;
 #ifdef CONFIG_LIST_OF_CONFIG_NAMES_SUPPORT
 #define CONFIG_NAME_MAX_ENTRIES	6
 #define CONFIG_NAME_MAX_LEN	32
+#endif
+
+/*
+ * Flash read/write commands
+ */
+#define CONFIG_CMD_FLASHREAD
+#define CONFIG_CMD_FLASHWRITE
+#if defined(CONFIG_CMD_FLASHREAD) || defined(CONFIG_CMD_FLASHWRITE)
+#define CONFIG_CMD_FLASHRW
 #endif
 
 /*

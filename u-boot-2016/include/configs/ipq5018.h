@@ -50,9 +50,13 @@
 #define CONFIG_ARMV7_PSCI
 
 /*
- * Enable Flashwrite command
+ * Flash read/write commands
  */
+#define CONFIG_CMD_FLASHREAD
 #define CONFIG_CMD_FLASHWRITE
+#if defined(CONFIG_CMD_FLASHREAD) || defined(CONFIG_CMD_FLASHWRITE)
+#define CONFIG_CMD_FLASHRW
+#endif
 
 /*
  * Enable Env overwrite support

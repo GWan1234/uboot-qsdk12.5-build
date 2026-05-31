@@ -94,7 +94,15 @@
 
 #define CONFIG_SYS_DEVICE_NULLDEV
 #define CONFIG_FLASH_PROTECT
+
+/*
+ * Flash read/write commands
+ */
+#define CONFIG_CMD_FLASHREAD
 #define CONFIG_CMD_FLASHWRITE
+#if defined(CONFIG_CMD_FLASHREAD) || defined(CONFIG_CMD_FLASHWRITE)
+#define CONFIG_CMD_FLASHRW
+#endif
 
 /* Environment */
 #define CONFIG_MSM_PCOMM
@@ -378,4 +386,3 @@ typedef struct {
 #undef CONFIG_IPQ_ROOTFS_AUTH
 
 #endif /* _IPQ806x_CDP_H */
-

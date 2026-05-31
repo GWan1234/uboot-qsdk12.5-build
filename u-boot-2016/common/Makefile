@@ -82,7 +82,6 @@ obj-$(CONFIG_DATAFLASH_MMC_SELECT) += cmd_dataflash_mmc_mux.o
 obj-$(CONFIG_CMD_DATE) += cmd_date.o
 obj-$(CONFIG_CMD_DEMO) += cmd_demo.o
 obj-$(CONFIG_CMD_SOUND) += cmd_sound.o
-obj-$(CONFIG_CMD_FLASHREAD) += cmd_flashread.o
 ifdef CONFIG_4xx
 obj-$(CONFIG_CMD_SETGETDCR) += cmd_dcr.o
 endif
@@ -107,7 +106,7 @@ endif
 obj-$(CONFIG_OF_LIBFDT) += fdt_support.o
 obj-$(CONFIG_CMD_FITUPD) += cmd_fitupd.o
 obj-$(CONFIG_CMD_FLASH) += cmd_flash.o
-obj-$(CONFIG_CMD_FLASHWRITE) += cmd_flashwrite.o
+obj-$(CONFIG_CMD_FLASHRW) += cmd_flashrw.o
 ifdef CONFIG_FPGA
 obj-$(CONFIG_CMD_FPGA) += cmd_fpga.o
 endif

@@ -386,7 +386,6 @@ extern loff_t board_env_size;
  * Other commands
  */
 
-#define CONFIG_CMD_FLASHWRITE
 #define CONFIG_CMD_RUN
 #define CONFIG_IPQ_ELF_AUTH
 #define IPQ_UBI_VOL_WRITE_SUPPORT
@@ -420,4 +419,14 @@ extern loff_t board_env_size;
 #define CONFIG_NAME_MAX_ENTRIES	4
 #define CONFIG_NAME_MAX_LEN	32
 #endif
+
+/*
+ * Flash read/write commands
+ */
+#define CONFIG_CMD_FLASHREAD
+#define CONFIG_CMD_FLASHWRITE
+#if defined(CONFIG_CMD_FLASHREAD) || defined(CONFIG_CMD_FLASHWRITE)
+#define CONFIG_CMD_FLASHRW
+#endif
+
 #endif /* _IPQ9574_H */
