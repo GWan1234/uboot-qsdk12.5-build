@@ -509,7 +509,7 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 	if (p)
 		*p = 0;
 
-	if (strcmp(uri_ptr, "/console/poll")) {
+	if (strcmp(uri_ptr, "/console/poll") && strcmp(uri_ptr, "/syslog/poll")) {
 		handle_start_led_state();
 		httpd_debug("%s %s\n", pdata->buf, uri_ptr);
 	}

@@ -2579,6 +2579,89 @@ html[data-theme="dark"] .mac-byte-input.invalid {
     background: rgba(248, 113, 113, 0.08);
 }
 
+/* ====== 系统日志页面样式 ====== */
+
+/* 日志工具栏 */
+.syslog-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    min-height: 3rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+/* 状态区域 */
+.syslog-status-area {
+    flex: 1;
+}
+
+.syslog-status {
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+/* 操作按钮区域 */
+.syslog-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+/* 日志输出区域 */
+.syslog-output {
+    width: 100%;
+    min-height: 400px;
+    max-height: 600px;
+    overflow-y: auto;
+    padding: 0.75rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    resize: vertical;
+}
+
+/* 日志输出区域为空时的占位符 */
+.syslog-output:empty::before {
+    content: attr(data-placeholder);
+    color: var(--muted);
+    opacity: 0.5;
+}
+
+/* 暗色主题适配 - 日志输出区域 */
+html[data-theme="dark"] .syslog-output {
+    background: var(--panel);
+    border-color: var(--border);
+}
+
+html[data-theme="dark"] .syslog-toolbar {
+    background: var(--panel-2);
+    border-color: var(--border);
+}
+
+/* 亮色主题下的日志区域 */
+html[data-theme="light"] .syslog-output {
+    background: #fafbfc;
+    border-color: var(--border);
+}
+
+/* 按钮非活动状态 */
+.button-inactive {
+    opacity: 0.6;
+}
+
 /* 响应式设计 - 移动端显示切换按钮 */
 @media (max-width: 768px) {
     .sidebar-toggle {
@@ -2950,6 +3033,27 @@ html[data-theme="dark"] .mac-byte-input.invalid {
 
     .mac-action-bar {
         justify-content: center;
+    }
+
+    .syslog-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .syslog-status-area {
+        text-align: center;
+    }
+
+    .syslog-actions {
+        justify-content: center;
+    }
+
+    .syslog-output {
+        min-height: 300px;
+        max-height: 400px;
+        font-size: 0.8rem;
+        padding: 0.6rem;
+        line-height: 1.5;
     }
 }
 

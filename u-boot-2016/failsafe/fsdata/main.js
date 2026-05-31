@@ -56,6 +56,7 @@ class SidebarManager {
             '/cgi-bin/luci': 'sysinfo',
             '/cgi-bin/luci/': 'sysinfo',
             '/index.html': 'sysinfo',
+            '/syslog.html': 'syslog',
             '/firmware.html': 'firmware',
             '/art.html': 'art',
             '/cdt.html': 'cdt',
@@ -101,7 +102,8 @@ class SidebarManager {
             overview: {
                 titleKey: "nav.overview",
                 items: [
-                    { path: "/", labelKey: "nav.sysinfo", id: "sysinfo" }
+                    { path: "/", labelKey: "nav.sysinfo", id: "sysinfo" },
+                    { path: "/syslog.html", labelKey: "nav.syslog", id: "syslog" }
                 ]
             },
             update: {
@@ -1096,7 +1098,11 @@ const pageConfigs = {
     sysinfo: {
         needUpload: false,
         init: () => sysinfoManager.init()
-    }
+    },
+    syslog: {
+        needUpload: false,
+        init: () => syslogManager.init()
+    },
 };
 
 /**
@@ -4748,6 +4754,379 @@ const sysinfoManager = (() => {
 })();
 
 // ==============================
+// 系统日志模块
+// ==============================
+
+/**
+ * 系统日志管理器
+ * 负责通过轮询方式获取系统日志
+ */
+const syslogManager = (() => {
+    let elements = null;
+    let state = {
+        running: false,
+        pollTimer: null,
+        autoScroll: true,
+        persistKey: "failsafe_syslog_output",
+        persistMax: 500000,  // 最大存储 500KB
+        logBuffer: ""
+    };
+
+    /**
+     * 获取或缓存 DOM 元素
+     */
+    function getElements() {
+        if (elements) return elements;
+
+        elements = {
+            output: document.getElementById("syslog_out"),
+            status: document.getElementById("syslog_status")
+        };
+
+        return elements;
+    }
+
+    /**
+     * 设置状态提示
+     */
+    function setStatus(text, isError) {
+        const el = getElements().status;
+        if (el) {
+            el.textContent = text || "";
+            if (isError) {
+                el.style.color = "var(--danger)";
+            } else {
+                el.style.color = "";
+            }
+        }
+
+        // 如果是成功消息（非错误），3秒后自动清除
+        if (!isError && text && text !== t("syslog.status.ready")) {
+            setTimeout(() => {
+                if (getElements().status && getElements().status.textContent === text) {
+                    setStatus(t("syslog.status.ready"));
+                }
+            }, 3000);
+        }
+    }
+
+    /**
+     * 加载持久化的输出
+     */
+    function loadPersistedOutput() {
+        const outputEl = getElements().output;
+        if (!outputEl) return;
+
+        try {
+            const saved = sessionStorage.getItem(state.persistKey);
+            if (saved) {
+                outputEl.textContent = saved;
+                state.logBuffer = saved;
+                // 滚动到底部
+                if (state.autoScroll) {
+                    outputEl.scrollTop = outputEl.scrollHeight;
+                }
+            }
+        } catch (e) {
+            console.warn("Failed to load persisted syslog:", e);
+        }
+    }
+
+    /**
+     * 保存输出到 sessionStorage
+     */
+    function savePersistedOutput() {
+        const outputEl = getElements().output;
+        if (!outputEl) return;
+
+        try {
+            let content = outputEl.textContent || "";
+            if (content.length > state.persistMax) {
+                // 保留最近的内容
+                content = content.slice(content.length - state.persistMax);
+            }
+            sessionStorage.setItem(state.persistKey, content);
+            state.logBuffer = content;
+        } catch (e) {
+            console.warn("Failed to persist syslog:", e);
+        }
+    }
+
+    /**
+     * 追加日志到输出区域
+     */
+    function appendLog(text) {
+        const outputEl = getElements().output;
+        if (!outputEl || !text) return;
+
+        // 直接追加文本，不进行 HTML 转义（保持原始格式）
+        if (outputEl.textContent === "") {
+            outputEl.textContent = text;
+        } else {
+            outputEl.textContent += text;
+        }
+
+        // 限制输出长度
+        if (outputEl.textContent.length > state.persistMax) {
+            outputEl.textContent = outputEl.textContent.slice(
+                outputEl.textContent.length - state.persistMax
+            );
+        }
+
+        savePersistedOutput();
+
+        // 自动滚动到底部
+        if (state.autoScroll) {
+            outputEl.scrollTop = outputEl.scrollHeight;
+        }
+    }
+
+    /**
+     * 复制日志到剪贴板
+     */
+    async function copy() {
+        const outputEl = getElements().output;
+        if (!outputEl || !outputEl.textContent) {
+            setStatus(t("syslog.status.no_content"), true);
+            return;
+        }
+
+        try {
+            const logText = outputEl.textContent;
+
+            // 使用现代 Clipboard API
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(logText);
+                setStatus(t("syslog.status.copied"));
+            }
+            // 降级方案：使用传统的 execCommand
+            else {
+                // 创建临时 textarea 元素
+                const textarea = document.createElement("textarea");
+                textarea.value = logText;
+                textarea.style.position = "fixed";
+                textarea.style.left = "-9999px";
+                textarea.style.top = "-9999px";
+                document.body.appendChild(textarea);
+
+                textarea.select();
+                textarea.setSelectionRange(0, logText.length);
+
+                const success = document.execCommand("copy");
+                document.body.removeChild(textarea);
+
+                if (success) {
+                    setStatus(t("syslog.status.copied"));
+                } else {
+                    throw new Error("execCommand failed");
+                }
+            }
+        } catch (error) {
+            console.error("Copy failed:", error);
+            setStatus(t("syslog.status.copy_failed"), true);
+        }
+    }
+
+    /**
+     * 清空日志输出
+     */
+    function clear() {
+        if (!confirm(t("syslog.confirm.clear"))) return;
+
+        const outputEl = getElements().output;
+        if (outputEl) {
+            outputEl.textContent = "";
+            state.logBuffer = "";
+            try {
+                sessionStorage.removeItem(state.persistKey);
+            } catch (e) {
+                // 忽略清理错误
+            }
+            setStatus(t("syslog.status.cleared"));
+        }
+    }
+
+    /**
+     * 格式化日期时间：年-月-日_时-分-秒
+     */
+    function formatDateTime(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+
+        return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`;
+    }
+
+    /**
+     * 保存日志文件
+     */
+    function save() {
+        const outputEl = getElements().output;
+        if (!outputEl || !outputEl.textContent) {
+            setStatus(t("syslog.status.no_content"), true);
+            return;
+        }
+
+        try {
+            // 获取原始文本
+            let logText = outputEl.textContent || "";
+
+            if (!logText) {
+                setStatus(t("syslog.status.no_content"), true);
+                return;
+            }
+
+            const now = new Date();
+            const dateTimeStr = formatDateTime(now);
+            const filename = `uboot_syslog_${dateTimeStr}.log`;
+
+            const blob = new Blob([logText], { type: "text/plain;charset=utf-8" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+
+            setStatus(t("syslog.status.saved"));
+        } catch (error) {
+            setStatus(formatError(error), true);
+        }
+    }
+
+    /**
+     * 切换自动滚动
+     */
+    function toggleAutoScroll() {
+        state.autoScroll = !state.autoScroll;
+        const btn = document.querySelector('.syslog-actions .button-sm:nth-child(4)');
+        if (btn) {
+            if (state.autoScroll) {
+                btn.classList.remove('button-inactive');
+                btn.style.opacity = "1";
+            } else {
+                btn.classList.add('button-inactive');
+                btn.style.opacity = "0.6";
+            }
+        }
+        setStatus(state.autoScroll ? t("syslog.status.auto_scroll_on") : t("syslog.status.auto_scroll_off"));
+
+        // 如果自动滚动开启，立即滚动到底部
+        if (state.autoScroll) {
+            const outputEl = getElements().output;
+            if (outputEl) {
+                outputEl.scrollTop = outputEl.scrollHeight;
+            }
+        }
+    }
+
+    /**
+     * 格式化错误信息
+     */
+    function formatError(error) {
+        if (!error) return t("error.unknown");
+        if (error.message) return error.message;
+        return String(error);
+    }
+
+    /**
+     * 单次轮询获取日志
+     */
+    async function pollOnce() {
+        if (!state.running) return;
+
+        try {
+            const url = '/syslog/poll';
+            const response = await fetch(url, {
+                method: "GET",
+                cache: "no-store"
+            });
+
+            if (!response.ok) {
+                if (response.status !== 404) {
+                    setStatus(`${t("syslog.status.http")} ${response.status}`, true);
+                }
+                return;
+            }
+
+            const text = await response.text();
+            if (text && text.trim()) {
+                appendLog(text);
+            }
+
+        } catch (error) {
+            console.warn("Syslog poll error:", error);
+            setStatus(formatError(error), true);
+        }
+    }
+
+    /**
+     * 启动轮询调度
+     */
+    function schedulePoll() {
+        if (state.pollTimer) {
+            clearTimeout(state.pollTimer);
+        }
+
+        state.pollTimer = setTimeout(async () => {
+            await pollOnce();
+            schedulePoll();
+        }, 500);  // 0.5 秒轮询间隔
+    }
+
+    /**
+     * 停止轮询
+     */
+    function stopPoll() {
+        if (state.pollTimer) {
+            clearTimeout(state.pollTimer);
+            state.pollTimer = null;
+        }
+        state.running = false;
+    }
+
+    /**
+     * 初始化系统日志管理器
+     */
+    function init() {
+        getElements();
+
+        loadPersistedOutput();
+
+        // 启动轮询
+        state.running = true;
+        setStatus(t("syslog.status.ready"));
+        schedulePoll();
+
+        // 页面卸载时停止轮询
+        window.addEventListener("beforeunload", () => {
+            stopPoll();
+        });
+    }
+
+    /**
+     * 销毁管理器，清理资源
+     */
+    function destroy() {
+        stopPoll();
+        elements = null;
+    }
+
+    return {
+        init,
+        copy,
+        clear,
+        save,
+        toggleAutoScroll,
+        destroy
+    };
+})();
+
+// ==============================
 // 设置页面管理器
 // ==============================
 
@@ -5406,6 +5785,7 @@ const I18N = (() => {
             "app.name": "uBootKit",
             "nav.overview": "Overview",
             "nav.sysinfo": "System Info",
+            "nav.syslog": "System Log",
             "nav.update": "Update",
             "nav.firmware": "Firmware Update",
             "nav.art": "ART Update",
@@ -5659,6 +6039,23 @@ const I18N = (() => {
             "sysinfo.part_end": "End Address",
             "sysinfo.no_data": "No data available",
             "sysinfo.boot_mode": "Boot Mode",
+            "syslog.title": "SYSTEM LOG",
+            "syslog.copy": "Copy",
+            "syslog.clear": "Clear",
+            "syslog.save": "Save",
+            "syslog.auto_scroll": "Auto Scroll",
+            "syslog.confirm.clear": "Clear all logs?",
+            "syslog.status.copied": "Copied to clipboard",
+            "syslog.status.copy_failed": "Failed to copy to clipboard",
+            "syslog.status.ready": "Ready",
+            "syslog.status.cleared": "Cleared",
+            "syslog.status.saved": "Saved",
+            "syslog.status.no_content": "No log content",
+            "syslog.status.auto_scroll_on": "Auto-scroll enabled",
+            "syslog.status.auto_scroll_off": "Auto-scroll disabled",
+            "syslog.status.http": "HTTP error:",
+            "syslog.warn.1": "Logs are fetched via polling and updated automatically.",
+            "syslog.warn.2": "Logs are stored in browser session storage and will be cleared when the page is closed.",
             "reboot.confirm": "Reboot device now?",
             "reboot.title.in_progress": "REBOOTING DEVICE",
             "reboot.hint.in_progress": "Reboot request has been sent. Please wait...<br>This page may be in not responding status for a short time.",
@@ -5710,6 +6107,7 @@ const I18N = (() => {
             "app.name": "uBootKit",
             "nav.overview": "概览",
             "nav.sysinfo": "系统信息",
+            "nav.syslog": "系统日志",
             "nav.update": "更新",
             "nav.firmware": "固件更新",
             "nav.art": "ART 更新",
@@ -5962,6 +6360,23 @@ const I18N = (() => {
             "sysinfo.part_end": "结束地址",
             "sysinfo.no_data": "无数据",
             "sysinfo.boot_mode": "启动模式",
+            "syslog.title": "系统日志",
+            "syslog.copy": "复制",
+            "syslog.clear": "清空",
+            "syslog.save": "保存",
+            "syslog.auto_scroll": "自动滚动",
+            "syslog.confirm.clear": "是否清空所有日志？",
+            "syslog.status.copied": "已复制到剪贴板",
+            "syslog.status.copy_failed": "复制到剪贴板失败",
+            "syslog.status.ready": "就绪",
+            "syslog.status.cleared": "已清空",
+            "syslog.status.saved": "保存完成",
+            "syslog.status.no_content": "无日志内容",
+            "syslog.status.auto_scroll_on": "自动滚动已开启",
+            "syslog.status.auto_scroll_off": "自动滚动已关闭",
+            "syslog.status.http": "HTTP 错误：",
+            "syslog.warn.1": "日志通过轮询方式获取并自动更新。",
+            "syslog.warn.2": "日志保存在浏览器会话存储中，关闭页面后将清空。",
             "reboot.confirm": "确认立即重启设备？",
             "reboot.title.in_progress": "正在重启设备",
             "reboot.hint.in_progress": "已发送重启请求，请稍候…<br>该页面短时间可能显示无响应，这是正常现象。",

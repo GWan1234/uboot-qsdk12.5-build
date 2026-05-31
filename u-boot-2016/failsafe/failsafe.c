@@ -33,6 +33,7 @@
 #include "modules/mibib.h"
 #include "modules/network.h"
 #include "modules/sysinfo.h"
+#include "modules/syslog.h"
 #include "modules/webconsole.h"
 
 #if defined(CONFIG_HTTPD_DEBUG)
@@ -611,6 +612,9 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/sysinfo", &sysinfo_handler, NULL);
 	httpd_register_uri_handler(inst, "/upload", &upload_handler, NULL);
 	httpd_register_uri_handler(inst, "/version", &version_handler, NULL);
+
+	httpd_register_uri_handler(inst, "/syslog.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/syslog/poll", &syslog_poll_handler, NULL);
 
 	httpd_register_uri_handler(inst, "/reboot.html", &html_handler, NULL);
 	httpd_register_uri_handler(inst, "/reboot", &reboot_handler, NULL);

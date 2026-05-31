@@ -1,0 +1,58 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title data-i18n="syslog.title"></title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/main.js"></script>
+</head>
+
+<body onload="appInit('syslog')" data-page="syslog">
+    <div class="app">
+        <aside id="sidebar" class="sidebar"></aside>
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+        <button class="sidebar-toggle" id="sidebarToggle"></button>
+        <div class="main">
+            <div id="m">
+                <div class="card-title-section">
+                    <h1 data-i18n="syslog.title"></h1>
+                </div>
+
+                <div class="card-main-section">
+                    <div class="card-main-inner">
+                        <div class="syslog-toolbar">
+                            <div class="syslog-status-area">
+                                <div class="syslog-status" id="syslog_status"></div>
+                            </div>
+                            <div class="syslog-actions">
+                                <button type="button" class="button button-sm" onclick="syslogManager.copy()" data-i18n="syslog.copy"></button>
+                                <button type="button" class="button button-sm" onclick="syslogManager.save()" data-i18n="syslog.save"></button>
+                                <button type="button" class="button button-sm" onclick="syslogManager.clear()" data-i18n="syslog.clear"></button>
+                                <button type="button" class="button button-sm" onclick="syslogManager.toggleAutoScroll()" data-i18n="syslog.auto_scroll"></button>
+                            </div>
+                        </div>
+
+                        <div id="syslog_out" class="syslog-output"></div>
+                    </div>
+                </div>
+
+                <div class="card-foot-section">
+                    <div class="card-foot-inner">
+                        <div class="i w">
+                            <strong data-i18n="common.warnings"></strong>
+                            <ul>
+                                <li data-i18n="syslog.warn.1"></li>
+                                <li data-i18n="syslog.warn.2"></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="version"></div>
+        </div>
+    </div>
+</body>
+
+</html>
