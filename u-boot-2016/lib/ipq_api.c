@@ -472,9 +472,9 @@ static const void *get_mibib_ptable_offset(const void *addr, size_t limit,
 		uint32_t ptable_start_in_mibib, uint32_t ptable_end_in_mibib)
 {
 	const void *p = addr;
-	const u64 magic_mbn = HEADER_MAGIC_MBN;
+	const u64 magic_mibib_start = HEADER_MAGIC_MBN;
 	const u64 magic_ptable_start = HEADER_MAGIC_PTABLE;
-	const u64 magic_ptable_end = FOOTER_MAGIC_PTABLE;
+	const u64 magic_ptable_end = FOOTER_MAGIC_MBN;
 	const size_t magic_len = sizeof(u64);
 
 	if (!p)
@@ -482,7 +482,7 @@ static const void *get_mibib_ptable_offset(const void *addr, size_t limit,
 
 	while (limit >= ptable_end_in_mibib + magic_len) {
 		limit--;
-		if (!memcmp(p, &magic_mbn, magic_len) &&
+		if (!memcmp(p, &magic_mibib_start, magic_len) &&
 			!memcmp(p + ptable_start_in_mibib, &magic_ptable_start, magic_len) &&
 			!memcmp(p + ptable_end_in_mibib, &magic_ptable_end, magic_len)) {
 			return p + ptable_start_in_mibib;
@@ -508,7 +508,7 @@ static int reload_mibib_from_spi(void)
 		return -ENODEV;
 
 	/* 读取 SPI-NOR 的前 2 MiB 数据 */
-	read_size = min_t(size_t, 2 * 1024 * 1024, spi->size);
+	read_size = min_t(size_t, SZ_MIB(2), spi->size);
 
 	load_addr = map_sysmem(CONFIG_SYS_LOAD_ADDR, read_size);
 	if (!load_addr)
@@ -524,7 +524,7 @@ static int reload_mibib_from_spi(void)
 		goto done;
 	}
 
-	ret = mibib_ptable_init((unsigned int *)(mibib_ptable));
+	ret = mibib_ptable_init((unsigned int *)mibib_ptable);
 	if (ret)
 		goto done;
 
@@ -556,7 +556,7 @@ static int reload_mibib_from_nand(void)
 	int ret;
 
 	/* 读取 NAND 的前 4 MiB 数据 */
-	read_size = min_t(size_t, 4 * 1024 * 1024, nand->size);
+	read_size = min_t(size_t, SZ_MIB(4), nand->size);
 
 	load_addr = map_sysmem(CONFIG_SYS_LOAD_ADDR, read_size);
 	if (!load_addr)
@@ -572,7 +572,7 @@ static int reload_mibib_from_nand(void)
 		goto done;
 	}
 
-	ret = mibib_ptable_init((unsigned int *)(mibib_ptable));
+	ret = mibib_ptable_init((unsigned int *)mibib_ptable);
 	if (ret)
 		goto done;
 

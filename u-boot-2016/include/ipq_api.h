@@ -6,6 +6,9 @@ typedef struct {
 
 extern detected_flash_device_t detected_flash_device;
 
+#define SZ_KIB(n) ((n) << 10)
+#define SZ_MIB(n) ((n) << 20)
+
 /* loadaddr 环境变量的默认值 (u-boot-2016/include/env_default.h) */
 #if defined(CONFIG_IPQ40XX)
 #define CONFIG_LOADADDR 0x84000000

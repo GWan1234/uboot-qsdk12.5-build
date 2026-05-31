@@ -84,8 +84,8 @@ void *httpd_get_upload_buffer_ptr(size_t size)
 {
 	ulong load_addr;
 
-	if (gd->ram_size >= 512 * 1024 * 1024)
-		load_addr = CONFIG_SYS_SDRAM_BASE + (256 << 20);
+	if (gd->ram_size >= SZ_MIB(512))
+		load_addr = CONFIG_SYS_SDRAM_BASE + SZ_MIB(256);
 	else
 		load_addr = IPQ_TFTP_MIN_ADDR;
 
@@ -368,7 +368,7 @@ static int get_factory_fw_kernel_size(const void *data_addr, const ulong data_si
 	while (size_remain >= magic_len) {
 		size_remain--;
 		if (!memcmp(p, &magic, magic_len) &&
-			((p - data_addr) % (2 * 1024 * 1024) == 0)) {
+			((p - data_addr) % SZ_MIB(2) == 0)) {
 			/* 内核大小需为 2 MiB 的整数倍 */
 			factory_fw_kernel_size = p - data_addr;
 			return RET_SUCCESS;

@@ -383,13 +383,13 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 		}
 	} else if (strcmp(part_name, "firmware") == 0) {
 		/* Handle firmware partitions */
-		const char *fw_parts[3] = {
+		const char *fw_parts[] = {
 			"0:HLOS",
 			"rootfs",
 			"0:WIFIFW"
 		};
 		for (i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
-			for (int j = 0; j < 3; j++) {
+			for (int j = 0; j < ARRAY_SIZE(fw_parts); j++) {
 				if (strncmp(bootcfg.info.per_part_entry[i].name, fw_parts[j],
 						ALT_PART_NAME_LENGTH) == 0) {
 					if (bootcfg.info.per_part_entry[i].primaryboot != value) {
