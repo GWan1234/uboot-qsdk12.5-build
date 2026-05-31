@@ -475,8 +475,11 @@ char * const argv[])
 	} else
 		ret = fl_erase(flash_type, offset, part_size, layout);
 exit:
-	if (ret)
+	if (ret) {
+		printf("%s command failed, set flash type to default: %s (0x%x)\n",
+			argv[0], flash_type_to_string(sfi->flash_type), sfi->flash_type);
 		flash_type_new = -1;
+	}
 	return ret;
 }
 
@@ -641,36 +644,55 @@ char * const argv[])
 }
 #endif
 
-static int do_flupdate(cmd_tbl_t *cmdtp, int flag, int argc,
-char * const argv[])
+static int do_flupdate(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
-	int ret = CMD_RET_USAGE;
+	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+	detected_flash_device_t *dfd = &detected_flash_device;
+	const char *flash_type_str;
 
 	if (argc < 2 || argc > 3)
-		goto quit;
+		return CMD_RET_USAGE;
 
 	if (!strncmp(argv[1], "set", 3)) {
 		if(argc != 3)
-			goto quit;
-		if (!strncmp(argv[2], "mmc", 3))
-			flash_type_new = SMEM_BOOT_MMC_FLASH;
-		else if (!strncmp(argv[2], "nor", 3))
-			flash_type_new = SMEM_BOOT_SPI_FLASH;
-		else if (!strncmp(argv[2], "nand", 4))
-			flash_type_new = SMEM_BOOT_QSPI_NAND_FLASH;
-		else {
-			flash_type_new = -1;
-			goto quit;
-		}
-	}
-	else if (!strncmp(argv[1], "clear", 5)) /* set flash type to default */
-		flash_type_new = -1;
-	else
-		goto quit;
+			return CMD_RET_USAGE;
 
-	ret = CMD_RET_SUCCESS;
-quit:
-	return ret;
+		flash_type_str = argv[2];
+
+		if (!strncmp(flash_type_str, "nor", 3)) {
+			if (!dfd->spi)
+				goto flash_not_found;
+			flash_type_new = SMEM_BOOT_SPI_FLASH;
+		} else if (!strncmp(flash_type_str, "nand", 4)) {
+			if (!dfd->nand)
+				goto flash_not_found;
+#ifdef CONFIG_QPIC_SERIAL
+			flash_type_new = SMEM_BOOT_QSPI_NAND_FLASH;
+#else
+			flash_type_new = SMEM_BOOT_NAND_FLASH;
+#endif
+		} else if (!strncmp(flash_type_str, "mmc", 3)) {
+			if (!dfd->mmc)
+				goto flash_not_found;
+			flash_type_new = SMEM_BOOT_MMC_FLASH;
+		} else {
+			return CMD_RET_USAGE;
+		}
+
+		printf("set read/erase/write flash type to %s (0x%x)\n", flash_type_str, flash_type_new);
+	} else if (!strncmp(argv[1], "clear", 5)) {
+		printf("set flash type to default: %s (0x%x)\n",
+			flash_type_to_string(sfi->flash_type), sfi->flash_type);
+		flash_type_new = -1;
+	} else {
+		return CMD_RET_USAGE;
+	}
+
+	return CMD_RET_SUCCESS;
+
+flash_not_found:
+    printf("%s: flash not found\n", flash_type_str);
+	return CMD_RET_FAILURE;
 }
 
 #ifdef CONFIG_CMD_FLASHREAD
@@ -857,8 +879,9 @@ U_BOOT_CMD(
 
 U_BOOT_CMD(
 	flupdate,       3,       0,       do_flupdate,
-	"flupdate set mmc/nand/nor ; flupdate clear \n",
-	"flash type update \n"
+	"flupdate set nor/nand/mmc\n"
+	"\tflupdate clear\n",
+	"flash type update\n"
 );
 
 #ifdef CONFIG_CMD_FLASHREAD
