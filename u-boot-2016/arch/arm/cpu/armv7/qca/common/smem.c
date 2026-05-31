@@ -38,6 +38,7 @@
 #include "fdt_info.h"
 #include <ubi_uboot.h>
 #include <command.h>
+#include <ipq_api.h>
 
 #ifdef IPQ_UBI_VOL_WRITE_SUPPORT
 static struct ubi_device *ubi;
@@ -1223,30 +1224,36 @@ int do_smeminfo(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 #ifdef IPQ_UBI_VOL_WRITE_SUPPORT
 	ubi_set_rootfs_part();
 #endif
-	if(sfi->flash_density != 0) {
+	if (sfi->flash_density != 0) {
 		printf(
-			"flash_type:             0x%x\n"
+			"flash_type:             0x%x (%s)\n"
 			"flash_index:            0x%x\n"
 			"flash_chip_select:      0x%x\n"
 			"flash_block_size:       0x%x\n"
 			"flash_density:          0x%x\n"
-			"flash_secondary_type:   0x%x\n"
+			"flash_secondary_type:   0x%x (%s)\n"
 			"partition table offset: 0x%x\n",
-				sfi->flash_type, sfi->flash_index,
-				sfi->flash_chip_select, sfi->flash_block_size,
-				sfi->flash_density, sfi->flash_secondary_type,
+				sfi->flash_type, flash_type_to_string(sfi->flash_type),
+				sfi->flash_index,
+				sfi->flash_chip_select,
+				sfi->flash_block_size,
+				sfi->flash_density,
+				sfi->flash_secondary_type, flash_type_to_string(sfi->flash_secondary_type),
 				get_partition_table_offset());
 	} else {
 		printf(
-			"flash_type:             0x%x\n"
+			"flash_type:             0x%x (%s)\n"
 			"flash_index:            0x%x\n"
 			"flash_chip_select:      0x%x\n"
 			"flash_block_size:       0x%x\n"
-			"flash_secondary_type:   0x%x\n"
+			"flash_secondary_type:   0x%x (%s)\n"
 			"partition table offset: 0x%x\n",
-				sfi->flash_type, sfi->flash_index,
-				sfi->flash_chip_select, sfi->flash_block_size,
-				sfi->flash_secondary_type, get_partition_table_offset());
+				sfi->flash_type, flash_type_to_string(sfi->flash_type),
+				sfi->flash_index,
+				sfi->flash_chip_select,
+				sfi->flash_block_size,
+				sfi->flash_secondary_type, flash_type_to_string(sfi->flash_secondary_type),
+				get_partition_table_offset());
 	}
 
 	if (smem_ptable.len > 0) {

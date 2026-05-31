@@ -34,7 +34,7 @@ extern detected_flash_device_t detected_flash_device;
 #define ONENAND_FLASH_STR    "onenand"
 #define SDC_FLASH_STR        "sdc"
 #define MMC_FLASH_STR        "mmc"
-#define SPI_FLASH_STR        "spi"
+#define SPI_FLASH_STR        "spi_nor"
 #define NORPLUSNAND_STR      "nor_plus_nand"
 #define NORPLUSEMMC_STR      "nor_plus_emmc"
 #define QSPI_NAND_FLASH_STR  "qspi_nand"
@@ -51,9 +51,22 @@ void led_toggle(const char *gpio_name);
 unsigned int fdt_get_gpio_by_name(const char *gpio_name, const int debug_state);
 size_t json_escape(const char *input, char *output, size_t output_buffer_size);
 bool mmc_part_exists(const char *part_name);
+void reload_mibib_from_flash_in_9008_mode(void);
+
+#if defined(CONFIG_HTTPD)
 const char *flash_type_to_string(const uint32_t flash_type);
 int string_to_flash_type(const char *str);
-void reload_mibib_from_flash_in_9008_mode(void);
+#else
+static inline const char *flash_type_to_string(const uint32_t flash_type)
+{
+	return "";
+}
+
+static inline int string_to_flash_type(const char *str)
+{
+	return -1;
+}
+#endif
 
 static inline void handle_start_led_state(void)
 {
