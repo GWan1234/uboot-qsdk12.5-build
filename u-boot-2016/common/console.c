@@ -496,10 +496,6 @@ void putc(const char c)
 	if (gd && (gd->flags & GD_FLG_CAPTURE))
 		capture_putc(c);
 #endif
-#ifdef CONFIG_HTTPD
-	if (gd && gd->failsafe_capture_out.start)
-		membuff_putbyte((struct membuff *)&gd->failsafe_capture_out, c);
-#endif
 #ifdef CONFIG_SILENT_CONSOLE
 	if (gd->flags & GD_FLG_SILENT)
 		return;
@@ -550,10 +546,6 @@ void puts(const char *s)
 #ifdef CONFIG_CALL_FUNC_CAPTURE
 	if (gd && (gd->flags & GD_FLG_CAPTURE))
 		capture_puts(s);
-#endif
-#ifdef CONFIG_HTTPD
-	if (gd && gd->failsafe_capture_out.start)
-		membuff_put((struct membuff *)&gd->failsafe_capture_out, s, strlen(s));
 #endif
 #ifdef CONFIG_SILENT_CONSOLE
 	if (gd->flags & GD_FLG_SILENT)

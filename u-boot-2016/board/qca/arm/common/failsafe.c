@@ -37,8 +37,7 @@
 #include <ipq_api.h>
 #include <u-boot/md5.h>
 #include <net/httpd.h>
-#include <console.h>
-#include <membuff.h>
+#include <capture.h>
 
 #include "untar.h"
 
@@ -50,7 +49,7 @@ extern struct sdhci_host mmc_host;
 
 DECLARE_GLOBAL_DATA_PTR;
 
-#define FAILSAFE_CAPTURE_RECORD_OUT_SIZE 0x400
+#define FAILSAFE_CAPTURE_OUTPUT_SIZE 0x400
 
 #define  FLASH_TYPE_STR_SPI   "SPI-NOR"
 #define  FLASH_TYPE_STR_NAND  "NAND"
@@ -205,28 +204,17 @@ static void handle_invalid_qsdk_fw(const char *node_prefix)
 
 static void handle_run_command_failed(const char *cmd, const char *output)
 {
-	char escaped_cmd[MAX_CMD_LEN * 2];
-	char *escaped_output, *buf;
-	size_t buf_size = 2 * strlen(output);
+	char esc_cmd[MAX_CMD_LEN * 2];
+	char esc_output[FAILSAFE_CAPTURE_OUTPUT_SIZE * 2];
 
 	printf("Failed to run: %s\n", cmd);
 
-	json_escape(cmd, escaped_cmd, sizeof(escaped_cmd));
-
-	buf = malloc(buf_size);
-	if (buf) {
-		json_escape(output, buf, buf_size);
-		escaped_output = buf[0] ? buf : "none";
-	} else {
-		escaped_output = "[ERROR] malloc failed, cannot escape output.";
-	}
+	json_escape(cmd, esc_cmd, sizeof(esc_cmd));
+	json_escape(output, esc_output, sizeof(esc_output));
 
 	snprintf(info, sizeof(info),
 		"{\"type\":\"run_cmd_failed\",\"cmd\":\"%s\",\"output\":\"%s\"}",
-		escaped_cmd, escaped_output);
-
-	if (buf)
-		free(buf);
+		esc_cmd, esc_output);
 }
 
 /**
@@ -672,37 +660,23 @@ int failsafe_validate_image(const int upgrade_type, const char *filename,
 	return ret;
 }
 
+static int exec_command(void *cmd)
+{
+	return run_command((const char *)cmd, 0);
+}
+
 static int failsafe_run_command_capture(const char *cmd)
 {
-	bool capture_on;
-	int ret, avail, want, got;
-	char output[FAILSAFE_CAPTURE_RECORD_OUT_SIZE];
+	static char output[FAILSAFE_CAPTURE_OUTPUT_SIZE];
+	int ret;
 
 	printf("\n### Executing: %s\n", cmd);
 
-	ret = membuff_new((struct membuff *)&gd->failsafe_capture_out,
-				FAILSAFE_CAPTURE_RECORD_OUT_SIZE);
-
-	capture_on = ret ? false : true;
-
-	if (capture_on)
-		membuff_purge((struct membuff *)&gd->failsafe_capture_out);
-
-	ret = run_command(cmd, 0);
-
-	if (ret && capture_on) {
-		avail = membuff_avail((struct membuff *)&gd->failsafe_capture_out);
-		want = min(avail, (int)FAILSAFE_CAPTURE_RECORD_OUT_SIZE);
-		got = membuff_get((struct membuff *)&gd->failsafe_capture_out, output, want);
-		output[got] = '\0';
-	}
+	ret = call_func_capture(exec_command, (void *)cmd,
+			output, sizeof(output), NULL);
 
 	if (ret)
-		handle_run_command_failed(cmd,
-			capture_on ? output : "[ERROR] Failed to capture output.");
-
-	if (capture_on)
-		membuff_dispose((struct membuff *)&gd->failsafe_capture_out);
+		handle_run_command_failed(cmd, output);
 
 	return ret;
 }
