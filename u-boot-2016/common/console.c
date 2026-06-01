@@ -18,6 +18,11 @@
 #include <environment.h>
 #include <poller.h>
 
+#ifdef CONFIG_HTTPD
+extern void webconsole_putc(const char c);
+extern void webconsole_puts(const char *s);
+#endif
+
 DECLARE_GLOBAL_DATA_PTR;
 
 static int on_console(const char *name, const char *value, enum env_op op,
@@ -494,6 +499,8 @@ void putc(const char c)
 #ifdef CONFIG_HTTPD
 	if (gd && gd->failsafe_capture_out.start)
 		membuff_putbyte((struct membuff *)&gd->failsafe_capture_out, c);
+
+	webconsole_putc(c);
 #endif
 #ifdef CONFIG_SILENT_CONSOLE
 	if (gd->flags & GD_FLG_SILENT)
@@ -545,6 +552,8 @@ void puts(const char *s)
 #ifdef CONFIG_HTTPD
 	if (gd && gd->failsafe_capture_out.start)
 		membuff_put((struct membuff *)&gd->failsafe_capture_out, s, strlen(s));
+
+	webconsole_puts(s);
 #endif
 #ifdef CONFIG_SILENT_CONSOLE
 	if (gd->flags & GD_FLG_SILENT)

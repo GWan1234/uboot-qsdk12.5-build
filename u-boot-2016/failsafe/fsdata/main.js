@@ -3330,8 +3330,6 @@ const networkManager = (() => {
 const consoleManager = (() => {
     let elements = null;
     let state = {
-        running: false,
-        pollTimer: null,
         history: [],
         histPos: -1,
         persistKey: "failsafe_console_output",
@@ -3955,64 +3953,6 @@ const consoleManager = (() => {
     }
 
     /**
-     * 轮询输出
-     */
-    async function pollOnce() {
-        if (!state.running) return;
-
-        try {
-            const response = await fetch("/console/poll", {
-                method: "GET",
-            });
-
-            if (!response.ok) {
-                setStatus(`${t("console.status.http")} ${response.status}`, true);
-                return;
-            }
-
-            const text = await response.text();
-            let data;
-            try {
-                data = JSON.parse(text);
-            } catch (e) {
-                setStatus(t("console.status.parse"), true);
-                return;
-            }
-
-            if (data && data.data) {
-                appendText(data.data);
-            }
-        } catch (error) {
-            setStatus(formatError(error), true);
-        }
-    }
-
-    /**
-     * 启动轮询
-     */
-    function schedulePoll() {
-        if (state.pollTimer) {
-            clearTimeout(state.pollTimer);
-        }
-
-        state.pollTimer = setTimeout(async () => {
-            await pollOnce();
-            schedulePoll();
-        }, 300);
-    }
-
-    /**
-     * 停止轮询
-     */
-    function stopPoll() {
-        if (state.pollTimer) {
-            clearTimeout(state.pollTimer);
-            state.pollTimer = null;
-        }
-        state.running = false;
-    }
-
-    /**
      * 发送命令
      */
     async function send() {
@@ -4072,22 +4012,22 @@ const consoleManager = (() => {
                 body: formData
             });
 
-            const result = await response.text();
+            const text = await response.text();
 
             if (!response.ok) {
                 setStatus(
-                    `${t("console.status.http")} ${response.status}${result ? ": " + result : ""}`,
+                    `${t("console.status.http")} ${response.status}${text ? ": " + text : ""}`,
                     true
                 );
                 return;
             }
 
-            try {
-                const data = JSON.parse(result);
-                setStatus(`${t("console.status.ret")} ${data && typeof data.ret !== "undefined" ? data.ret : "?"}`);
-            } catch (e) {
-                setStatus(t("console.status.done"));
+            if (text && text.trim()) {
+                appendText(text);
             }
+
+            setStatus(t("console.status.done"));
+
         } catch (error) {
             setStatus(formatError(error), true);
         }
@@ -4097,27 +4037,16 @@ const consoleManager = (() => {
      * 清空输出
      */
     async function clear() {
-        try {
-            const response = await fetch("/console/clear", {
-                method: "GET",
-            });
-
-            if (response.ok) {
-                const outputEl = getElements().output;
-                if (outputEl) {
-                    outputEl.textContent = "";
-                }
-                try {
-                    sessionStorage.removeItem(state.persistKey);
-                } catch (e) {
-                    // 忽略清理错误
-                }
-                setStatus(t("console.status.cleared"));
-            } else {
-                setStatus(`${t("console.status.http")} ${response.status}`, true);
+        const outputEl = getElements().output;
+        if (outputEl) {
+            outputEl.textContent = "";
+            state.logBuffer = "";
+            try {
+                sessionStorage.removeItem(state.persistKey);
+            } catch (e) {
+                // 忽略清理错误
             }
-        } catch (error) {
-            setStatus(formatError(error), true);
+            setStatus(t("console.status.cleared"));
         }
     }
 
@@ -4158,14 +4087,14 @@ const consoleManager = (() => {
                         showFileProgress(false);
 
                         if (xhr.status === 200) {
-                            const responseText = xhr.responseText.trim();
-                            if (responseText === "ok") {
-                                showFileInfo(`✓ ${t("console.upload.success")}`, true);
-                                setStatus(t("console.upload.success"), false);
-                            } else {
-                                showFileInfo(`✗ ${t("console.upload.failed")}: ${responseText}`, false);
-                                setStatus(`${t("console.upload.failed")}: ${responseText}`, true);
+                            const text = xhr.responseText;
+                            if (text) {
+                                appendText(text);
                             }
+
+                            showFileInfo(`✓ ${t("console.upload.success")}`, true);
+                            setStatus(t("console.upload.success"), false);
+
                         } else {
                             showFileInfo(`✗ ${t("console.status.http")} ${xhr.status}`, false);
                             setStatus(`${t("console.status.http")} ${xhr.status}`, true);
@@ -4249,22 +4178,13 @@ const consoleManager = (() => {
         // 预加载命令列表（不阻塞UI）
         loadCommands();
 
-        // 启动轮询
-        state.running = true;
         setStatus(t("console.status.ready"));
-        schedulePoll();
-
-        // 页面卸载时停止轮询
-        window.addEventListener("beforeunload", () => {
-            stopPoll();
-        });
     }
 
     /**
      * 清理资源
      */
     function destroy() {
-        stopPoll();
         if (state.debounceTimer) {
             clearTimeout(state.debounceTimer);
         }
@@ -5871,7 +5791,6 @@ const I18N = (() => {
             "backup.warn.2": "Custom range reads raw bytes; be careful with offsets.",
             "backup.warn.3": "Large backups may take a long time depending on storage speed.",
             "console.title": "WEB CONSOLE",
-            "console.hint": "Run <strong>U-Boot commands</strong> directly in your browser.<br>Output is streamed by polling (no WebSocket). Treat this as <strong>root access</strong>.",
             "console.send": "Send",
             "console.clear": "Clear",
             "console.cmd.forbid": "Forbidden",
@@ -5893,9 +5812,6 @@ const I18N = (() => {
             "console.upload": "Upload",
             "console.uploading": "Uploading:",
             "console.upload.success": "Upload successful",
-            "console.upload.failed": "Upload failed",
-            "console.warn.1": "This console can execute arbitrary U-Boot commands.",
-            "console.warn.2": "Do not expose this page on untrusted networks.",
             "env.title": "U-BOOT ENV",
             "env.hint": "Manage <strong>U-Boot environment variables</strong>. Changes will be saved to storage.",
             "env.count": "Variables:",
@@ -6192,7 +6108,6 @@ const I18N = (() => {
             "backup.warn.2": "自定义范围读取原始字节，请谨慎设置偏移量。",
             "backup.warn.3": "大容量备份可能需要较长时间，取决于存储速度。",
             "console.title": "网页终端",
-            "console.hint": "在浏览器中直接执行 <strong>U-Boot 命令</strong>。<br>输出通过轮询方式获取（非 WebSocket），相当于 <strong>root 权限</strong>。",
             "console.send": "发送",
             "console.clear": "清空",
             "console.cmd.forbid": "禁止",
@@ -6214,9 +6129,6 @@ const I18N = (() => {
             "console.upload": "上传",
             "console.uploading": "正在上传：",
             "console.upload.success": "上传成功",
-            "console.upload.failed": "上传失败",
-            "console.warn.1": "该终端可执行任意 U-Boot 命令。",
-            "console.warn.2": "不要在不可信网络中暴露此页面。",
             "env.title": "U-BOOT 环境变量",
             "env.hint": "管理 <strong>U-Boot 环境变量</strong>。更改将保存到存储设备。",
             "env.count": "变量数:",

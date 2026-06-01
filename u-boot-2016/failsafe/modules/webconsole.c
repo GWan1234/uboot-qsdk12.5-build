@@ -1,24 +1,25 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2026 Yuzhii0718
+ * Copyright (C) 2026 chenxin527. All Rights Reserved.
  *
- * All rights reserved.
+ * This file is part of the project uboot-qsdk12.5-build
  *
- * This file is part of the project bl-mt798x-dhcpd
- * You may not use, copy, modify or distribute this file except in compliance with the license agreement.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- * Failsafe Web console
- */
-
-/*
- * Modified by: chenxin527
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <common.h>
-#include <command.h>
 #include <malloc.h>
-#include <console.h>
-#include <membuff.h>
 #include <errno.h>
 #include <net/httpd.h>
 #include <ipq_api.h>
@@ -38,313 +39,157 @@ extern struct sdhci_host mmc_host;
 
 DECLARE_GLOBAL_DATA_PTR;
 
-#define WEB_CONSOLE_CMD_MAX		256
-#define WEB_CONSOLE_POLL_MAX	8192
+#define WEBCONSOLE_MAX_CMD_SIZE				256
+#define WEBCONSOLE_RECORD_OUT_SIZE			9999
+#define WEBCONSOLE_UPLOAD_FILE_INFO_SIZE	999
 
-static const char *failsafe_get_prompt(void)
+struct webconsole_buffer {
+	char *buf;
+	size_t buf_size;
+	size_t pos;
+};
+
+static bool webconsole_record_on = false;
+static struct webconsole_buffer webconsole_out;
+
+static void handle_response_message(struct httpd_response *response,
+    int code, const char *data, int data_size, const char *content_type)
 {
-	const char *p = getenv("prompt");
-
-	if (p && p[0])
-		return p;
-
-#ifdef CONFIG_SYS_PROMPT
-	return CONFIG_SYS_PROMPT;
-#else
-	return "IPQ# ";
-#endif
+	response->status = HTTP_RESP_STD;
+	response->data = data ? data : "";
+	response->size = (data_size != -1) ? data_size : strlen(response->data);
+	response->info.code = code;
+	response->info.connection_close = 1;
+	response->info.content_type = content_type ? content_type : "text/plain";
 }
 
-static void failsafe_webconsole_free_session(enum httpd_uri_handler_status status,
-	struct httpd_response *response)
+void webconsole_putc(const char c)
 {
-	if (status != HTTP_CB_CLOSED)
+	struct webconsole_buffer *p = &webconsole_out;
+
+	if (!webconsole_record_on || p->buf == NULL)
 		return;
 
-	if (response->session_data) {
-		free(response->session_data);
-		response->session_data = NULL;
+	if (p->pos < p->buf_size - 1) {
+		p->buf[p->pos++] = c;
+		p->buf[p->pos] = '\0';
 	}
 }
 
-int failsafe_webconsole_ensure_recording(void)
+void webconsole_puts(const char *s)
 {
-	int ret;
+	struct webconsole_buffer *p = &webconsole_out;
+	size_t s_len, avail_len, cpy_len;
 
-	if (!gd)
-		return -ENODEV;
+	if (!webconsole_record_on || p->buf == NULL)
+		return;
 
-	if (!gd->console_out.start) {
-		ret = console_record_init();
-		if (ret)
-			return ret;
+	if (p->pos < p->buf_size - 1) {
+		s_len = strlen(s);
+		avail_len = p->buf_size - p->pos - 1;
+		cpy_len = min(s_len, avail_len);
+
+		memcpy(p->buf + p->pos, s, cpy_len);
+		p->pos += cpy_len;
+		p->buf[p->pos] = '\0';
 	}
+}
 
-	gd->flags |= GD_FLG_RECORD;
+int webconsole_record_init(size_t buf_size)
+{
+	struct webconsole_buffer *p = &webconsole_out;
+
+	p->buf = malloc(buf_size);
+	if (p->buf == NULL)
+		return -ENOMEM;
+
+	p->buf[0] = '\0';
+	p->buf_size = buf_size;
+	p->pos = 0;
+
 	return 0;
 }
 
-void webconsole_poll_handler(enum httpd_uri_handler_status status,
-	struct httpd_request *request,
-	struct httpd_response *response)
+void webconsole_free_buffer(void *buf)
 {
-	char *chunk = NULL, *esc = NULL, *json = NULL;
-	int ret, avail, want, got;
-	size_t esc_sz, json_sz;
-
-	if (status == HTTP_CB_CLOSED) {
-		failsafe_webconsole_free_session(status, response);
-		return;
+	if (buf) {
+		free(buf);
+		buf = NULL;
 	}
-
-	if (status != HTTP_CB_NEW)
-		return;
-
-	response->status = HTTP_RESP_STD;
-	response->info.code = 200;
-	response->info.connection_close = 1;
-	response->info.content_type = "application/json";
-
-	if (!request || request->method != HTTP_GET) {
-		response->info.code = 405;
-		response->data = "{\"error\":\"method\"}\n";
-		response->size = strlen(response->data);
-		return;
-	}
-
-	ret = failsafe_webconsole_ensure_recording();
-	if (ret) {
-		response->info.code = 503;
-		response->data = "{\"error\":\"no_console\"}\n";
-		response->size = strlen(response->data);
-		return;
-	}
-
-	avail = membuff_avail((struct membuff *)&gd->console_out);
-	want = min(avail, (int)WEB_CONSOLE_POLL_MAX);
-
-	chunk = malloc(want + 1);
-	if (!chunk) {
-		response->info.code = 500;
-		response->data = "{\"error\":\"oom\"}\n";
-		response->size = strlen(response->data);
-		return;
-	}
-
-	got = want ? membuff_get((struct membuff *)&gd->console_out, chunk, want) : 0;
-	chunk[got] = '\0';
-
-	/* Worst case: every char becomes ' ' or escaped with one extra backslash */
-	esc_sz = (size_t)got * 2 + 64;
-	esc = malloc(esc_sz);
-	if (!esc) {
-		free(chunk);
-		response->info.code = 500;
-		response->data = "{\"error\":\"oom\"}\n";
-		response->size = strlen(response->data);
-		return;
-	}
-
-	json_escape(chunk, esc, esc_sz);
-	free(chunk);
-
-	json_sz = strlen(esc) + 128;
-	json = malloc(json_sz);
-	if (!json) {
-		free(esc);
-		response->info.code = 500;
-		response->data = "{\"error\":\"oom\"}\n";
-		response->size = strlen(response->data);
-		return;
-	}
-
-	snprintf(json, json_sz, "{\"data\":\"%s\",\"avail\":%d}\n", esc,
-		membuff_avail((struct membuff *)&gd->console_out));
-	free(esc);
-
-	response->data = json;
-	response->size = strlen(json);
-	response->session_data = json;
 }
 
 void webconsole_exec_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response)
 {
-	struct httpd_form_value *cmdv;
-	char cmd[WEB_CONSOLE_CMD_MAX + 1];
-	char *esc = NULL, *json = NULL;
-	int ret;
-	size_t esc_sz, json_sz;
+	struct webconsole_buffer *p = &webconsole_out;
+	struct httpd_form_value *raw_cmd;
+	char cmd[WEBCONSOLE_MAX_CMD_SIZE + 1];
 
 	if (status == HTTP_CB_CLOSED) {
-		failsafe_webconsole_free_session(status, response);
+		webconsole_free_buffer(webconsole_out.buf);
 		return;
 	}
 
 	if (status != HTTP_CB_NEW)
 		return;
 
-	response->status = HTTP_RESP_STD;
-	response->info.code = 200;
-	response->info.connection_close = 1;
-	response->info.content_type = "application/json";
-
 	if (!request || request->method != HTTP_POST) {
-		response->info.code = 405;
-		response->data = "{\"error\":\"method\"}\n";
-		response->size = strlen(response->data);
+		handle_response_message(response, 405, "bad method", -1, NULL);
 		return;
 	}
 
-	ret = failsafe_webconsole_ensure_recording();
-	if (ret) {
-		response->info.code = 503;
-		response->data = "{\"error\":\"no_console\"}\n";
-		response->size = strlen(response->data);
-		return;
-	}
-
-	cmdv = httpd_request_find_value(request, "cmd");
-	if (!cmdv || !cmdv->data || !cmdv->size) {
-		response->info.code = 400;
-		response->data = "{\"error\":\"no_cmd\"}\n";
-		response->size = strlen(response->data);
+	raw_cmd = httpd_request_find_value(request, "cmd");
+	if (!raw_cmd || !raw_cmd->data || !raw_cmd->size) {
+		handle_response_message(response, 400, "no cmd", -1, NULL);
 		return;
 	}
 
 	memset(cmd, 0, sizeof(cmd));
-	memcpy(cmd, cmdv->data, min((size_t)WEB_CONSOLE_CMD_MAX, cmdv->size));
+	memcpy(cmd, raw_cmd->data, min_t(size_t, WEBCONSOLE_MAX_CMD_SIZE, raw_cmd->size));
 
-	/* Echo to console so browser sees what was executed */
-	{
-		const char *prompt = failsafe_get_prompt();
-		size_t plen = prompt ? strlen(prompt) : 0;
-		bool need_space = plen && prompt[plen - 1] != ' ' && prompt[plen - 1] != '\t';
-
-		if (!prompt || !prompt[0])
-			prompt = "IPQ# ";
-
-		printf("%s%s%s\n", prompt, need_space ? " " : "", cmd);
-	}
-	ret = run_command(cmd, 0);
-
-	esc_sz = strlen(cmd) * 2 + 64;
-	esc = malloc(esc_sz);
-	if (!esc)
-		goto out_oom;
-
-	json_escape(cmd, esc, esc_sz);
-	json_sz = strlen(esc) + 128;
-	json = malloc(json_sz);
-	if (!json)
-		goto out_oom;
-
-	snprintf(json, json_sz, "{\"ok\":true,\"ret\":%d,\"cmd\":\"%s\"}\n", ret, esc);
-	free(esc);
-
-	response->data = json;
-	response->size = strlen(json);
-	response->session_data = json;
-	return;
-
-out_oom:
-	free(esc);
-	free(json);
-	response->info.code = 500;
-	response->data = "{\"error\":\"oom\"}\n";
-	response->size = strlen(response->data);
-}
-
-void webconsole_clear_handler(enum httpd_uri_handler_status status,
-	struct httpd_request *request,
-	struct httpd_response *response)
-{
-	char *json;
-
-	if (status == HTTP_CB_CLOSED) {
-		failsafe_webconsole_free_session(status, response);
+	if (webconsole_record_init(WEBCONSOLE_RECORD_OUT_SIZE)) {
+		handle_response_message(response, 500, "no mem", -1, NULL);
 		return;
 	}
 
-	if (status != HTTP_CB_NEW)
-		return;
+	webconsole_record_on = true;
 
-	response->status = HTTP_RESP_STD;
-	response->info.code = 200;
-	response->info.connection_close = 1;
-	response->info.content_type = "application/json";
+	printf("\nIPQ# %s\n", cmd);
 
-	if (!request || request->method != HTTP_GET) {
-		response->info.code = 405;
-		response->data = "{\"error\":\"method\"}\n";
-		response->size = strlen(response->data);
-		return;
-	}
+	run_command(cmd, 0);
 
-	if (failsafe_webconsole_ensure_recording()) {
-		response->info.code = 503;
-		response->data = "{\"error\":\"no_console\"}\n";
-		response->size = strlen(response->data);
-		return;
-	}
+	webconsole_record_on = false;
 
-	console_record_reset();
-
-	json = malloc(64);
-	if (!json) {
-		response->info.code = 500;
-		response->data = "{\"error\":\"oom\"}\n";
-		response->size = strlen(response->data);
-		return;
-	}
-
-	snprintf(json, 64, "{\"ok\":true}\n");
-	response->data = json;
-	response->size = strlen(json);
-	response->session_data = json;
+	handle_response_message(response, 200, p->buf, p->pos, NULL);
 }
 
 void webconsole_upload_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response)
 {
+	struct webconsole_buffer *p = &webconsole_out;
 	struct httpd_form_value *file;
 	block_dev_desc_t *mmc_dev;
 	detected_flash_device_t *dfd = &detected_flash_device;
 	ulong size_blocks;
 	unsigned char md5_sum[16];
-	int fw_type;
+	const char *separator;
+	int ret, fw_type;
+
+	if (status == HTTP_CB_CLOSED) {
+		webconsole_free_buffer(webconsole_out.buf);
+		return;
+	}
 
 	if (status != HTTP_CB_NEW)
 		return;
 
-	response->status = HTTP_RESP_STD;
-	response->info.connection_close = 1;
-	response->info.content_type = "text/plain";
-
 	file = httpd_request_find_value(request, "file");
 	if (!file || !file->data) {
-		response->data = "no file";
-		response->size = strlen(response->data);
-		response->info.code = 400;
+		handle_response_message(response, 400, "no file", -1, NULL);
 		return;
 	}
-
-	fw_type = check_fw_type((const void *)file->data);
-	md5((unsigned char *)file->data, file->size, md5_sum);
-
-	printf("[FILE] %s\n", file->filename);
-	printf("[TYPE] %s\n", fw_type_to_string(fw_type));
-	printf("[ADDR] 0x%lx\n", (ulong)file->data);
-
-	printf("[SIZE] 0x%lx (", (ulong)file->size);
-	print_size(file->size, ")\n");
-
-	puts("[ MD5] ");
-	for (int i = 0; i < 16; i++)
-		printf("%02x", md5_sum[i] & 0xFF);
-	putc('\n');
 
 	setenv_hex("fileaddr", (ulong)file->data);
     setenv_hex("filesize", (ulong)file->size);
@@ -357,9 +202,38 @@ void webconsole_upload_handler(enum httpd_uri_handler_status status,
         }
     }
 
-	response->data = "ok";
-	response->size = strlen(response->data);
-	response->info.code = 200;
+	fw_type = check_fw_type((const void *)file->data);
+	md5((unsigned char *)file->data, file->size, md5_sum);
+
+	ret = webconsole_record_init(WEBCONSOLE_UPLOAD_FILE_INFO_SIZE);
+
+	if (!ret)
+		webconsole_record_on = true;
+
+	separator = "\n===========================================================================\n";
+
+	puts(separator);
+	printf(" [FILE] %s\n", file->filename);
+	printf(" [TYPE] %s\n", fw_type_to_string(fw_type));
+	printf(" [ADDR] 0x%lx\n", (ulong)file->data);
+
+	printf(" [SIZE] 0x%lx (", (ulong)file->size);
+	print_size(file->size, ")\n");
+
+	puts(" [ MD5] ");
+	for (int i = 0; i < 16; i++)
+		printf("%02x", md5_sum[i] & 0xFF);
+	puts(separator);
+
+	if (!ret) {
+		webconsole_record_on = false;
+		handle_response_message(response, 200, p->buf, p->pos, NULL);
+	} else {
+		handle_response_message(response, 200,
+			"\n============================\n"
+			" File uploaded successfully"
+			"\n============================\n", -1, NULL);
+	}
 }
 
 void webconsole_cmdlist_handler(enum httpd_uri_handler_status status,
@@ -373,29 +247,23 @@ void webconsole_cmdlist_handler(enum httpd_uri_handler_status status,
 	char esc_cmd_usage[512];
 
 	if (status == HTTP_CB_CLOSED) {
-		failsafe_webconsole_free_session(status, response);
+		webconsole_free_buffer(response->session_data);
 		return;
 	}
 
 	if (status != HTTP_CB_NEW)
 		return;
 
-	response->status = HTTP_RESP_STD;
-	response->info.connection_close = 1;
-	response->info.content_type = "application/json";
+	response->session_data = NULL;
 
 	if (!request || request->method != HTTP_GET) {
-		response->info.code = 405;
-		response->data = "{\"error\":\"method\"}\n";
-		response->size = strlen(response->data);
+		handle_response_message(response, 405, "bad method", -1, NULL);
 		return;
 	}
 
 	buf = malloc(left);
 	if (!buf) {
-		response->info.code = 500;
-		response->data = "{\"error\":\"oom\"}\n";
-		response->size = strlen(response->data);
+		handle_response_message(response, 500, "no mem", -1, NULL);
 		return;
 	}
 
@@ -412,8 +280,6 @@ void webconsole_cmdlist_handler(enum httpd_uri_handler_status status,
 	len += snprintf(buf + len, left - len, "]");
 	len += snprintf(buf + len, left - len, "}");
 
-	response->info.code = 200;
-	response->data = buf;
-	response->size = strlen(buf);
+	handle_response_message(response, 200, buf, -1, "application/json");
 	response->session_data = buf;
 }
