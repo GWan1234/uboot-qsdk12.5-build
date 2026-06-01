@@ -17,6 +17,7 @@
 #include <exports.h>
 #include <environment.h>
 #include <poller.h>
+#include <capture.h>
 
 #ifdef CONFIG_HTTPD
 extern void webconsole_putc(const char c);
@@ -496,6 +497,10 @@ void putc(const char c)
 	if (gd && (gd->flags & GD_FLG_RECORD) && gd->console_out.start)
 		membuff_putbyte((struct membuff *)&gd->console_out, c);
 #endif
+#ifdef CONFIG_CALL_FUNC_CAPTURE
+	if (gd && (gd->flags & GD_FLG_CAPTURE))
+		capture_putc(c);
+#endif
 #ifdef CONFIG_HTTPD
 	if (gd && gd->failsafe_capture_out.start)
 		membuff_putbyte((struct membuff *)&gd->failsafe_capture_out, c);
@@ -548,6 +553,10 @@ void puts(const char *s)
 #ifdef CONFIG_CONSOLE_RECORD
 	if (gd && (gd->flags & GD_FLG_RECORD) && gd->console_out.start)
 		membuff_put((struct membuff *)&gd->console_out, s, strlen(s));
+#endif
+#ifdef CONFIG_CALL_FUNC_CAPTURE
+	if (gd && (gd->flags & GD_FLG_CAPTURE))
+		capture_puts(s);
 #endif
 #ifdef CONFIG_HTTPD
 	if (gd && gd->failsafe_capture_out.start)
