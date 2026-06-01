@@ -28,6 +28,7 @@
 #include <part.h>
 #include <u-boot/md5.h>
 #include <failsafe/fw.h>
+#include <capture.h>
 
 #include "webconsole.h"
 
@@ -37,20 +38,9 @@ extern qca_mmc mmc_host;
 extern struct sdhci_host mmc_host;
 #endif
 
-DECLARE_GLOBAL_DATA_PTR;
-
 #define WEBCONSOLE_MAX_CMD_SIZE				256
 #define WEBCONSOLE_RECORD_OUT_SIZE			9999
 #define WEBCONSOLE_UPLOAD_FILE_INFO_SIZE	999
-
-struct webconsole_buffer {
-	char *buf;
-	size_t buf_size;
-	size_t pos;
-};
-
-static bool webconsole_record_on = false;
-static struct webconsole_buffer webconsole_out;
 
 static void handle_response_message(struct httpd_response *response,
     int code, const char *data, int data_size, const char *content_type)
@@ -63,76 +53,39 @@ static void handle_response_message(struct httpd_response *response,
 	response->info.content_type = content_type ? content_type : "text/plain";
 }
 
-void webconsole_putc(const char c)
+void webconsole_free_session_data(struct httpd_response *response)
 {
-	struct webconsole_buffer *p = &webconsole_out;
-
-	if (!webconsole_record_on || p->buf == NULL)
-		return;
-
-	if (p->pos < p->buf_size - 1) {
-		p->buf[p->pos++] = c;
-		p->buf[p->pos] = '\0';
+	if (response->session_data) {
+		free(response->session_data);
+		response->session_data = NULL;
 	}
 }
 
-void webconsole_puts(const char *s)
+static int webconsole_run_command(void *cmd)
 {
-	struct webconsole_buffer *p = &webconsole_out;
-	size_t s_len, avail_len, cpy_len;
+	printf("\nIPQ# %s\n", (const char *)cmd);
 
-	if (!webconsole_record_on || p->buf == NULL)
-		return;
-
-	if (p->pos < p->buf_size - 1) {
-		s_len = strlen(s);
-		avail_len = p->buf_size - p->pos - 1;
-		cpy_len = min(s_len, avail_len);
-
-		memcpy(p->buf + p->pos, s, cpy_len);
-		p->pos += cpy_len;
-		p->buf[p->pos] = '\0';
-	}
-}
-
-int webconsole_record_init(size_t buf_size)
-{
-	struct webconsole_buffer *p = &webconsole_out;
-
-	p->buf = malloc(buf_size);
-	if (p->buf == NULL)
-		return -ENOMEM;
-
-	p->buf[0] = '\0';
-	p->buf_size = buf_size;
-	p->pos = 0;
-
-	return 0;
-}
-
-void webconsole_free_buffer(void *buf)
-{
-	if (buf) {
-		free(buf);
-		buf = NULL;
-	}
+	return run_command((const char *)cmd, 0);
 }
 
 void webconsole_exec_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response)
 {
-	struct webconsole_buffer *p = &webconsole_out;
 	struct httpd_form_value *raw_cmd;
 	char cmd[WEBCONSOLE_MAX_CMD_SIZE + 1];
+	char *buf;
+	size_t len = 0;
 
 	if (status == HTTP_CB_CLOSED) {
-		webconsole_free_buffer(webconsole_out.buf);
+		webconsole_free_session_data(response);
 		return;
 	}
 
 	if (status != HTTP_CB_NEW)
 		return;
+
+	response->session_data = NULL;
 
 	if (!request || request->method != HTTP_POST) {
 		handle_response_message(response, 405, "bad method", -1, NULL);
@@ -148,42 +101,69 @@ void webconsole_exec_handler(enum httpd_uri_handler_status status,
 	memset(cmd, 0, sizeof(cmd));
 	memcpy(cmd, raw_cmd->data, min_t(size_t, WEBCONSOLE_MAX_CMD_SIZE, raw_cmd->size));
 
-	if (webconsole_record_init(WEBCONSOLE_RECORD_OUT_SIZE)) {
+	buf = malloc(WEBCONSOLE_RECORD_OUT_SIZE);
+	if (!buf) {
 		handle_response_message(response, 500, "no mem", -1, NULL);
 		return;
 	}
 
-	webconsole_record_on = true;
+	call_func_capture(webconsole_run_command, cmd,
+			buf, WEBCONSOLE_RECORD_OUT_SIZE, &len);
 
-	printf("\nIPQ# %s\n", cmd);
+	handle_response_message(response, 200, buf, len, NULL);
+	response->session_data = buf;
+}
 
-	run_command(cmd, 0);
+static int print_file_info(void *arg)
+{
+	struct httpd_form_value *file;
+	unsigned char md5_sum[16];
+	const char *separator;
+	int fw_type;
 
-	webconsole_record_on = false;
+	file = arg;
+	fw_type = check_fw_type((const void *)file->data);
+	md5((unsigned char *)file->data, file->size, md5_sum);
 
-	handle_response_message(response, 200, p->buf, p->pos, NULL);
+	separator = "\n=================================="
+				"=========================================\n";
+
+	puts(separator);
+	printf(" [FILE] %s\n", file->filename);
+	printf(" [TYPE] %s\n", fw_type_to_string(fw_type));
+	printf(" [ADDR] 0x%lx\n", (ulong)file->data);
+
+	printf(" [SIZE] 0x%lx (", (ulong)file->size);
+	print_size(file->size, ")\n");
+
+	puts(" [ MD5] ");
+	for (int i = 0; i < 16; i++)
+		printf("%02x", md5_sum[i] & 0xFF);
+	puts(separator);
+
+	return 0;
 }
 
 void webconsole_upload_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response)
 {
-	struct webconsole_buffer *p = &webconsole_out;
 	struct httpd_form_value *file;
 	block_dev_desc_t *mmc_dev;
 	detected_flash_device_t *dfd = &detected_flash_device;
 	ulong size_blocks;
-	unsigned char md5_sum[16];
-	const char *separator;
-	int ret, fw_type;
+	char *buf;
+	size_t len = 0;
 
 	if (status == HTTP_CB_CLOSED) {
-		webconsole_free_buffer(webconsole_out.buf);
+		webconsole_free_session_data(response);
 		return;
 	}
 
 	if (status != HTTP_CB_NEW)
 		return;
+
+	response->session_data = NULL;
 
 	file = httpd_request_find_value(request, "file");
 	if (!file || !file->data) {
@@ -202,32 +182,12 @@ void webconsole_upload_handler(enum httpd_uri_handler_status status,
         }
     }
 
-	fw_type = check_fw_type((const void *)file->data);
-	md5((unsigned char *)file->data, file->size, md5_sum);
-
-	ret = webconsole_record_init(WEBCONSOLE_UPLOAD_FILE_INFO_SIZE);
-
-	if (!ret)
-		webconsole_record_on = true;
-
-	separator = "\n===========================================================================\n";
-
-	puts(separator);
-	printf(" [FILE] %s\n", file->filename);
-	printf(" [TYPE] %s\n", fw_type_to_string(fw_type));
-	printf(" [ADDR] 0x%lx\n", (ulong)file->data);
-
-	printf(" [SIZE] 0x%lx (", (ulong)file->size);
-	print_size(file->size, ")\n");
-
-	puts(" [ MD5] ");
-	for (int i = 0; i < 16; i++)
-		printf("%02x", md5_sum[i] & 0xFF);
-	puts(separator);
-
-	if (!ret) {
-		webconsole_record_on = false;
-		handle_response_message(response, 200, p->buf, p->pos, NULL);
+	buf = malloc(WEBCONSOLE_UPLOAD_FILE_INFO_SIZE);
+	if (buf) {
+		call_func_capture(print_file_info, file,
+			buf, WEBCONSOLE_UPLOAD_FILE_INFO_SIZE, &len);
+		handle_response_message(response, 200, buf, len, NULL);
+		response->session_data = buf;
 	} else {
 		handle_response_message(response, 200,
 			"\n============================\n"
@@ -247,7 +207,7 @@ void webconsole_cmdlist_handler(enum httpd_uri_handler_status status,
 	char esc_cmd_usage[512];
 
 	if (status == HTTP_CB_CLOSED) {
-		webconsole_free_buffer(response->session_data);
+		webconsole_free_session_data(response);
 		return;
 	}
 
