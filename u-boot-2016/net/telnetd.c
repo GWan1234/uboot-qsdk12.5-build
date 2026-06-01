@@ -15,18 +15,12 @@
 
 #include <common.h>
 #include <command.h>
-#include <console.h>
 #include <errno.h>
 #include <malloc.h>
-#include <membuff.h>
-#include <net.h>
 #include <net/tcp.h>
 #include <net/telnetd.h>
 #include <version.h>
-#include <vsprintf.h>
-#include <asm/global_data.h>
-
-DECLARE_GLOBAL_DATA_PTR;
+#include <capture.h>
 
 /* ------------------------------------------------------------------
  * Telnet protocol constants
@@ -182,23 +176,6 @@ static const char *telnetd_get_prompt(void)
 #endif
 }
 
-static int telnetd_ensure_recording(void)
-{
-	int ret;
-
-	if (!gd)
-		return -ENODEV;
-
-	if (!gd->console_out.start) {
-		ret = console_record_init();
-		if (ret)
-			return ret;
-	}
-
-	gd->flags |= GD_FLG_RECORD;
-	return 0;
-}
-
 static char *telnetd_normalize_output(const char *src, size_t len, size_t *out_len)
 {
 	char *dst;
@@ -320,101 +297,93 @@ static u32 telnetd_iac_skip(const char *buf, u32 buflen)
  * Command execution
  * ------------------------------------------------------------------ */
 
+struct telnetd_custom_arg {
+	const char *cmd;
+	const char *prompt;
+};
+
+static int telnetd_run_command(void *arg)
+{
+	struct telnetd_custom_arg *p = arg;
+	int ret;
+
+	/* Run the U-Boot command */
+	ret = run_command(p->cmd, 0);
+
+	/* Print a fresh prompt after the command's output */
+	if (p->prompt[0] != '\n')
+		putc('\n');
+
+	puts(p->prompt);
+
+	return ret;
+}
+
+static void telnetd_send_prompt(struct tcp_cb_data *cbd,
+		struct telnetd_pdata *pdata, const char *prompt)
+{
+	size_t plen = strlen(prompt);
+	char *p = malloc(plen + 3);
+
+	if (p) {
+		p[0] = '\r';
+		p[1] = '\n';
+		memcpy(p + 2, prompt, plen);
+		p[2 + plen] = '\0';
+		telnetd_send_or_queue(cbd, pdata, p, plen + 2);
+	}
+}
+
 static void telnetd_execute(struct tcp_cb_data *cbd,
 			    const char *cmd)
 {
 	struct telnetd_pdata *pdata = cbd->pdata;
+	struct telnetd_custom_arg custom_arg;
 	const char *prompt = telnetd_get_prompt();
-	char *outbuf;
-	int avail;
-	struct membuff saved_console_out;
-	struct membuff telnet_console_out;
-	char *raw_out = NULL;
-	bool use_private_console_out = false;
+	char *raw_out, *outbuf;
+	size_t len = 0;
 
 	/* Empty command -> just re-print the prompt */
 	if (!cmd[0]) {
-		size_t plen = strlen(prompt);
-		char *p = malloc(plen + 3);
-
-		if (p) {
-			p[0] = '\r';
-			p[1] = '\n';
-			memcpy(p + 2, prompt, plen);
-			p[2 + plen] = '\0';
-			telnetd_send_or_queue(cbd, pdata, p, plen + 2);
-		}
+		telnetd_send_prompt(cbd, pdata, prompt);
 		return;
 	}
 
-	/* Ensure console output is being recorded */
-	if (telnetd_ensure_recording()) {
-		outbuf = malloc(64);
+	raw_out = malloc(TELNETD_OUTBUF_SIZE);
+	if (!raw_out) {
+		outbuf = malloc(88);
 		if (outbuf) {
-			snprintf(outbuf, 64,
-				 "Error: console recording unavailable\r\n");
+			snprintf(outbuf, 88,
+				"Error: failed to allocate %u bytes for capture buffer\r\n",
+				TELNETD_OUTBUF_SIZE);
 			telnetd_send_or_queue(cbd, pdata, outbuf, strlen(outbuf));
 		}
 		return;
 	}
 
-	saved_console_out = gd->console_out;
-	if (!membuff_new((struct membuff *)&telnet_console_out, TELNETD_OUTBUF_SIZE)) {
-		gd->console_out = telnet_console_out;
-		use_private_console_out = true;
-	}
+	custom_arg.cmd = cmd;
+	custom_arg.prompt = prompt;
 
-	/* Reset record so we only capture output from this command */
-	console_record_reset();
+	call_func_capture(telnetd_run_command, &custom_arg,
+			raw_out, TELNETD_OUTBUF_SIZE, &len);
 
-	/* Run the U-Boot command */
-	run_command(cmd, 0);
-
-	/* Print a fresh prompt after the command's output */
-	if (prompt[0] != '\n')
-		printf("\n%s", prompt);
-	else
-		printf("%s", prompt);
-
-	/* Read captured console output and always send response */
-	avail = membuff_avail((struct membuff *)&gd->console_out);
-	if (avail > TELNETD_OUTBUF_SIZE)
-		avail = TELNETD_OUTBUF_SIZE;
-
-	if (avail > 0) {
+	if (len > 0) {
 		size_t norm_len = 0;
-		int got;
 
-		raw_out = malloc(avail);
-		if (raw_out) {
-			got = membuff_get((struct membuff *)&gd->console_out, raw_out, avail);
-			outbuf = telnetd_normalize_output(raw_out, got, &norm_len);
-			if (outbuf) {
-				telnetd_send_or_queue(cbd, pdata, outbuf, norm_len);
-			} else {
-				telnetd_send_or_queue(cbd, pdata, raw_out, got);
-				raw_out = NULL;
-			}
+		outbuf = telnetd_normalize_output(raw_out, len, &norm_len);
+		if (outbuf) {
+			telnetd_send_or_queue(cbd, pdata, outbuf, norm_len);
+		} else {
+			telnetd_send_or_queue(cbd, pdata, raw_out, len);
+			raw_out = NULL;
 		}
 	} else {
 		/* No output: send prompt to indicate command completed */
-		size_t plen = strlen(prompt);
-		outbuf = malloc(plen + 3);
-		if (outbuf) {
-			outbuf[0] = '\r';
-			outbuf[1] = '\n';
-			memcpy(outbuf + 2, prompt, plen);
-			outbuf[2 + plen] = '\0';
-			telnetd_send_or_queue(cbd, pdata, outbuf, plen + 2);
-		}
+		telnetd_send_prompt(cbd, pdata, prompt);
 	}
 
-	if (use_private_console_out) {
-		membuff_dispose((struct membuff *)&gd->console_out);
-		gd->console_out = saved_console_out;
-	}
-
-	free(raw_out);
+	if (raw_out)
+		free(raw_out);
 }
 
 /* ------------------------------------------------------------------
