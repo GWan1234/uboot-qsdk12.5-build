@@ -39,7 +39,7 @@ extern struct sdhci_host mmc_host;
 #endif
 
 #define WEBCONSOLE_MAX_CMD_SIZE				256
-#define WEBCONSOLE_RECORD_OUT_SIZE			9999
+#define WEBCONSOLE_RECORD_OUT_SIZE			16666
 #define WEBCONSOLE_UPLOAD_FILE_INFO_SIZE	999
 
 static void handle_response_message(struct httpd_response *response,
@@ -63,8 +63,6 @@ void webconsole_free_session_data(struct httpd_response *response)
 
 static int webconsole_run_command(void *cmd)
 {
-	printf("\nIPQ# %s\n", (const char *)cmd);
-
 	return run_command((const char *)cmd, 0);
 }
 
@@ -106,6 +104,8 @@ void webconsole_exec_handler(enum httpd_uri_handler_status status,
 		handle_response_message(response, 500, "no mem", -1, NULL);
 		return;
 	}
+
+	printf("\nIPQ# %s\n", cmd);
 
 	call_func_capture(webconsole_run_command, cmd,
 			buf, WEBCONSOLE_RECORD_OUT_SIZE, &len);

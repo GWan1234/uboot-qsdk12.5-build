@@ -3340,6 +3340,7 @@ const consoleManager = (() => {
         currentMatch: null,
         isCommandLoaded: false,
         loadingCommands: false,
+        fileInfoTimeout: null,
         forbiddenCommands: new Map([
             ['bootp', {
                 reasonKey: 'console.cmd.forbid.reason.common'
@@ -3367,11 +3368,12 @@ const consoleManager = (() => {
         if (elements) return elements;
 
         elements = {
-            output: document.getElementById("console_out"),
-            cmd: document.getElementById("console_cmd"),
-            status: document.getElementById("console_status"),
-            fileInfo: document.getElementById("console_file_info"),
-            fileProgress: document.getElementById("console_file_progress"),
+            output: document.getElementById("terminal_output"),
+            status: document.getElementById("terminal_status"),
+            cmd: document.getElementById("terminal_cmd"),
+            fileInfo: document.getElementById("terminal_file_info"),
+            fileMessage: document.getElementById("terminal_file_message"),
+            fileProgress: document.getElementById("terminal_file_progress"),
             progressCircle: document.getElementById("bar-circle-mini"),
             suggestionsBox: document.getElementById("cmd_suggestions"),
             suggestionsList: document.getElementById("suggestions_list")
@@ -3381,16 +3383,17 @@ const consoleManager = (() => {
     }
 
     /**
-     * 设置状态提示
+     * 设置状态栏文本
      */
     function setStatus(text, isError) {
         const el = getElements().status;
         if (el) {
-            el.textContent = text || "";
+            el.textContent = text || "Ready";
             if (isError) {
-                el.style.color = "var(--danger)";
+                el.classList.add('error');
+                el.classList.remove('warning');
             } else {
-                el.style.color = "";
+                el.classList.remove('error', 'warning');
             }
         }
     }
@@ -3399,18 +3402,41 @@ const consoleManager = (() => {
      * 显示文件信息
      */
     function showFileInfo(text, isSuccess) {
-        const el = getElements().fileInfo;
-        if (el) {
-            el.textContent = text || "";
-            el.style.display = text ? "block" : "none";
-            if (isSuccess) {
-                el.style.color = "var(--primary)";
+        const els = getElements();
+
+        // 清除之前的自动隐藏定时器
+        if (state.fileInfoTimeout) {
+            clearTimeout(state.fileInfoTimeout);
+            state.fileInfoTimeout = null;
+        }
+
+        if (!text) {
+            els.fileInfo.classList.remove('show');
+            return;
+        }
+
+        // 显示文件信息区域
+        els.fileInfo.classList.add('show');
+
+        // 设置消息内容和样式
+        if (els.fileMessage) {
+            els.fileMessage.textContent = text;
+            if (isSuccess === true) {
+                els.fileMessage.classList.add('success');
+                els.fileMessage.classList.remove('error');
             } else if (isSuccess === false) {
-                el.style.color = "var(--danger)";
+                els.fileMessage.classList.add('error');
+                els.fileMessage.classList.remove('success');
             } else {
-                el.style.color = "";
+                els.fileMessage.classList.remove('success', 'error');
             }
         }
+
+        // 2秒后自动隐藏
+        state.fileInfoTimeout = setTimeout(() => {
+            els.fileInfo.classList.remove('show');
+            state.fileInfoTimeout = null;
+        }, 2000);
     }
 
     /**
@@ -3491,7 +3517,7 @@ const consoleManager = (() => {
     function highlightMatch(text, query) {
         if (!query || query.length === 0) return text;
 
-        const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+        const regex = new RegExp(`(${escapeRegex(query)})`);
         return text.replace(regex, match => `<span class="suggestion-highlight">${escapeHtml(match)}</span>`);
     }
 
@@ -3528,20 +3554,26 @@ const consoleManager = (() => {
     }
 
     /**
-     * 从输入中提取命令名（忽略前导空格，只取第一个单词）
-     * @param {string} input - 用户输入
-     * @returns {string} 提取的命令名（小写），如果没有命令则返回空字符串
+     * 从输入中提取命令名（忽略前导空格，只取第一个单词）和参数
+     * @param {string} rawInput - 原始用户输入
+     * @returns {Object} 提取的命令名（小写）和参数
      */
-    function extractCommandName(input) {
-        if (!input) return "";
+    function extractCommandAndArgument(rawInput) {
+        let rawCommand = "", rawArgument = "";
 
         // 去除前导空格
-        const trimmed = input.trimStart();
-        if (trimmed.length === 0) return "";
+        const trimmedInput = rawInput ? rawInput.trimStart() : "";
+        if (trimmedInput.length !== 0) {
+            // 提取第一个单词（命令名），遇到空格或换行停止
+            const match = trimmedInput.match(/^[^\s]+/);
+            rawCommand = match ? match[0].toLowerCase() : "";
+            rawArgument = trimmedInput.substring(rawCommand.length);
+        }
 
-        // 提取第一个单词（命令名），遇到空格或换行停止
-        const match = trimmed.match(/^[^\s]+/);
-        return match ? match[0].toLowerCase() : "";
+        return {
+            rawCommand: rawCommand,
+            rawArgument: rawArgument
+        };
     }
 
     /**
@@ -3551,25 +3583,19 @@ const consoleManager = (() => {
      */
     function filterCommands(input) {
         // 提取命令名（忽略前导空格和参数）
-        const commandName = extractCommandName(input);
+        const { rawCommand } = extractCommandAndArgument(input);
 
         // 如果命令名为空（输入为空或只有空格），返回空数组
-        if (!commandName || commandName.length === 0) {
-            return { matches: [], exactMatch: null, hasForbidden: false };
+        if (!rawCommand || rawCommand.length === 0) {
+            return { matches: [], exactMatch: null };
         }
 
-        // 前缀匹配和包含匹配
         const matches = state.commands.filter(cmd => {
             const cmdName = cmd.name.toLowerCase();
-            // 前缀匹配优先
-            if (cmdName.startsWith(commandName)) {
+            // 前缀匹配
+            if (cmdName.startsWith(rawCommand)) {
                 return true;
             }
-            // TODO: 返回某个匹配是前缀匹配还是包含匹配
-            // 包含匹配（作为后备）
-            // if (cmdName.includes(commandName)) {
-            //     return true;
-            // }
             return false;
         }).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -3578,42 +3604,18 @@ const consoleManager = (() => {
 
         // 检查是否有精确匹配
         let exactMatch = null;
-        let exactMatchIsForbidden = false;
-        if (state.commandNames.has(commandName)) {
-            exactMatch = state.commandNames.get(commandName);
-            exactMatchIsForbidden = isForbiddenCommand(commandName) !== null;
+        if (state.commandNames.has(rawCommand)) {
+            exactMatch = state.commandNames.get(rawCommand);
         }
 
-        // 判断是否有其他匹配（不包括精确匹配本身）
-        const hasOtherMatches = limitedMatches.some(cmd => cmd.name.toLowerCase() !== commandName);
-
-        // 判断需要隐藏提示框的条件（同时满足）：
-        // 1. 有精确匹配
-        // 2. 没有其他匹配
-        // 3. 精确匹配的命令不是禁止命令（如果是禁止命令，即使只有它也不隐藏）
-        const shouldHide = exactMatch !== null && !hasOtherMatches && !exactMatchIsForbidden;
-
-        // 检查匹配结果中是否包含禁止命令
-        const hasForbidden = limitedMatches.some(cmd => state.forbiddenCommands.has(cmd.name.toLowerCase()));
+        // 检查是否有非精确匹配
+        const hasInexactMatches = limitedMatches.some(cmd => cmd.name.toLowerCase() !== rawCommand);
 
         return {
             matches: limitedMatches,
             exactMatch: exactMatch,
-            exactMatchIsForbidden: exactMatchIsForbidden,
-            shouldHide: shouldHide,
-            hasForbidden: hasForbidden
+            hasInexactMatches: hasInexactMatches
         };
-    }
-
-    /**
-     * 检查命令是否被禁止
-     * @param {string} commandName - 命令名称
-     * @returns {Object|null} 禁止信息，如果不被禁止则返回 null
-     */
-    function isForbiddenCommand(commandName) {
-        if (!commandName) return null;
-        const lowerName = commandName.toLowerCase();
-        return state.forbiddenCommands.get(lowerName) || null;
     }
 
     /**
@@ -3626,21 +3628,23 @@ const consoleManager = (() => {
         if (!els.suggestionsBox || !els.suggestionsList) return;
 
         // 提取命令名用于显示（去除前导空格）
-        const commandName = extractCommandName(input);
+        const { rawCommand, rawArgument } = extractCommandAndArgument(input);
 
         // 清除输入框的错误样式
         inputEl.classList.remove('input-error');
 
         // 如果输入为空（去除前导空格后），隐藏提示框
-        if (!commandName || commandName.length === 0) {
+        if (!rawCommand || rawCommand.length === 0) {
             hideSuggestions();
             return;
         }
 
-        const { matches, exactMatch, shouldHide, hasForbidden } = filterResult;
+        const { matches, exactMatch, hasInexactMatches } = filterResult;
 
-        // 如果需要隐藏（只有精确匹配、无其他匹配、且精确匹配不是禁止命令），隐藏提示框
-        if (shouldHide) {
+        // 判断需要隐藏提示框的条件（同时满足）：
+        // 1. 有精确匹配
+        // 2. 无非精确匹配或命令后有其他内容（即参数，空格也算）
+        if (exactMatch && (!hasInexactMatches || rawArgument)) {
             hideSuggestions();
             return;
         }
@@ -3650,44 +3654,36 @@ const consoleManager = (() => {
             els.suggestionsBox.className = "cmd-suggestions no-match";
             els.suggestionsList.innerHTML = `
                 <div class="no-match-message">
-                    ${escapeHtml(commandName) + ": " + t("console.cmd.nomatch")}
+                    ${escapeHtml(rawCommand) + ": " + t("console.cmd.nomatch")}
                 </div>
             `;
             els.suggestionsBox.style.display = "block";
 
-            // 输入框变红
+            // 输入框中的文字变红
             inputEl.classList.add('input-error');
             return;
         }
 
         // 有匹配命令（包括精确匹配但还有其他选项的情况）
         if (matches.length > 0) {
-            // 如果包含禁止命令，添加特殊类名
-            els.suggestionsBox.className = hasForbidden ? "cmd-suggestions has-danger" : "cmd-suggestions normal";
+            els.suggestionsBox.className = "cmd-suggestions";
 
             let html = '';
             matches.forEach(match => {
-                const isExact = exactMatch && match.name.toLowerCase() === commandName;
-                const isForbidden = isForbiddenCommand(match.name);
+                const isExact = exactMatch && match.name.toLowerCase() === rawCommand;
                 const displayDesc = getCommandDescription(match);
-                const highlightedName = highlightMatch(escapeHtml(match.name), commandName);
+                const highlightedName = highlightMatch(escapeHtml(match.name), rawCommand);
 
-                // 根据是否为禁止命令选择样式类
                 let itemClass = 'suggestion-item';
-                if (isForbidden) {
-                    itemClass += ' suggestion-danger';
-                }
-                if (isExact && !isForbidden) {
+                if (isExact) {
                     itemClass += ' suggestion-exact';
                 }
 
                 html += `
-                    <div class="${itemClass}" data-cmd="${escapeHtml(match.name)}" data-is-forbidden="${isForbidden ? 'true' : 'false'}">
+                    <div class="${itemClass}" data-cmd="${escapeHtml(match.name)}">
                         <span class="suggestion-cmd">
-                            ${isForbidden ? '<span class="suggestion-danger-icon">⛔</span>' : ''}
-                            ${highlightedName}
-                            ${isForbidden ? `<span class="suggestion-danger-badge">${t('console.cmd.forbid')}</span>` : ''}
-                            ${isExact && !isForbidden ? '<span class="suggestion-exact-badge">✓</span>' : ''}
+                            <span class="suggestion-cmd-name">${highlightedName}</span>
+                            ${isExact ? '<span class="suggestion-exact-badge">✓</span>' : ''}
                         </span>
                         <span class="suggestion-desc">${escapeHtml(displayDesc)}</span>
                     </div>
@@ -3701,24 +3697,14 @@ const consoleManager = (() => {
             items.forEach(item => {
                 item.addEventListener('click', (e) => {
                     e.stopPropagation();
+
                     const cmd = item.getAttribute('data-cmd');
-                    const isForbidden = item.getAttribute('data-is-forbidden') === 'true';
-
-                    if (isForbidden) {
-                        // 禁止命令：显示警告并阻止执行
-                        const forbiddenInfo = isForbiddenCommand(cmd);
-                        showForbiddenWarning(cmd, forbiddenInfo);
-                        return;
-                    }
-
                     if (cmd && inputEl) {
                         // 保留用户已输入的命令后的参数部分
-                        const trimmedInput = inputEl.value.trimStart();
-                        const currentCommand = extractCommandName(trimmedInput);
-                        const afterCommand = trimmedInput.substring(currentCommand.length);
+                        const { rawArgument } = extractCommandAndArgument(inputEl.value);
 
                         // 替换命令名，保留参数
-                        inputEl.value = cmd + afterCommand;
+                        inputEl.value = cmd + rawArgument;
                         inputEl.focus();
                         hideSuggestions();
                         inputEl.classList.remove('input-error');
@@ -3730,21 +3716,6 @@ const consoleManager = (() => {
 
         // 默认情况（不应该到达这里）
         hideSuggestions();
-    }
-
-    /**
-     * 显示禁止命令警告对话框
-     * @param {string} commandName - 命令名称
-     * @param {Object} forbiddenInfo - 禁止信息
-     */
-    function showForbiddenWarning(commandName, forbiddenInfo) {
-        let message;
-
-        message = commandName + ": " + t("console.cmd.forbid.hint");
-        if (forbiddenInfo.reasonKey) message += "\n\n" + t(forbiddenInfo.reasonKey);
-        if (forbiddenInfo.altKey) message += "\n\n" + t(forbiddenInfo.altKey);
-
-        alert(message);
     }
 
     /**
@@ -3814,24 +3785,18 @@ const consoleManager = (() => {
             e.preventDefault();
 
             const rawInput = inputEl.value;
-            const commandName = extractCommandName(rawInput);
+            const { rawCommand, rawArgument } = extractCommandAndArgument(rawInput);
 
-            if (!commandName || commandName.length === 0) return;
+            if (!rawCommand || rawCommand.length === 0) return;
 
             // 查找匹配的命令
             const filterResult = filterCommands(rawInput);
-            const { matches, exactMatch, exactMatchIsForbidden } = filterResult;
+            const { matches } = filterResult;
 
             if (matches.length === 1) {
-                // 只有一个匹配且是禁止命令，直接返回
-                const isForbidden = isForbiddenCommand(matches[0].name);
-                if (isForbidden) return;
-
-                // 只有一个匹配且不是禁止命令，自动补全
-                const trimmedInput = rawInput.trimStart();
-                const afterCommand = trimmedInput.substring(commandName.length);
+                // 只有一个匹配，自动补全
                 hideSuggestions();
-                inputEl.value = matches[0].name + afterCommand;
+                inputEl.value = matches[0].name + rawArgument;
                 inputEl.classList.remove('input-error');
             } else if (matches.length > 0) {
                 // 多个匹配，显示提示框
@@ -3887,6 +3852,15 @@ const consoleManager = (() => {
     }
 
     /**
+     * 显示欢迎信息
+     */
+    function showWelcomeMessage() {
+        addTerminalLine('system', 'Welcome to U-Boot Web Terminal');
+        addTerminalLine('system', 'Type "help" to see available commands');
+        addTerminalLine('separator', '');
+    }
+
+    /**
      * 加载持久化的输出
      */
     function loadPersistedOutput() {
@@ -3896,9 +3870,11 @@ const consoleManager = (() => {
         try {
             const saved = sessionStorage.getItem(state.persistKey);
             if (saved) {
-                outputEl.textContent = saved;
+                outputEl.innerHTML = saved;
                 // 滚动到底部
                 outputEl.scrollTop = outputEl.scrollHeight;
+            } else {
+                showWelcomeMessage();
             }
         } catch (e) {
             console.warn("Failed to load persisted output:", e);
@@ -3913,7 +3889,7 @@ const consoleManager = (() => {
         if (!outputEl) return;
 
         try {
-            let content = outputEl.textContent || "";
+            let content = outputEl.innerHTML;
             if (content.length > state.persistMax) {
                 content = content.slice(content.length - state.persistMax);
             }
@@ -3924,23 +3900,37 @@ const consoleManager = (() => {
     }
 
     /**
-     * 追加文本到输出区域
+     * 添加一行到终端输出
+     * @param {string} type - 行类型: 'command', 'output', 'error', 'system'
+     * @param {string} content - 内容
+     * @param {string} commandPrompt - 命令行的提示符（仅当 type='command' 时使用）
      */
-    function appendText(text) {
+    function addTerminalLine(type, content, commandPrompt = '$') {
         const outputEl = getElements().output;
-        if (!outputEl || !text) return;
+        if (!outputEl) return;
 
-        outputEl.textContent += text;
+        const lineDiv = document.createElement('div');
+        lineDiv.className = `terminal-line ${type}`;
 
-        // 限制输出长度
-        if (outputEl.textContent.length > state.persistMax) {
-            outputEl.textContent = outputEl.textContent.slice(
-                outputEl.textContent.length - state.persistMax
-            );
+        if (type === 'command') {
+            const promptSpan = document.createElement('span');
+            promptSpan.className = 'line-prompt';
+            promptSpan.textContent = commandPrompt;
+            const contentSpan = document.createElement('span');
+            contentSpan.className = 'line-content';
+            contentSpan.textContent = content;
+            lineDiv.appendChild(promptSpan);
+            lineDiv.appendChild(contentSpan);
+        } else {
+            const contentSpan = document.createElement('span');
+            contentSpan.className = 'line-content';
+            contentSpan.textContent = content;
+            lineDiv.appendChild(contentSpan);
         }
 
-        savePersistedOutput();
+        outputEl.appendChild(lineDiv);
         outputEl.scrollTop = outputEl.scrollHeight;
+        savePersistedOutput();
     }
 
     /**
@@ -3953,41 +3943,69 @@ const consoleManager = (() => {
     }
 
     /**
-     * 发送命令
+     * 检查命令是否被禁止
+     * @param {string} commandName - 命令名称
+     * @returns {Object|null} 禁止信息，如果不被禁止则返回 null
      */
-    async function send() {
-        const cmdEl = getElements().cmd;
+    function isForbiddenCommand(commandName) {
+        if (!commandName) return null;
+        const lowerName = commandName.toLowerCase();
+        return state.forbiddenCommands.get(lowerName) || null;
+    }
 
-        if (!cmdEl || !cmdEl.value.trim()) return;
-
-        const line = cmdEl.value.trim();
-
-        // 检查命令是否被禁止
-        const commandName = extractCommandName(line);
+    /**
+     * 检查并处理命令
+     * @param {string} line - 输入的命令行
+     * @returns {boolean} - 是否允许执行
+     */
+    function validateCommand(line) {
+        const { rawCommand } = extractCommandAndArgument(line);
         const { matches, exactMatch } = filterCommands(line);
-        let fullCommandName;
+        let fullCommandName = "";
 
         if (exactMatch) {
             // 命令有精确匹配
-            fullCommandName = commandName;
+            fullCommandName = rawCommand;
         } else if (matches.length === 1) {
             // 命令没有精确匹配，但有唯一前缀匹配
             fullCommandName = matches[0].name;
         } else {
             // 命令没有精确匹配，且无前缀匹配或有不止一个前缀匹配
-            alert(commandName + ": " + t("console.cmd.unknown"));
-            return;
+            addTerminalLine('error', `${rawCommand}: ${t("console.cmd.unknown")}`);
+            return false;
         }
 
         const forbiddenInfo = isForbiddenCommand(fullCommandName);
-
         if (forbiddenInfo) {
-            // 显示禁止命令警告，不发送命令
-            showForbiddenWarning(fullCommandName, forbiddenInfo);
-            // 警告关闭后，恢复焦点到输入框
-            cmdEl.focus();
+            addTerminalLine('error', `${fullCommandName}: ${t("console.cmd.forbid.hint")}`);
+            if (forbiddenInfo.reasonKey) {
+                addTerminalLine('error', t(forbiddenInfo.reasonKey));
+            }
+            if (forbiddenInfo.altKey) {
+                addTerminalLine('system', t(forbiddenInfo.altKey));
+            }
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * 发送命令并执行
+     */
+    async function send() {
+        const cmdEl = getElements().cmd;
+
+        if (!cmdEl || !cmdEl.value.trim()) {
+            addTerminalLine('command', '');
+            cmdEl.value = "";
             return;
         }
+
+        const line = cmdEl.value.trim();
+
+        // 回显命令到终端
+        addTerminalLine('command', line);
 
         cmdEl.value = "";
 
@@ -4000,6 +4018,12 @@ const consoleManager = (() => {
             state.history.length = 50;
         }
         state.histPos = -1;
+
+        // 验证命令
+        if (!validateCommand(line)) {
+            setStatus(t("console.status.ready"));
+            return;
+        }
 
         try {
             const formData = new FormData();
@@ -4015,21 +4039,35 @@ const consoleManager = (() => {
             const text = await response.text();
 
             if (!response.ok) {
-                setStatus(
-                    `${t("console.status.http")} ${response.status}${text ? ": " + text : ""}`,
-                    true
-                );
+                const errorMsg = `${t("console.status.http")} ${response.status}${text ? ": " + text : ""}`;
+                addTerminalLine('error', errorMsg);
+                setStatus(errorMsg, true);
                 return;
             }
 
             if (text && text.trim()) {
-                appendText(text);
+                // 移除末尾的换行符，但保留格式
+                let outputText = text;
+                if (outputText.endsWith('\n')) {
+                    outputText = outputText.slice(0, -1);
+                }
+                // 分割多行输出
+                const lines = outputText.split('\n');
+                for (const lineText of lines) {
+                    if (lineText.trim() !== "" || lines.length === 1) {
+                        addTerminalLine('output', lineText);
+                    } else if (lineText === "") {
+                        addTerminalLine('output', "");
+                    }
+                }
             }
 
             setStatus(t("console.status.done"));
 
         } catch (error) {
-            setStatus(formatError(error), true);
+            const errorMsg = formatError(error);
+            addTerminalLine('error', errorMsg);
+            setStatus(errorMsg, true);
         }
     }
 
@@ -4039,8 +4077,8 @@ const consoleManager = (() => {
     async function clear() {
         const outputEl = getElements().output;
         if (outputEl) {
-            outputEl.textContent = "";
-            state.logBuffer = "";
+            outputEl.innerHTML = "";
+            showWelcomeMessage();
             try {
                 sessionStorage.removeItem(state.persistKey);
             } catch (e) {
@@ -4065,7 +4103,6 @@ const consoleManager = (() => {
             if (!file) return;
 
             showFileInfo(`${t("console.uploading")} ${file.name}`);
-
             showFileProgress(true);
             setFileProgress(0);
 
@@ -4079,6 +4116,7 @@ const consoleManager = (() => {
                     if (event.lengthComputable && event.total > 0) {
                         const percent = parseInt((event.loaded / event.total) * 100);
                         setFileProgress(percent);
+                        showFileInfo(`${t("console.uploading")} ${file.name} (${percent}%)`);
                     }
                 });
 
@@ -4089,21 +4127,14 @@ const consoleManager = (() => {
                         if (xhr.status === 200) {
                             const text = xhr.responseText;
                             if (text) {
-                                appendText(text);
+                                addTerminalLine('output', text);
                             }
-
                             showFileInfo(`✓ ${t("console.upload.success")}`, true);
-                            setStatus(t("console.upload.success"), false);
-
+                            setStatus(t("console.upload.success"));
                         } else {
                             showFileInfo(`✗ ${t("console.status.http")} ${xhr.status}`, false);
                             setStatus(`${t("console.status.http")} ${xhr.status}`, true);
                         }
-
-                        // 5秒后自动清除文件信息
-                        setTimeout(() => {
-                            showFileInfo("");
-                        }, 5000);
                     }
                 };
 
@@ -4114,11 +4145,6 @@ const consoleManager = (() => {
                 showFileProgress(false);
                 showFileInfo(`✗ ${formatError(error)}`, false);
                 setStatus(formatError(error), true);
-
-                // 5秒后自动清除文件信息
-                setTimeout(() => {
-                    showFileInfo("");
-                }, 5000);
             }
         };
 
@@ -5793,19 +5819,16 @@ const I18N = (() => {
             "console.title": "WEB CONSOLE",
             "console.send": "Send",
             "console.clear": "Clear",
-            "console.cmd.forbid": "Forbidden",
             "console.cmd.forbid.hint": "this command has been disabled!",
             "console.cmd.forbid.reason.common": "This command will cause the HTTPD service to exit abnormally. Do not use it in the web terminal!",
             "console.cmd.forbid.alt.tftpb": "Use the upload function provided on this page instead.",
             "console.cmd.nomatch": "no matching command",
             "console.cmd.placeholder": "help; printenv",
-            "console.cmd.suggest": "📝 Suggested command",
             "console.cmd.unknown": "unknown command!",
             "console.status.ready": "Ready",
             "console.status.running": "Running...",
             "console.status.done": "Done",
             "console.status.cleared": "Cleared",
-            "console.status.ret": "Return:",
             "console.status.http": "HTTP error:",
             "console.status.parse": "Parse error",
             "console.status.error": "Error:",
@@ -6110,19 +6133,16 @@ const I18N = (() => {
             "console.title": "网页终端",
             "console.send": "发送",
             "console.clear": "清空",
-            "console.cmd.forbid": "禁止",
             "console.cmd.forbid.hint": "此命令已被禁止执行！",
             "console.cmd.forbid.reason.common": "此命令会导致 HTTPD 服务异常退出，请勿在网页终端中使用！",
             "console.cmd.forbid.alt.tftpb": "请使用本页面提供的上传功能替代。",
             "console.cmd.nomatch": "没有匹配的命令",
             "console.cmd.placeholder": "help; printenv",
-            "console.cmd.suggest": "📝 建议命令",
             "console.cmd.unknown": "未知命令！",
             "console.status.ready": "就绪",
             "console.status.running": "执行中...",
             "console.status.done": "完成",
             "console.status.cleared": "已清空",
-            "console.status.ret": "返回值：",
             "console.status.http": "HTTP 错误：",
             "console.status.parse": "解析失败",
             "console.status.error": "错误：",

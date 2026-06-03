@@ -21,38 +21,30 @@
                 </div>
 
                 <div class="card-main-section">
-                    <div class="card-main-inner">
-                        <div id="console_out" class="console-output"></div>
-
-                        <div class="console-toolbar">
-                            <div class="console-file-area">
-                                <div id="console_file_progress" class="console-file-progress" style="display: none;">
-                                    <div class="bar-circle-mini" id="bar-circle-mini" style="--percent: 0;"></div>
-                                </div>
-                                <div id="console_file_info" class="console-file-info"></div>
-                            </div>
-
-                            <div class="console-status-area">
-                                <div class="console-status" id="console_status"></div>
-                                <div class="console-actions">
-                                    <button type="button" class="button button-sm" onclick="consoleManager.uploadFile()" data-i18n="console.upload"></button>
-                                    <button type="button" class="button button-sm" onclick="consoleManager.clear()" data-i18n="console.clear"></button>
-                                </div>
+                    <div id="terminal" class="terminal-container">
+                        <div id="terminal_output" class="terminal-output"></div>
+                        <div id="terminal_status" class="terminal-status"></div>
+                        <div class="terminal-input-line">
+                            <span class="terminal-prompt">></span>
+                            <span class="terminal-input-wrapper">
+                                <input type="text" id="terminal_cmd" class="terminal-input"
+                                        autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                                        data-i18n-attr="placeholder:console.cmd.placeholder">
+                            </span>
+                            <div class="terminal-actions">
+                                <button type="button" class="terminal-btn" onclick="consoleManager.send()" data-i18n="console.send"></button>
+                                <button type="button" class="terminal-btn" onclick="consoleManager.uploadFile()" data-i18n="console.upload"></button>
+                                <button type="button" class="terminal-btn" onclick="consoleManager.clear()" data-i18n="console.clear"></button>
                             </div>
                         </div>
-
-                        <div class="console-input-row">
-                            <div class="field console-input-field" style="position: relative;">
-                                <div id="cmd_suggestions" class="cmd-suggestions" style="display: none;">
-                                    <div class="suggestions-header" data-i18n="console.cmd.suggest"></div>
-                                    <div id="suggestions_list" class="suggestions-list"></div>
-                                </div>
-                                <input id="console_cmd" class="field-control console-input"
-                                       type="text" autocomplete="off"
-                                       autocapitalize="off" autocorrect="off" spellcheck="false"
-                                       data-i18n-attr="placeholder:console.cmd.placeholder">
+                        <div id="cmd_suggestions" class="cmd-suggestions" style="display: none;">
+                            <div id="suggestions_list" class="suggestions-list"></div>
+                        </div>
+                        <div id="terminal_file_info" class="terminal-file-info">
+                            <div class="terminal-file-progress" id="terminal_file_progress">
+                                <div class="bar-circle-mini" id="bar-circle-mini" style="--percent: 0;"></div>
                             </div>
-                            <button type="button" class="button" onclick="consoleManager.send()" data-i18n="console.send"></button>
+                            <div class="terminal-file-message" id="terminal_file_message"></div>
                         </div>
                     </div>
                 </div>
