@@ -1808,10 +1808,12 @@ html[data-theme="dark"] .env-edit-panel {
     overflow: hidden;
 }
 
-/* 终端输出区域 */
-.terminal-output {
+/* 终端主内容区域（输出 + 输入） */
+.terminal-main {
+    display: flex;
+    flex-direction: column;
     width: 100%;
-    height: 375px;
+    height: 425px;
     min-height: 330px;
     max-height: 530px;
     overflow-y: auto;
@@ -1826,110 +1828,7 @@ html[data-theme="dark"] .env-edit-panel {
     background: var(--terminal-bg);
 }
 
-/* 终端状态栏 */
-.terminal-status {
-    padding: 0.5rem 1rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size: 0.75rem;
-    color: #6a9955;
-    background: var(--terminal-status-bg);
-    border-top: 1px solid var(--terminal-border);
-    text-align: right;
-    letter-spacing: 0.3px;
-}
-
-/* 状态栏错误状态 */
-.terminal-status.error {
-    color: #f48771;
-}
-
-/* 状态栏警告状态 */
-.terminal-status.warning {
-    color: #dcdcaa;
-}
-
-/* 终端输入行 */
-.terminal-input-line {
-    display: flex;
-    align-items: center;
-    padding: 0.75rem 1rem;
-    background: var(--terminal-input-bg);
-    border-top: 1px solid var(--terminal-border);
-    gap: 0.75rem;
-}
-
-/* 终端提示符 */
-.terminal-prompt {
-    color: var(--terminal-prompt);
-    font-weight: 600;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size: 0.85rem;
-    user-select: none;
-    flex-shrink: 0;
-}
-
-/* 终端输入框包装器 */
-.terminal-input-wrapper {
-    flex: 1;
-    position: relative;
-}
-
-/* 终端输入框 */
-.terminal-input {
-    width: 100%;
-    background: transparent;
-    border: none;
-    color: var(--terminal-text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size: 0.85rem;
-    line-height: 1.5;
-    padding: 0;
-    margin: 0;
-    outline: none;
-}
-
-.terminal-input:focus {
-    outline: none;
-}
-
-.terminal-input::placeholder {
-    color: #5a5a5a;
-    font-size: 0.8rem;
-}
-
-/* 终端操作按钮组 */
-.terminal-actions {
-    display: flex;
-    gap: 0.5rem;
-    flex-shrink: 0;
-}
-
-/* 终端按钮样式 */
-.terminal-btn {
-    background: transparent;
-    border: 1px solid #4a4a4a;
-    color: #cccccc;
-    font-size: 0.7rem;
-    padding: 0.3rem 0.8rem;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-family: inherit;
-    font-weight: 500;
-    letter-spacing: 0.5px;
-}
-
-.terminal-btn:hover {
-    background: #3c3c3c;
-    border-color: #6a6a6a;
-    color: #ffffff;
-}
-
-.terminal-btn:active {
-    transform: scale(0.98);
-}
-
-/* 终端输出中的行样式 */
+/* 终端行样式 */
 .terminal-line {
     margin-bottom: 0.25rem;
     display: flex;
@@ -1942,20 +1841,20 @@ html[data-theme="dark"] .env-edit-panel {
 }
 
 .terminal-line.command .line-prompt {
-    color: #4ec9b0;
+    color: var(--terminal-prompt);
     font-weight: 600;
     margin-right: 0.5rem;
     user-select: none;
 }
 
 .terminal-line.command .line-content {
-    color: #d4d4d4;
+    color: var(--terminal-text);
     word-break: break-all;
 }
 
 /* 输出行 */
 .terminal-line.output {
-    color: #cccccc;
+    color: var(--terminal-text);
 }
 
 .terminal-line.output .line-content {
@@ -1981,17 +1880,67 @@ html[data-theme="dark"] .env-edit-panel {
     border-top: 1px solid #3c3c3c;
 }
 
+/* 终端提示符 */
+.terminal-prompt {
+    color: var(--terminal-prompt);
+    font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.85rem;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+/* 终端输入框包装器 */
+.terminal-input-wrapper {
+    flex: 1;
+    position: relative;
+    display: inline-flex;
+}
+
+/* 终端输入框 */
+.terminal-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--terminal-text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    padding: 0;
+    margin: 0;
+    outline: none;
+}
+
+.terminal-input:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.terminal-input::placeholder {
+    color: #5a5a5a;
+    font-size: 0.8rem;
+    opacity: 0.6;
+}
+
+/* 终端底部信息栏容器 */
+.terminal-info-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem 1rem;
+    background: var(--terminal-status-bg);
+    border-top: 1px solid var(--terminal-border);
+    min-height: 2.5rem;
+}
+
 /* 文件信息区域 */
 .terminal-file-info {
     display: none;
-    padding: 0.5rem 1rem;
-    background: var(--terminal-input-bg);
-    border-radius: var(--radius-sm);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size: 0.8rem;
     align-items: center;
     gap: 0.75rem;
-    border: 1px solid var(--terminal-border);
+    flex: 0 1 auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.8rem;
 }
 
 .terminal-file-info.show {
@@ -2006,7 +1955,6 @@ html[data-theme="dark"] .env-edit-panel {
 }
 
 .terminal-file-message {
-    flex: 1;
     color: var(--terminal-text);
     font-size: 0.8rem;
     word-break: break-all;
@@ -2062,9 +2010,72 @@ html[data-theme="dark"] .bar-circle-mini::before {
     );
 }
 
+/* 状态信息 */
+.terminal-status {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.75rem;
+    color: #6a9955;
+    text-align: right;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+/* 状态栏错误状态 */
+.terminal-status.error {
+    color: #f48771;
+}
+
+/* 状态栏警告状态 */
+.terminal-status.warning {
+    color: #dcdcaa;
+}
+
+/* 终端工具栏 */
+.terminal-toolbar {
+    display: flex;
+    justify-content: right;
+    padding: 0.75rem 1rem;
+    background: var(--terminal-input-bg);
+    border-top: 1px solid var(--terminal-border);
+    gap: 0.75rem;
+}
+
+/* 终端操作按钮组 */
+.terminal-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+/* 终端按钮样式 */
+.terminal-btn {
+    background: transparent;
+    border: 1px solid #4a4a4a;
+    color: #cccccc;
+    font-size: 0.7rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.terminal-btn:hover {
+    background: #3c3c3c;
+    border-color: #6a6a6a;
+    color: #ffffff;
+}
+
+.terminal-btn:active {
+    transform: scale(0.98);
+}
+
 /* 移动端适配 */
 @media (max-width: 768px) {
-    .terminal-output {
+    .terminal-main {
         height: 250px;
         min-height: 200px;
         max-height: 350px;
@@ -2072,15 +2083,8 @@ html[data-theme="dark"] .bar-circle-mini::before {
         padding: 0.75rem;
     }
 
-    .terminal-status {
-        padding: 0.4rem 0.75rem;
-        font-size: 0.7rem;
-    }
-
-    .terminal-input-line {
-        padding: 0.6rem 0.75rem;
-        gap: 0.5rem;
-        flex-wrap: wrap;
+    .terminal-line.command .line-prompt {
+        margin-right: 0.5rem;
     }
 
     .terminal-prompt {
@@ -2095,6 +2099,28 @@ html[data-theme="dark"] .bar-circle-mini::before {
         font-size: 0.75rem;
     }
 
+    .terminal-info-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .terminal-file-info {
+        justify-content: flex-start;
+    }
+
+    .bar-circle-mini {
+        --size: 1.3rem;
+        --stroke-width: 2px;
+    }
+
+    .terminal-toolbar {
+        padding: 0.6rem 0.75rem;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
     .terminal-actions {
         width: 100%;
         justify-content: flex-end;
@@ -2104,26 +2130,6 @@ html[data-theme="dark"] .bar-circle-mini::before {
     .terminal-btn {
         padding: 0.25rem 0.6rem;
         font-size: 0.65rem;
-    }
-
-    .terminal-line.command .line-prompt {
-        margin-right: 0.5rem;
-    }
-
-    .terminal-line.output,
-    .terminal-line.error,
-    .terminal-line.system {
-        margin-left: 1rem;
-    }
-
-    .terminal-file-info {
-        padding: 0.4rem 0.75rem;
-        font-size: 0.75rem;
-    }
-
-    .bar-circle-mini {
-        --size: 1.3rem;
-        --stroke-width: 2px;
     }
 }
 

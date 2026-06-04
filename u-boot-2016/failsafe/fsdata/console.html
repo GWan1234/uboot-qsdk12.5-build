@@ -22,29 +22,39 @@
 
                 <div class="card-main-section">
                     <div id="terminal" class="terminal-container">
-                        <div id="terminal_output" class="terminal-output"></div>
-                        <div id="terminal_status" class="terminal-status"></div>
-                        <div class="terminal-input-line">
-                            <span class="terminal-prompt">></span>
-                            <span class="terminal-input-wrapper">
-                                <input type="text" id="terminal_cmd" class="terminal-input"
-                                        autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
-                                        data-i18n-attr="placeholder:console.cmd.placeholder">
-                            </span>
+                        <div id="terminal_main" class="terminal-main">
+                            <div id="terminal_output" class="terminal-output"></div>
+                            <div id="terminal_input_line" class="terminal-line command">
+                                <span class="line-prompt">$</span>
+                                <span class="line-content terminal-input-wrapper">
+                                    <input type="text" id="terminal_input" class="terminal-input"
+                                            autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                                            data-i18n-attr="placeholder:console.cmd.placeholder">
+                                </span>
+                            </div>
+                        </div>
+
+                        <div id="cmd_suggestions" class="cmd-suggestions" style="display: none;">
+                            <div id="suggestions_list" class="suggestions-list"></div>
+                        </div>
+
+                        <div class="terminal-info-bar">
+                            <div id="terminal_file_info" class="terminal-file-info">
+                                <div class="terminal-file-progress" id="terminal_file_progress">
+                                    <div class="bar-circle-mini" id="bar-circle-mini" style="--percent: 0;"></div>
+                                </div>
+                                <div class="terminal-file-message" id="terminal_file_message"></div>
+                            </div>
+                            <div id="terminal_status" class="terminal-status"></div>
+                        </div>
+
+                        <div class="terminal-toolbar">
                             <div class="terminal-actions">
+                                <button type="button" class="terminal-btn" onclick="consoleManager.focusInput()" data-i18n="console.input"></button>
                                 <button type="button" class="terminal-btn" onclick="consoleManager.send()" data-i18n="console.send"></button>
                                 <button type="button" class="terminal-btn" onclick="consoleManager.uploadFile()" data-i18n="console.upload"></button>
                                 <button type="button" class="terminal-btn" onclick="consoleManager.clear()" data-i18n="console.clear"></button>
                             </div>
-                        </div>
-                        <div id="cmd_suggestions" class="cmd-suggestions" style="display: none;">
-                            <div id="suggestions_list" class="suggestions-list"></div>
-                        </div>
-                        <div id="terminal_file_info" class="terminal-file-info">
-                            <div class="terminal-file-progress" id="terminal_file_progress">
-                                <div class="bar-circle-mini" id="bar-circle-mini" style="--percent: 0;"></div>
-                            </div>
-                            <div class="terminal-file-message" id="terminal_file_message"></div>
                         </div>
                     </div>
                 </div>

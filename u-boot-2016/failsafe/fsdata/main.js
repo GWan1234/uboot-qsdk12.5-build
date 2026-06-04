@@ -3368,9 +3368,10 @@ const consoleManager = (() => {
         if (elements) return elements;
 
         elements = {
+            main: document.getElementById("terminal_main"),
             output: document.getElementById("terminal_output"),
+            input: document.getElementById("terminal_input"),
             status: document.getElementById("terminal_status"),
-            cmd: document.getElementById("terminal_cmd"),
             fileInfo: document.getElementById("terminal_file_info"),
             fileMessage: document.getElementById("terminal_file_message"),
             fileProgress: document.getElementById("terminal_file_progress"),
@@ -3623,7 +3624,7 @@ const consoleManager = (() => {
      */
     function showSuggestions(filterResult, input) {
         const els = getElements();
-        const inputEl = els.cmd;
+        const inputEl = els.input;
 
         if (!els.suggestionsBox || !els.suggestionsList) return;
 
@@ -3723,7 +3724,7 @@ const consoleManager = (() => {
      */
     function hideSuggestions() {
         const els = getElements();
-        const inputEl = els.cmd;
+        const inputEl = els.input;
 
         if (els.suggestionsBox) {
             els.suggestionsBox.style.display = "none";
@@ -3748,8 +3749,8 @@ const consoleManager = (() => {
 
         // 设置防抖
         state.debounceTimer = setTimeout(() => {
-            const els = getElements();
-            const rawInput = els.cmd ? els.cmd.value : "";
+            const inputEl = getElements().input;
+            const rawInput = inputEl ? inputEl.value : "";
 
             // 如果命令列表还没加载，先加载
             if (!state.isCommandLoaded && !state.loadingCommands) {
@@ -3769,7 +3770,7 @@ const consoleManager = (() => {
      */
     function onKeyDown(e) {
         const els = getElements();
-        const inputEl = els.cmd;
+        const inputEl = els.input;
         if (!inputEl) return;
 
         // Enter 键发送命令
@@ -3906,8 +3907,11 @@ const consoleManager = (() => {
      * @param {string} commandPrompt - 命令行的提示符（仅当 type='command' 时使用）
      */
     function addTerminalLine(type, content, commandPrompt = '$') {
-        const outputEl = getElements().output;
-        if (!outputEl) return;
+        const els = getElements();
+        const mainEl = els.main;
+        const outputEl = els.output;
+
+        if (!mainEl || !outputEl) return;
 
         const lineDiv = document.createElement('div');
         lineDiv.className = `terminal-line ${type}`;
@@ -3929,7 +3933,7 @@ const consoleManager = (() => {
         }
 
         outputEl.appendChild(lineDiv);
-        outputEl.scrollTop = outputEl.scrollHeight;
+        mainEl.scrollTop = mainEl.scrollHeight;
         savePersistedOutput();
     }
 
@@ -3994,20 +3998,21 @@ const consoleManager = (() => {
      * 发送命令并执行
      */
     async function send() {
-        const cmdEl = getElements().cmd;
+        const inputEl = getElements().input;
 
-        if (!cmdEl || !cmdEl.value.trim()) {
+        if (!inputEl) return;
+
+        const line = inputEl.value.trim();
+        if (!line) {
             addTerminalLine('command', '');
-            cmdEl.value = "";
+            inputEl.value = "";
             return;
         }
-
-        const line = cmdEl.value.trim();
 
         // 回显命令到终端
         addTerminalLine('command', line);
 
-        cmdEl.value = "";
+        inputEl.value = "";
 
         // 隐藏提示框
         hideSuggestions();
@@ -4086,6 +4091,8 @@ const consoleManager = (() => {
             }
             setStatus(t("console.status.cleared"));
         }
+
+        focusInput();
     }
 
     /**
@@ -4155,28 +4162,44 @@ const consoleManager = (() => {
     }
 
     /**
+     * 聚焦输入框
+     */
+    function focusInput() {
+        const inputEl = getElements().input;
+        if (inputEl) {
+            inputEl.focus();
+        }
+    }
+
+    /**
      * 绑定键盘事件
      */
     function bindKeyboardEvents() {
-        const cmdEl = getElements().cmd;
-        if (!cmdEl) return;
+        const els = getElements();
+        const mainEl = els.main;
+        const inputEl = els.input;
+
+        if (!mainEl || !inputEl) return;
+
+        // 鼠标双击 main 区域，聚焦输入框
+        mainEl.addEventListener("dblclick", focusInput);
 
         // 输入事件（带防抖）
-        cmdEl.addEventListener("input", onInputChange);
+        inputEl.addEventListener("input", onInputChange);
 
         // 键盘事件（统一处理所有按键）
-        cmdEl.addEventListener("keydown", onKeyDown);
+        inputEl.addEventListener("keydown", onKeyDown);
 
         // 失去焦点时隐藏提示框（延迟一下，让点击事件有机会执行）
-        cmdEl.addEventListener("blur", () => {
+        inputEl.addEventListener("blur", () => {
             setTimeout(() => {
                 hideSuggestions();
             }, 200);
         });
 
         // 获得焦点时的处理
-        cmdEl.addEventListener("focus", () => {
-            const rawInput = cmdEl.value;
+        inputEl.addEventListener("focus", () => {
+            const rawInput = inputEl.value;
             if (rawInput && rawInput.trimStart().length > 0) {
                 if (!state.isCommandLoaded && !state.loadingCommands) {
                     loadCommands().then(() => {
@@ -4205,6 +4228,8 @@ const consoleManager = (() => {
         loadCommands();
 
         setStatus(t("console.status.ready"));
+
+        focusInput();
     }
 
     /**
@@ -4219,6 +4244,7 @@ const consoleManager = (() => {
 
     return {
         init,
+        focusInput,
         send,
         clear,
         uploadFile,
@@ -5817,6 +5843,7 @@ const I18N = (() => {
             "backup.warn.2": "Custom range reads raw bytes; be careful with offsets.",
             "backup.warn.3": "Large backups may take a long time depending on storage speed.",
             "console.title": "WEB CONSOLE",
+            "console.input": "Input",
             "console.send": "Send",
             "console.clear": "Clear",
             "console.cmd.forbid.hint": "this command has been disabled!",
@@ -6131,6 +6158,7 @@ const I18N = (() => {
             "backup.warn.2": "自定义范围读取原始字节，请谨慎设置偏移量。",
             "backup.warn.3": "大容量备份可能需要较长时间，取决于存储速度。",
             "console.title": "网页终端",
+            "console.input": "输入",
             "console.send": "发送",
             "console.clear": "清空",
             "console.cmd.forbid.hint": "此命令已被禁止执行！",
