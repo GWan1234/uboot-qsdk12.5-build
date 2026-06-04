@@ -330,6 +330,19 @@ html[data-theme="dark"] .sidebar-toggle {
     transition: opacity 0.3s ease;
 }
 
+.nav::-webkit-scrollbar {
+    width: 5px;
+}
+
+.nav::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 6px;
+}
+
+.nav::-webkit-scrollbar-thumb:hover {
+    background: var(--primary);
+}
+
 /* 导航部分 - 可折叠菜单 */
 .nav-section {
     margin-top: 4px;
@@ -481,6 +494,19 @@ html[data-theme="dark"] .sidebar-toggle {
     background: var(--bg);
     position: relative;
     transition: margin-left 0.3s ease-in-out;
+}
+
+.main::-webkit-scrollbar {
+    width: 6px;
+}
+
+.main::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 6px;
+}
+
+.main::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-2);
 }
 
 /* 当侧边栏收起时，主内容区域占满宽度 */
@@ -1828,6 +1854,28 @@ html[data-theme="dark"] .env-edit-panel {
     background: var(--terminal-bg);
 }
 
+.terminal-main::-webkit-scrollbar {
+    width: 6px;
+}
+
+.terminal-main::-webkit-scrollbar-track {
+    background: #1e1e1e;
+    border-radius: 6px;
+}
+
+.terminal-main::-webkit-scrollbar-thumb {
+    background: #4a4a4a;
+    border-radius: 6px;
+}
+
+.terminal-main::-webkit-scrollbar-thumb:hover {
+    background: #6a6a6a;
+}
+
+.terminal-main::-webkit-scrollbar-corner {
+    background: #323232;
+}
+
 /* 终端行样式 */
 .terminal-line {
     margin-bottom: 0.25rem;
@@ -2757,6 +2805,28 @@ html[data-theme="dark"] .mac-byte-input.invalid {
     white-space: pre-wrap;
     word-break: break-word;
     resize: vertical;
+}
+
+.syslog-output::-webkit-scrollbar {
+    width: 8px;
+}
+
+.syslog-output::-webkit-scrollbar-track {
+    background: var(--panel-2);
+    border-radius: 4px;
+}
+
+.syslog-output::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+}
+
+.syslog-output::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+}
+
+.syslog-output::-webkit-scrollbar-corner {
+    background: var(--panel-2);
 }
 
 /* 日志输出区域为空时的占位符 */
