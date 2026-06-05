@@ -1,29 +1,22 @@
 #include <common.h>
 #include <failsafe/fw.h>
 
-/**
- * check_fw_type - 检查文件类型
- * @address: 文件地址
- *
- * 通过检查魔数来判断文件类型.
- *
- * 如果文件类型未知，则返回 FW_TYPE_UNKNOWN；否则返回具体文件类型。
- */
-int check_fw_type(const void *address) {
-	u32 *header_magic1 = (u32 *)(address);
-	u32 *header_magic2 = (u32 *)(address + 0x4);
+#define U16_DATA_AT_OFFSET(n) (*((const u16 *)(n)))
+#define U32_DATA_AT_OFFSET(n) (*((const u32 *)(n)))
+#define U64_DATA_AT_OFFSET(n) (*((const u64 *)(n)))
 
-	switch (*header_magic1) {
+int check_fw_type(uintptr_t addr)
+{
+	switch (U32_DATA_AT_OFFSET(addr)) {
 	case HEADER_MAGIC_CDT:
 		return FW_TYPE_CDT;
 	case HEADER_MAGIC_ELF:
-		if (*((u64 *)(address + 0xC0000)) == HEADER_MAGIC_MBN)
+		if (U64_DATA_AT_OFFSET(addr + 0xC0000) == HEADER_MAGIC_MBN)
 			return FW_TYPE_NOR;
-		else
-			return FW_TYPE_ELF;
+		return FW_TYPE_ELF;
 	case HEADER_MAGIC_FIT:
-		if (*((u32 *)(address + 0x5C)) == HEADER_MAGIC_QSDK) {
-			switch (*((u32 *)(address + 0x65))) {
+		if (U32_DATA_AT_OFFSET(addr + 0x5C) == HEADER_MAGIC_QSDK) {
+			switch (U32_DATA_AT_OFFSET(addr + 0x65)) {
 			case HEADER_MAGIC_GLINET_V3: return FW_TYPE_GLINET_V3;
 			case HEADER_MAGIC_GLINET_V4: return FW_TYPE_GLINET_V4;
 			case HEADER_MAGIC_JDCLOUD: return FW_TYPE_JDCLOUD;
@@ -32,37 +25,36 @@ int check_fw_type(const void *address) {
 		}
 		return FW_TYPE_FIT;
 	case HEADER_MAGIC_LEGACY_IMAGE:
-		if (*((u32 *)(address + 0x40)) == HEADER_MAGIC_ASUSWRT_EMMC)
+		if (U32_DATA_AT_OFFSET(addr + 0x40) == HEADER_MAGIC_ASUSWRT_EMMC)
 			return FW_TYPE_ASUSWRT_EMMC;
-		else
-			return FW_TYPE_LEGACY_IMAGE;
+		return FW_TYPE_LEGACY_IMAGE;
 	case HEADER_MAGIC_MBN1:
-		if (*header_magic2 == HEADER_MAGIC_MBN2) {
-			if (*((u64 *)(address + 0x100)) == HEADER_MAGIC_PTABLE)
+		if (U32_DATA_AT_OFFSET(addr + 0x4) == HEADER_MAGIC_MBN2) {
+			if (U64_DATA_AT_OFFSET(addr + 0x100) == HEADER_MAGIC_PTABLE)
 				return FW_TYPE_MIBIB_NOR;
-			else if (*((u64 *)(address + 0x800)) == HEADER_MAGIC_PTABLE)
+			if (U64_DATA_AT_OFFSET(addr + 0x800) == HEADER_MAGIC_PTABLE)
 				return FW_TYPE_MIBIB_NAND;
 		}
 		return FW_TYPE_UNKNOWN;
 	case HEADER_MAGIC_SBL_NAND1:
-		if (*header_magic2 == HEADER_MAGIC_SBL_NAND2)
+		if (U32_DATA_AT_OFFSET(addr + 0x4) == HEADER_MAGIC_SBL_NAND2)
 			return FW_TYPE_NAND;
 		return FW_TYPE_UNKNOWN;
 	case HEADER_MAGIC_SYSUPGRADE1:
-		if (*header_magic2 == HEADER_MAGIC_SYSUPGRADE2)
+		if (U32_DATA_AT_OFFSET(addr + 0x4) == HEADER_MAGIC_SYSUPGRADE2)
 			return FW_TYPE_SYSUPGRADE;
 		return FW_TYPE_UNKNOWN;
 	case HEADER_MAGIC_UBI:
 		return FW_TYPE_UBI;
 	default:
-		if (*((u16 *)(address + 0x1FE)) == HEADER_MAGIC_EMMC)
+		if (U16_DATA_AT_OFFSET(addr + 0x1FE) == HEADER_MAGIC_EMMC)
 			return FW_TYPE_EMMC;
-		else
-			return FW_TYPE_UNKNOWN;
+		return FW_TYPE_UNKNOWN;
 	}
 }
 
-char *fw_type_to_string(const int fw_type) {
+char *fw_type_to_string(int fw_type)
+{
 	switch (fw_type) {
 	case FW_TYPE_ASUSWRT_EMMC:
 		return "ASUSWRT";

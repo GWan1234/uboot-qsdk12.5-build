@@ -54,7 +54,7 @@ enum {
 #define HEADER_MAGIC_GLINET_V4     0x74636166
 #define HEADER_MAGIC_JDCLOUD       0x636D6D65
 
-int check_fw_type(const void *address);
-char *fw_type_to_string(const int fw_type);
+int check_fw_type(uintptr_t addr);
+char *fw_type_to_string(int fw_type);
 
 #endif /* __FW_H__ */

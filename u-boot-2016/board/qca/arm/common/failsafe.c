@@ -595,7 +595,7 @@ int failsafe_validate_image(const int upgrade_type, const char *filename,
 {
 	int ret;
 
-	fw_type = check_fw_type(data_addr);
+	fw_type = check_fw_type((uintptr_t)data_addr);
 
 	memset(info, 0, sizeof(info));
 	memset(resp, 0, sizeof(resp));
@@ -959,7 +959,7 @@ int failsafe_write_image(const int upgrade_type, const ulong data_addr,
     int ret;
 
 	runcmd.count = 0;
-	fw_type = check_fw_type((const void *)data_addr);
+	fw_type = check_fw_type((uintptr_t)data_addr);
 
 	memset(info, 0, sizeof(info));
 	memset(resp, 0, sizeof(resp));

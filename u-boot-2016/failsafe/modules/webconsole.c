@@ -122,7 +122,7 @@ static int print_file_info(void *arg)
 	int fw_type;
 
 	file = arg;
-	fw_type = check_fw_type((const void *)file->data);
+	fw_type = check_fw_type((uintptr_t)file->data);
 	md5((unsigned char *)file->data, file->size, md5_sum);
 
 	separator = "\n=================================="
