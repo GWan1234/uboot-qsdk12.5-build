@@ -249,7 +249,7 @@ static int do_untar(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]) {
 	const void *kernel_addr, *rootfs_addr;
 	size_t file_size, adj_file_size;
 	size_t kernel_size, rootfs_size;
-	int fw_type;
+	fw_type_t fw_type;
 
 	switch (argc) {
 	case 1:

@@ -73,7 +73,7 @@ static ulong factory_fw_kernel_size;
 
 static char info[666];
 static char resp[888];
-static int fw_type;
+static fw_type_t fw_type;
 static detected_flash_device_t *dfd = &detected_flash_device;
 
 /* Implemented in: u-boot-2016/board/qca/arm/common/cmd_bootqca.c */
@@ -130,7 +130,7 @@ int boot_from_mem(const ulong data_addr)
 	return run_command(rcmd, 0);
 }
 
-static void handle_wrong_fw_type(const char *expected_file_type_str, const int fw_type)
+static void handle_wrong_fw_type(const char *expected_file_type_str, const fw_type_t fw_type)
 {
 	char *actual_file_type_str = fw_type_to_string(fw_type);
 
@@ -161,7 +161,7 @@ static void handle_file_too_big(const char *file_name, const ulong file_size,
 		file_name, file_size, part_name, part_size);
 }
 
-static void handle_flash_not_found(const int fw_type, const char *flash_type_str)
+static void handle_flash_not_found(const fw_type_t fw_type, const char *flash_type_str)
 {
 	const char *fw_type_str = fw_type_to_string(fw_type);
 
@@ -478,16 +478,16 @@ static int failsafe_validate_art(const void *data_addr, const ulong data_size)
     case FW_TYPE_ASUSWRT_EMMC:
     case FW_TYPE_CDT:
     case FW_TYPE_ELF:
-    case FW_TYPE_EMMC:
     case FW_TYPE_FIT:
 	case FW_TYPE_GLINET_V3:
 	case FW_TYPE_GLINET_V4:
+    case FW_TYPE_GPT:
     case FW_TYPE_JDCLOUD:
     case FW_TYPE_LEGACY_IMAGE:
     case FW_TYPE_MIBIB_NAND:
     case FW_TYPE_MIBIB_NOR:
-    case FW_TYPE_NAND:
-    case FW_TYPE_NOR:
+    case FW_TYPE_SIMG_NAND:
+    case FW_TYPE_SIMG_NOR:
     case FW_TYPE_SYSUPGRADE:
     case FW_TYPE_UBI:
         handle_wrong_fw_type("ART", fw_type);
@@ -510,7 +510,7 @@ static int failsafe_validate_cdt(const void *data_addr, const ulong data_size)
 static int failsafe_validate_ptable(const void *data_addr, const ulong data_size)
 {
 	switch(fw_type) {
-	case FW_TYPE_EMMC:
+	case FW_TYPE_GPT:
 		if (!dfd->mmc) {
 			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
 			return RET_FLASH_NOT_FOUND;
@@ -553,7 +553,7 @@ static int failsafe_validate_simg(const void *data_addr, const ulong data_size)
 	unsigned long long flash_device_size;
 
     switch(fw_type) {
-    case FW_TYPE_EMMC:
+    case FW_TYPE_SIMG_EMMC:
         if (!dfd->mmc) {
 			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
 			return RET_FLASH_NOT_FOUND;
@@ -561,7 +561,7 @@ static int failsafe_validate_simg(const void *data_addr, const ulong data_size)
 		mmc = find_mmc_device(mmc_host.dev_num);
 		flash_device_size = mmc->capacity_user;
         break;
-    case FW_TYPE_NAND:
+    case FW_TYPE_SIMG_NAND:
         if (!dfd->nand) {
 			handle_flash_not_found(fw_type, FLASH_TYPE_STR_NAND);
 			return RET_FLASH_NOT_FOUND;
@@ -571,7 +571,7 @@ static int failsafe_validate_simg(const void *data_addr, const ulong data_size)
         break;
     case FW_TYPE_ELF:
 		if (is_simg_nor(data_addr, data_size)) {
-			fw_type = FW_TYPE_NOR; /* 更新 fw_type，方便后续 failsafe_write_simg 使用 */
+			fw_type = FW_TYPE_SIMG_NOR; /* 更新 fw_type，方便后续 failsafe_write_simg 使用 */
 			if (!dfd->spi) {
 				handle_flash_not_found(fw_type, FLASH_TYPE_STR_SPI);
 				return RET_FLASH_NOT_FOUND;
@@ -879,7 +879,7 @@ static int failsafe_write_ptable(const ulong data_addr, const ulong data_size)
 	print_upgrade_hint("PTABLE");
 
 	switch(fw_type) {
-	case FW_TYPE_EMMC:
+	case FW_TYPE_GPT:
 		if (!dfd->mmc) {
 			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
 			return RET_FLASH_NOT_FOUND;
@@ -931,14 +931,14 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 	print_upgrade_hint("SIMG");
 
 	switch (fw_type) {
-	case FW_TYPE_EMMC:
+	case FW_TYPE_SIMG_EMMC:
 		if (!dfd->mmc) {
 			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
 			return RET_FLASH_NOT_FOUND;
 		}
 		handle_gpt_write_cmd(data_addr, data_size);
 		break;
-	case FW_TYPE_NAND:
+	case FW_TYPE_SIMG_NAND:
 		if (!dfd->nand) {
 			handle_flash_not_found(fw_type, FLASH_TYPE_STR_NAND);
 			return RET_FLASH_NOT_FOUND;
@@ -950,7 +950,7 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 			writable_size,
 			data_addr, writable_size);
 		break;
-	case FW_TYPE_NOR:
+	case FW_TYPE_SIMG_NOR:
 		if (!dfd->spi) {
 			handle_flash_not_found(fw_type, FLASH_TYPE_STR_SPI);
 			return RET_FLASH_NOT_FOUND;

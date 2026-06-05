@@ -5,7 +5,7 @@
 #define U32_DATA_AT_OFFSET(n) (*((const u32 *)(n)))
 #define U64_DATA_AT_OFFSET(n) (*((const u64 *)(n)))
 
-int check_fw_type(uintptr_t addr)
+fw_type_t check_fw_type(uintptr_t addr)
 {
 	switch (U32_DATA_AT_OFFSET(addr)) {
 	case HEADER_MAGIC_CDT:
@@ -36,7 +36,7 @@ int check_fw_type(uintptr_t addr)
 		return FW_TYPE_UNKNOWN;
 	case HEADER_MAGIC_SBL_NAND1:
 		if (U32_DATA_AT_OFFSET(addr + 0x4) == HEADER_MAGIC_SBL_NAND2)
-			return FW_TYPE_NAND;
+			return FW_TYPE_SIMG_NAND;
 		return FW_TYPE_UNKNOWN;
 	case HEADER_MAGIC_SYSUPGRADE1:
 		if (U32_DATA_AT_OFFSET(addr + 0x4) == HEADER_MAGIC_SYSUPGRADE2)
@@ -45,13 +45,13 @@ int check_fw_type(uintptr_t addr)
 	case HEADER_MAGIC_UBI:
 		return FW_TYPE_UBI;
 	default:
-		if (U16_DATA_AT_OFFSET(addr + 0x1FE) == HEADER_MAGIC_EMMC)
-			return FW_TYPE_EMMC;
+		if (U16_DATA_AT_OFFSET(addr + 0x1FE) == HEADER_MAGIC_GPT)
+			return FW_TYPE_GPT;
 		return FW_TYPE_UNKNOWN;
 	}
 }
 
-char *fw_type_to_string(int fw_type)
+char *fw_type_to_string(fw_type_t fw_type)
 {
 	switch (fw_type) {
 	case FW_TYPE_ASUSWRT_EMMC:
@@ -60,8 +60,6 @@ char *fw_type_to_string(int fw_type)
 		return "CDT";
 	case FW_TYPE_ELF:
 		return "ELF";
-	case FW_TYPE_EMMC:
-		return "GPT (Single Image for eMMC device)";
 	case FW_TYPE_LEGACY_IMAGE:
 		return "Legacy Image";
 	case FW_TYPE_FIT:
@@ -70,15 +68,17 @@ char *fw_type_to_string(int fw_type)
 		return "GLiNet Official Firmware (Version: 3.x)";
 	case FW_TYPE_GLINET_V4:
 		return "GLiNet Official Firmware (Version: 4.x)";
+	case FW_TYPE_GPT:
+		return "GPT (Single Image for eMMC device)";
 	case FW_TYPE_JDCLOUD:
 		return "JDCloud Official Firmware";
 	case FW_TYPE_MIBIB_NAND:
 		return "MIBIB for NAND device";
 	case FW_TYPE_MIBIB_NOR:
 		return "MIBIB for SPI-NOR device";
-	case FW_TYPE_NAND:
+	case FW_TYPE_SIMG_NAND:
 		return "Single Image for NAND device";
-	case FW_TYPE_NOR:
+	case FW_TYPE_SIMG_NOR:
 		return "Single Image for SPI-NOR device";
 	case FW_TYPE_SYSUPGRADE:
 		return "Sysupgrade Firmware";

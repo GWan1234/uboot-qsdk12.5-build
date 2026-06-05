@@ -119,7 +119,7 @@ static int print_file_info(void *arg)
 	struct httpd_form_value *file;
 	unsigned char md5_sum[16];
 	const char *separator;
-	int fw_type;
+	fw_type_t fw_type;
 
 	file = arg;
 	fw_type = check_fw_type((uintptr_t)file->data);

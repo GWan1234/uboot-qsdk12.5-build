@@ -40,7 +40,8 @@ void mibib_reload_handler(enum httpd_uri_handler_status status,
     nand_info_t *nand;
     struct httpd_form_value *mibib;
     uint32_t page_size;
-    int fw_type, ret;
+    fw_type_t fw_type;
+    int ret;
 
     if (status != HTTP_CB_NEW)
         return;
