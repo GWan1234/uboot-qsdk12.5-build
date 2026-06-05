@@ -468,17 +468,30 @@ int string_to_flash_type(const char *str)
         return -1;
 }
 
-const void *get_mibib_ptable_offset(const void *addr, size_t limit,
-		uint32_t ptable_start_in_mibib, uint32_t ptable_end_in_mibib)
+const void *get_mibib_ptable_offset(const void *addr, size_t limit, mibib_type_t mibib_type)
 {
 	const void *p = addr;
 	const u64 magic_mibib_start = HEADER_MAGIC_MBN;
 	const u64 magic_ptable_start = HEADER_MAGIC_PTABLE;
 	const u64 magic_ptable_end = FOOTER_MAGIC_MBN;
 	const size_t magic_len = sizeof(u64);
+	uint32_t ptable_start_in_mibib, ptable_end_in_mibib;
 
 	if (!p)
 		return NULL;
+
+	switch (mibib_type) {
+	case MIBIB_TYPE_NAND:
+		ptable_start_in_mibib = PTABLE_START_IN_MIBIB_NAND;
+		ptable_end_in_mibib = PTABLE_END_IN_MIBIB_NAND;
+		break;
+	case MIBIB_TYPE_NOR:
+		ptable_start_in_mibib = PTABLE_START_IN_MIBIB_NOR;
+		ptable_end_in_mibib = PTABLE_END_IN_MIBIB_NOR;
+		break;
+	default:
+		return NULL;
+	}
 
 	while (limit >= ptable_end_in_mibib + magic_len) {
 		limit--;
@@ -518,7 +531,7 @@ static int reload_mibib_from_spi(void)
 	if (ret)
 		goto done;
 
-	mibib_ptable = get_mibib_ptable_offset(load_addr, read_size, 0x100, 0x900);
+	mibib_ptable = get_mibib_ptable_offset(load_addr, read_size, MIBIB_TYPE_NOR);
 	if (!mibib_ptable) {
 		ret = -ENOENT;
 		goto done;
@@ -566,7 +579,7 @@ static int reload_mibib_from_nand(void)
 	if (ret)
 		goto done;
 
-	mibib_ptable = get_mibib_ptable_offset(load_addr, read_size, 0x800, 0x1800);
+	mibib_ptable = get_mibib_ptable_offset(load_addr, read_size, MIBIB_TYPE_NAND);
 	if (!mibib_ptable) {
 		ret = -ENOENT;
 		goto done;

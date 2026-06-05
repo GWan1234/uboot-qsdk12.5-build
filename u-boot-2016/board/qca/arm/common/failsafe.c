@@ -539,7 +539,7 @@ static bool is_simg_nor(const void *data_addr, const ulong data_size)
 	if (check_fw_type((uintptr_t)data_addr) != FW_TYPE_ELF)
 		return false;
 
-	if (get_mibib_ptable_offset(data_addr, data_size, 0x100, 0x900) == NULL)
+	if (get_mibib_ptable_offset(data_addr, data_size, MIBIB_TYPE_NOR) == NULL)
 		return false;
 
 	return true;

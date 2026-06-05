@@ -40,6 +40,11 @@ extern detected_flash_device_t detected_flash_device;
 #define QSPI_NAND_FLASH_STR  "qspi_nand"
 #define UNKNOWN_FLASH_STR    "unknown"
 
+typedef enum {
+    MIBIB_TYPE_NAND,
+    MIBIB_TYPE_NOR
+} mibib_type_t;
+
 #if defined(CONFIG_FORCE_NETWORK_ENV)
 void check_network_settings(void);
 #endif
@@ -51,8 +56,7 @@ void led_toggle(const char *gpio_name);
 unsigned int fdt_get_gpio_by_name(const char *gpio_name, const int debug_state);
 size_t json_escape(const char *input, char *output, size_t output_buffer_size);
 bool mmc_part_exists(const char *part_name);
-const void *get_mibib_ptable_offset(const void *addr, size_t limit,
-		uint32_t ptable_start_in_mibib, uint32_t ptable_end_in_mibib);
+const void *get_mibib_ptable_offset(const void *addr, size_t limit, mibib_type_t mibib_type);
 void reload_mibib_from_flash_in_9008_mode(void);
 
 #if defined(CONFIG_HTTPD)
