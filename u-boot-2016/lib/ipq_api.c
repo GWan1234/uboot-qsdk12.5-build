@@ -624,3 +624,41 @@ void reload_mibib_from_flash_in_9008_mode(void)
 	if (dfd->nand)
 		reload_mibib_from_nand();
 }
+
+/**
+ * 9008 模式下，根据检测到的 FLASH 设备设置默认 flash type。
+ * 后续可通过 "bootflash set nor/nand/mmc" 命令手动切换 flash type。
+ */
+void set_default_flash_type_in_9008_mode(void)
+{
+	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+	detected_flash_device_t *dfd = &detected_flash_device;
+
+	if (!is_9008_mode)
+		return;
+
+	/* SPI-NOR 具有最高优先级 */
+	if (dfd->spi) {
+		sfi->flash_type = SMEM_BOOT_SPI_FLASH;
+		return;
+	}
+
+	/* 只有 NAND 存在 */
+	if (dfd->nand && !dfd->mmc) {
+#ifdef CONFIG_QPIC_SERIAL
+		sfi->flash_type = SMEM_BOOT_QSPI_NAND_FLASH;
+#else
+		sfi->flash_type = SMEM_BOOT_NAND_FLASH;
+#endif
+		return;
+	}
+
+	/* 只有 eMMC 存在 */
+	if (dfd->mmc && !dfd->nand) {
+		sfi->flash_type = SMEM_BOOT_MMC_FLASH;
+		return;
+	}
+
+	/* 其他情况不做修改 */
+	return;
+}

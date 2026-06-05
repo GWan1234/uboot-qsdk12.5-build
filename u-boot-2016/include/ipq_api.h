@@ -58,6 +58,7 @@ size_t json_escape(const char *input, char *output, size_t output_buffer_size);
 bool mmc_part_exists(const char *part_name);
 const void *get_mibib_ptable_offset(const void *addr, size_t limit, mibib_type_t mibib_type);
 void reload_mibib_from_flash_in_9008_mode(void);
+void set_default_flash_type_in_9008_mode(void);
 
 #if defined(CONFIG_HTTPD)
 const char *flash_type_to_string(const uint32_t flash_type);

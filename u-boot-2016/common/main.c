@@ -94,6 +94,7 @@ void main_loop(void)
 #endif
 
 #if defined(CONFIG_HTTPD)
+	set_default_flash_type_in_9008_mode();
 	reload_mibib_from_flash_in_9008_mode();
 	do_httpd_check();
 #endif
