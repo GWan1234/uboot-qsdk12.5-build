@@ -534,6 +534,17 @@ static int failsafe_validate_ptable(const void *data_addr, const ulong data_size
     }
 }
 
+static bool is_simg_nor(const void *data_addr, const ulong data_size)
+{
+	if (check_fw_type((uintptr_t)data_addr) != FW_TYPE_ELF)
+		return false;
+
+	if (get_mibib_ptable_offset(data_addr, data_size, 0x100, 0x900) == NULL)
+		return false;
+
+	return true;
+}
+
 static int failsafe_validate_simg(const void *data_addr, const ulong data_size)
 {
 	struct mmc *mmc;
@@ -558,15 +569,18 @@ static int failsafe_validate_simg(const void *data_addr, const ulong data_size)
 		nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
 		flash_device_size = nand->size;
         break;
-    case FW_TYPE_NOR:
-        if (!dfd->spi) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_SPI);
-			return RET_FLASH_NOT_FOUND;
+    case FW_TYPE_ELF:
+		if (is_simg_nor(data_addr, data_size)) {
+			fw_type = FW_TYPE_NOR; /* 更新 fw_type，方便后续 failsafe_write_simg 使用 */
+			if (!dfd->spi) {
+				handle_flash_not_found(fw_type, FLASH_TYPE_STR_SPI);
+				return RET_FLASH_NOT_FOUND;
+			}
+			spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
+						CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
+			flash_device_size = spi->size;
+			break;
 		}
-		spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
-					CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
-		flash_device_size = spi->size;
-        break;
     default:
         handle_wrong_fw_type("Single Image", fw_type);
         return RET_WRONG_FW_TYPE;

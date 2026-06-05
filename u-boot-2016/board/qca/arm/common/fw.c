@@ -11,8 +11,6 @@ int check_fw_type(uintptr_t addr)
 	case HEADER_MAGIC_CDT:
 		return FW_TYPE_CDT;
 	case HEADER_MAGIC_ELF:
-		if (U64_DATA_AT_OFFSET(addr + 0xC0000) == HEADER_MAGIC_MBN)
-			return FW_TYPE_NOR;
 		return FW_TYPE_ELF;
 	case HEADER_MAGIC_FIT:
 		if (U32_DATA_AT_OFFSET(addr + 0x5C) == HEADER_MAGIC_QSDK) {

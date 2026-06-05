@@ -468,7 +468,7 @@ int string_to_flash_type(const char *str)
         return -1;
 }
 
-static const void *get_mibib_ptable_offset(const void *addr, size_t limit,
+const void *get_mibib_ptable_offset(const void *addr, size_t limit,
 		uint32_t ptable_start_in_mibib, uint32_t ptable_end_in_mibib)
 {
 	const void *p = addr;
