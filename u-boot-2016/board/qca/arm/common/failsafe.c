@@ -681,7 +681,7 @@ static int exec_command(void *cmd)
 
 static int failsafe_run_command_capture(const char *cmd)
 {
-	static char output[FAILSAFE_CAPTURE_OUTPUT_SIZE];
+	char output[FAILSAFE_CAPTURE_OUTPUT_SIZE];
 	int ret;
 
 	printf("\n### Executing: %s\n", cmd);
