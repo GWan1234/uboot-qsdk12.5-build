@@ -818,6 +818,7 @@ U_BOOT_CMD(
 	"NAND sub-system", nand_help_text
 );
 
+#ifdef CONFIG_CMD_NBOOT
 static int nand_load_image(cmd_tbl_t *cmdtp, nand_info_t *nand,
 			   ulong offset, ulong addr, char *cmd)
 {
@@ -992,3 +993,4 @@ U_BOOT_CMD(nboot, 4, 1, do_nandboot,
 	"boot from NAND device",
 	"[partition] | [[[loadAddr] dev] offset]"
 );
+#endif /* CONFIG_CMD_NBOOT */
