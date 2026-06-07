@@ -63,31 +63,31 @@
 				label = "power_led";
 				gpio = <50>;
 				func = <0>;
-				out = <GPIO_OUT_LOW>;
+				out = <GPIO_OUT_HIGH>;
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_DOWN>;
 				oe = <GPIO_OE_ENABLE>;
-				active_level = <GPIO_ACTIVE_HIGH>;
+				active_level = <GPIO_ACTIVE_LOW>;
 			};
 			led_blue {
 				label = "blink_led";
 				gpio = <69>;
 				func = <0>;
-				out = <GPIO_OUT_LOW>;
+				out = <GPIO_OUT_HIGH>;
 				drvstr = <GPIO_8MA>;
-				pull = <GPIO_PULL_DOWN>;
+				pull = <GPIO_NO_PULL>;
 				oe = <GPIO_OE_ENABLE>;
-				active_level = <GPIO_ACTIVE_HIGH>;
+				active_level = <GPIO_ACTIVE_LOW>;
 			};
 			led_green {
 				label = "system_led";
 				gpio = <70>;
 				func = <0>;
-				out = <GPIO_OUT_LOW>;
+				out = <GPIO_OUT_HIGH>;
 				drvstr = <GPIO_8MA>;
-				pull = <GPIO_PULL_DOWN>;
+				pull = <GPIO_NO_PULL>;
 				oe = <GPIO_OE_ENABLE>;
-				active_level = <GPIO_ACTIVE_HIGH>;
+				active_level = <GPIO_ACTIVE_LOW>;
 			};
 		};
 
