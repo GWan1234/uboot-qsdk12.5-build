@@ -63,7 +63,7 @@
 				label = "power_led", "blink_led";
 				gpio = <58>;
 				func = <0>;
-				out = <GPIO_OUT_LOW>;
+				out = <GPIO_OUT_HIGH>;
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_DOWN>;
 				oe = <GPIO_OE_ENABLE>;

@@ -579,7 +579,6 @@ static int initr_ethaddr(void)
 static int initr_ipq_gpio(void)
 {
 	ipq_gpio_init();
-	led_on("power_led");
 	return 0;
 }
 #endif
