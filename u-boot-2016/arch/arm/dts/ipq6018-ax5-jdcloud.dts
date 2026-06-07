@@ -68,6 +68,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_DOWN>;
 				oe = <GPIO_OE_ENABLE>;
+				active_level = <GPIO_ACTIVE_HIGH>;
 			};
 			led_yellow {
 				label = "power_led";
@@ -77,6 +78,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_DOWN>;
 				oe = <GPIO_OE_ENABLE>;
+				active_level = <GPIO_ACTIVE_HIGH>;
 			};
 			net_blue {
 				label = "system_led";
@@ -86,6 +88,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_DOWN>;
 				oe = <GPIO_OE_ENABLE>;
+				active_level = <GPIO_ACTIVE_HIGH>;
 			};
 			net_yellow {
 				gpio = <30>;
@@ -104,6 +107,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_UP>;
 				oe = <GPIO_OE_DISABLE>;
+				active_level = <GPIO_ACTIVE_LOW>;
 			};
 		};
 	};

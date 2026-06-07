@@ -75,6 +75,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_DOWN>;
 				oe = <GPIO_OE_ENABLE>;
+				active_level = <GPIO_ACTIVE_HIGH>;
 			};
 			led_blue {
 				label = "blink_led";
@@ -84,6 +85,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_DOWN>;
 				oe = <GPIO_OE_ENABLE>;
+				active_level = <GPIO_ACTIVE_HIGH>;
 			};
 			led_green {
 				label = "system_led";
@@ -93,6 +95,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_DOWN>;
 				oe = <GPIO_OE_ENABLE>;
+				active_level = <GPIO_ACTIVE_HIGH>;
 			};
 		};
 
@@ -103,6 +106,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_UP>;
 				oe = <GPIO_OE_DISABLE>;
+				active_level = <GPIO_ACTIVE_LOW>;
 			};
 			joylink {
 				gpio = <72>;
@@ -110,6 +114,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_UP>;
 				oe = <GPIO_OE_DISABLE>;
+				active_level = <GPIO_ACTIVE_LOW>;
 			};
 			screen {
 				gpio = <71>;
@@ -117,6 +122,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_UP>;
 				oe = <GPIO_OE_DISABLE>;
+				active_level = <GPIO_ACTIVE_LOW>;
 			};
 		};
 	};

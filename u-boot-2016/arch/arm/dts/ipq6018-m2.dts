@@ -67,6 +67,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_DOWN>;
 				oe = <GPIO_OE_ENABLE>;
+				active_level = <GPIO_ACTIVE_HIGH>;
 			};
 			led_mesh {
 				label = "system_led";
@@ -76,6 +77,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_DOWN>;
 				oe = <GPIO_OE_ENABLE>;
+				active_level = <GPIO_ACTIVE_HIGH>;
 			};
 			led_lan {
 				gpio = <74>;
@@ -84,6 +86,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_DOWN>;
 				oe = <GPIO_OE_ENABLE>;
+				active_level = <GPIO_ACTIVE_HIGH>;
 			};
 			led_wan {
 				gpio = <37>;
@@ -92,6 +95,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_DOWN>;
 				oe = <GPIO_OE_ENABLE>;
+				active_level = <GPIO_ACTIVE_HIGH>;
 			};
 			led_wlan2g {
 				gpio = <70>;
@@ -100,6 +104,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_DOWN>;
 				oe = <GPIO_OE_ENABLE>;
+				active_level = <GPIO_ACTIVE_HIGH>;
 			};
 			led_wlan5g {
 				gpio = <35>;
@@ -108,6 +113,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_DOWN>;
 				oe = <GPIO_OE_ENABLE>;
+				active_level = <GPIO_ACTIVE_HIGH>;
 			};
 		};
 
@@ -118,6 +124,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_UP>;
 				oe = <GPIO_OE_DISABLE>;
+				active_level = <GPIO_ACTIVE_LOW>;
 			};
 			wps {
 				gpio = <9>;
@@ -125,6 +132,7 @@
 				drvstr = <GPIO_8MA>;
 				pull = <GPIO_PULL_UP>;
 				oe = <GPIO_OE_DISABLE>;
+				active_level = <GPIO_ACTIVE_LOW>;
 			};
 		};
 	};

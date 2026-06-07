@@ -1,7 +1,9 @@
 #include <common.h>
 #include <cli.h>
+#include <errno.h>
 #include <ipq_api.h>
 #include <fdtdec.h>
+#include <dt-bindings/gpio/gpio.h>
 #include <part.h>
 #include <mmc.h>
 #include <sdhci.h>
@@ -21,7 +23,16 @@ extern qca_mmc mmc_host;
 extern struct sdhci_host mmc_host;
 #endif
 
-#define BUTTON_PRESSED           0
+typedef struct {
+	unsigned int gpio;
+	unsigned int active_level;
+} led_info_t;
+
+typedef struct {
+	const char *name;
+	unsigned int gpio;
+	unsigned int active_level;
+} button_info_t;
 
 detected_flash_device_t detected_flash_device;
 
@@ -42,69 +53,77 @@ void ipq_gpio_init(void)
 	}
 }
 
-static unsigned int fdt_get_led_gpio_by_label(const char *led_label)
+static int fdt_get_led_info_by_label(const char *led_label, led_info_t *led_info)
 {
 	int parent, node;
 	int ret, strings_count;
 	const char *node_label;
 
 	if (!led_label)
-		return 0;
+		return -EINVAL;
 
 	parent = fdt_path_offset(gd->fdt_blob, "/tlmm-gpio/led_gpio");
 	if (parent < 0)
-		return 0;
+		return -ENOENT;
 
 	fdt_for_each_subnode(gd->fdt_blob, node, parent) {
 		strings_count = fdt_count_strings(gd->fdt_blob, node, "label");
 		for (int i = 0; i < strings_count; i++) {
 			node_label = NULL;
 			ret = fdt_get_string_index(gd->fdt_blob, node, "label", i, &node_label);
-			if (!ret && node_label && !strcmp(node_label, led_label))
-				return fdtdec_get_uint(gd->fdt_blob, node, "gpio", 0);
+			if (!ret && node_label && !strcmp(node_label, led_label)) {
+				led_info->gpio = fdtdec_get_uint(gd->fdt_blob, node, "gpio", 0);
+				led_info->active_level = fdtdec_get_uint(gd->fdt_blob, node, "active_level", GPIO_ACTIVE_HIGH);
+				return 0;
+			}
 		}
 	}
 
-	return 0;
+	return -ENOENT;
 }
 
 void led_on(const char *label)
 {
-	unsigned int gpio;
+	int ret;
+	led_info_t led;
 
-	gpio = fdt_get_led_gpio_by_label(label);
-	if (gpio)
-		gpio_set_value(gpio, 1);
+	ret = fdt_get_led_info_by_label(label, &led);
+	if (!ret && led.gpio)
+		gpio_set_value(led.gpio,
+			(led.active_level == GPIO_ACTIVE_HIGH) ? GPIO_OUT_HIGH : GPIO_OUT_LOW);
 }
 
 void led_off(const char *label)
 {
-	unsigned int gpio;
+	int ret;
+	led_info_t led;
 
-	gpio = fdt_get_led_gpio_by_label(label);
-	if (gpio)
-		gpio_set_value(gpio, 0);
+	ret = fdt_get_led_info_by_label(label, &led);
+	if (!ret && led.gpio)
+		gpio_set_value(led.gpio,
+			(led.active_level == GPIO_ACTIVE_HIGH) ? GPIO_OUT_LOW : GPIO_OUT_HIGH);
 }
 
 void led_toggle(const char *label)
 {
-	unsigned int gpio;
+	int ret;
+	led_info_t led;
 
-	gpio = fdt_get_led_gpio_by_label(label);
-	if (gpio)
-		gpio_set_value(gpio, !gpio_get_value(gpio));
+	ret = fdt_get_led_info_by_label(label, &led);
+	if (!ret && led.gpio)
+		gpio_set_value(led.gpio, !gpio_get_value(led.gpio));
 }
 
-static inline bool is_button_pressed(unsigned int button_gpio)
+static inline bool is_button_pressed(unsigned int button_gpio, unsigned int active_level)
 {
-	return gpio_get_value(button_gpio) == BUTTON_PRESSED ? true : false;
+	unsigned int button_pressed = (active_level == GPIO_ACTIVE_LOW) ? GPIO_OUT_LOW : GPIO_OUT_HIGH;
+	return (gpio_get_value(button_gpio) == button_pressed) ? true : false;
 }
 
-static bool is_any_button_pressed(const char **button_name, unsigned int *button_gpio)
+static bool is_any_button_pressed(button_info_t *button_info)
 {
 	int parent, node;
-	unsigned int gpio;
-	const char *node_name;
+	unsigned int gpio, active_level;
 
 	parent = fdt_path_offset(gd->fdt_blob, "/tlmm-gpio/key_gpio");
 	if (parent < 0)
@@ -112,13 +131,11 @@ static bool is_any_button_pressed(const char **button_name, unsigned int *button
 
 	fdt_for_each_subnode(gd->fdt_blob, node, parent) {
 		gpio = fdtdec_get_uint(gd->fdt_blob, node, "gpio", 0);
-		if (gpio && is_button_pressed(gpio)) {
-			if (button_gpio)
-				*button_gpio = gpio;
-			if (button_name) {
-				node_name = fdt_get_name(gd->fdt_blob, node, NULL);
-				*button_name = node_name ? node_name : "unknown";
-			}
+		active_level = fdtdec_get_uint(gd->fdt_blob, node, "active_level", GPIO_ACTIVE_LOW);
+		if (gpio && is_button_pressed(gpio, active_level)) {
+			button_info->name = fdt_get_name(gd->fdt_blob, node, NULL);
+			button_info->gpio = gpio;
+			button_info->active_level = active_level;
 			return true;
 		}
 	}
@@ -131,13 +148,12 @@ static bool is_any_button_pressed_for_enough_time(void)
 	int counter = 3;
 	ulong ts;
 	bool led_state_on, still_pressed = true;
-	const char *button_name;
-	unsigned int button_gpio;
+	button_info_t button;
 
-    if (!is_any_button_pressed(&button_name, &button_gpio))
+    if (!is_any_button_pressed(&button))
 		return false;
 
-	printf("%s button pressed, enter web failsafe mode after: %-2d", button_name, counter);
+	printf("%s button pressed, enter web failsafe mode after: %-2d", button.name, counter);
 
 	while (counter > 0 && still_pressed) {
 		counter--;
@@ -145,7 +161,7 @@ static bool is_any_button_pressed_for_enough_time(void)
 		led_state_on = false;
 		led_off("power_led");
 		do {
-			still_pressed = is_button_pressed(button_gpio);
+			still_pressed = is_button_pressed(button.gpio, button.active_level);
 
 			if (!led_state_on && get_timer(ts) >= 500) {
 				led_state_on = true;
