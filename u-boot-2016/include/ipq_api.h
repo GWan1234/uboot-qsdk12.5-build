@@ -50,10 +50,10 @@ void check_network_settings(void);
 #endif
 void do_httpd_check(void);
 void detect_flash_device(void);
+void ipq_gpio_init(void);
 void led_on(const char *gpio_name);
 void led_off(const char *gpio_name);
 void led_toggle(const char *gpio_name);
-unsigned int fdt_get_gpio_by_name(const char *gpio_name, const int debug_state);
 size_t json_escape(const char *input, char *output, size_t output_buffer_size);
 bool mmc_part_exists(const char *part_name);
 const void *get_mibib_ptable_offset(const void *addr, size_t limit, mibib_type_t mibib_type);

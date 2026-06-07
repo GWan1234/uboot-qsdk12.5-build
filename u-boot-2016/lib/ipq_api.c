@@ -1,7 +1,6 @@
 #include <common.h>
 #include <cli.h>
 #include <ipq_api.h>
-#include <asm/gpio.h>
 #include <fdtdec.h>
 #include <part.h>
 #include <mmc.h>
@@ -24,135 +23,121 @@ extern struct sdhci_host mmc_host;
 
 #define BUTTON_PRESSED           0
 
-#define RESET_BUTTON_NAME        "reset_key"
-#define WPS_BUTTON_NAME          "wps_key"
-#define SCREEN_BUTTON_NAME       "screen_key"
-
-enum BUTTON {
-	RESET, WPS, SCREEN
-};
-
 detected_flash_device_t detected_flash_device;
 
 DECLARE_GLOBAL_DATA_PTR;
 
-unsigned int fdt_get_gpio_by_name(const char *gpio_name, const int debug_state)
+void ipq_gpio_init(void)
 {
 	int node;
-	unsigned int gpio;
+	const char *node_paths[] = {
+		"/tlmm-gpio/led_gpio",
+		"/tlmm-gpio/key_gpio"
+	};
 
-	node = fdt_path_offset(gd->fdt_blob, gpio_name);
-	if (node < 0) {
-		if (debug_state)
-			printf("Could not find %s node in fdt\n", gpio_name);
+	for (int i = 0; i < ARRAY_SIZE(node_paths); i++) {
+		node = fdt_path_offset(gd->fdt_blob, node_paths[i]);
+		if (node >= 0)
+			qca_gpio_init(node);
+	}
+}
+
+static unsigned int fdt_get_led_gpio_by_label(const char *led_label)
+{
+	int parent, node;
+	int ret, strings_count;
+	const char *node_label;
+
+	if (!led_label)
 		return 0;
-	}
 
-	gpio = fdtdec_get_uint(gd->fdt_blob, node, "gpio", 0);
-	if (!gpio) {
-		if (debug_state)
-			printf("Could not find %s node's gpio in fdt\n", gpio_name);
+	parent = fdt_path_offset(gd->fdt_blob, "/tlmm-gpio/led_gpio");
+	if (parent < 0)
 		return 0;
+
+	fdt_for_each_subnode(gd->fdt_blob, node, parent) {
+		strings_count = fdt_count_strings(gd->fdt_blob, node, "label");
+		for (int i = 0; i < strings_count; i++) {
+			node_label = NULL;
+			ret = fdt_get_string_index(gd->fdt_blob, node, "label", i, &node_label);
+			if (!ret && node_label && !strcmp(node_label, led_label))
+				return fdtdec_get_uint(gd->fdt_blob, node, "gpio", 0);
+		}
 	}
 
-	return gpio;
+	return 0;
 }
 
-void led_toggle(const char *gpio_name)
-{
-	int value;
-	unsigned int gpio;
-
-	gpio = fdt_get_gpio_by_name(gpio_name, 1);
-	if (!gpio)
-		return;
-
-	value = gpio_get_value(gpio);
-	value = !value;
-	gpio_set_value(gpio, value);
-
-	return;
-}
-
-void led_on(const char *gpio_name)
+void led_on(const char *label)
 {
 	unsigned int gpio;
 
-	gpio = fdt_get_gpio_by_name(gpio_name, 1);
-	if (!gpio)
-		return;
-
-	gpio_set_value(gpio, 1);
-
-	return;
+	gpio = fdt_get_led_gpio_by_label(label);
+	if (gpio)
+		gpio_set_value(gpio, 1);
 }
 
-void led_off(const char *gpio_name)
+void led_off(const char *label)
 {
 	unsigned int gpio;
 
-	gpio = fdt_get_gpio_by_name(gpio_name, 1);
-	if (!gpio)
-		return;
-
-	gpio_set_value(gpio, 0);
-
-	return;
+	gpio = fdt_get_led_gpio_by_label(label);
+	if (gpio)
+		gpio_set_value(gpio, 0);
 }
 
-static bool button_is_pressed(enum BUTTON button, int value)
+void led_toggle(const char *label)
 {
 	unsigned int gpio;
-	const char *button_name;
 
-	switch (button) {
-	case RESET:
-		button_name = RESET_BUTTON_NAME;
-		break;
-	case WPS:
-		button_name = WPS_BUTTON_NAME;
-		break;
-	case SCREEN:
-		button_name = SCREEN_BUTTON_NAME;
-		break;
-	default:
-		return false;
-	}
+	gpio = fdt_get_led_gpio_by_label(label);
+	if (gpio)
+		gpio_set_value(gpio, !gpio_get_value(gpio));
+}
 
-	gpio = fdt_get_gpio_by_name(button_name, button == RESET ? 1 : 0);
+static inline bool is_button_pressed(unsigned int button_gpio)
+{
+	return gpio_get_value(button_gpio) == BUTTON_PRESSED ? true : false;
+}
 
-	if (!gpio)
+static bool is_any_button_pressed(const char **button_name, unsigned int *button_gpio)
+{
+	int parent, node;
+	unsigned int gpio;
+	const char *node_name;
+
+	parent = fdt_path_offset(gd->fdt_blob, "/tlmm-gpio/key_gpio");
+	if (parent < 0)
 		return false;
 
-	if (gpio_get_value(gpio) == value) {
-		mdelay(10);
-		if (gpio_get_value(gpio) == value)
+	fdt_for_each_subnode(gd->fdt_blob, node, parent) {
+		gpio = fdtdec_get_uint(gd->fdt_blob, node, "gpio", 0);
+		if (gpio && is_button_pressed(gpio)) {
+			if (button_gpio)
+				*button_gpio = gpio;
+			if (button_name) {
+				node_name = fdt_get_name(gd->fdt_blob, node, NULL);
+				*button_name = node_name ? node_name : "unknown";
+			}
 			return true;
-		else
-			return false;
-	} else {
-		return false;
+		}
 	}
+
+	return false;
 }
 
-static bool button_is_pressed_for_enough_time(void)
+static bool is_any_button_pressed_for_enough_time(void)
 {
 	int counter = 3;
 	ulong ts;
-	enum BUTTON button;
 	bool led_state_on, still_pressed = true;
+	const char *button_name;
+	unsigned int button_gpio;
 
-    if (button_is_pressed(RESET, BUTTON_PRESSED))
-        button = RESET;
-    else if (button_is_pressed(WPS, BUTTON_PRESSED))
-        button = WPS;
-    else if (button_is_pressed(SCREEN, BUTTON_PRESSED))
-        button = SCREEN;
-	else
+    if (!is_any_button_pressed(&button_name, &button_gpio))
 		return false;
 
-	printf("%s button pressed, enter web failsafe mode after: %-2d",
-		button == RESET ? "reset" : button == WPS ? "wps" : "screen", counter);
+	printf("%s button pressed, enter web failsafe mode after: %-2d", button_name, counter);
 
 	while (counter > 0 && still_pressed) {
 		counter--;
@@ -160,7 +145,7 @@ static bool button_is_pressed_for_enough_time(void)
 		led_state_on = false;
 		led_off("power_led");
 		do {
-			still_pressed = button_is_pressed(button, BUTTON_PRESSED);
+			still_pressed = is_button_pressed(button_gpio);
 
 			if (!led_state_on && get_timer(ts) >= 500) {
 				led_state_on = true;
@@ -235,7 +220,7 @@ void do_httpd_check(void)
 	}
 
 	if (!start_httpd)
-		start_httpd = button_is_pressed_for_enough_time();
+		start_httpd = is_any_button_pressed_for_enough_time();
 
 	if (abort) {
 		led_on("power_led");

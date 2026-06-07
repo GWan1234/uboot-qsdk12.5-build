@@ -26,12 +26,6 @@
 		pci0 = "/pci@20000000";
 		usb0 = "/xhci@8a00000";
 		i2c1 = "/i2c@78ba000";
-		power_led = "/tlmm-gpio/led_gpio/led_red";
-		blink_led = "/tlmm-gpio/led_gpio/led_blue";
-		system_led = "/tlmm-gpio/led_gpio/led_green";
-		reset_key = "/tlmm-gpio/key_gpio/reset";
-		screen_key = "/tlmm-gpio/key_gpio/screen";
-		wps_key = "/tlmm-gpio/key_gpio/joylink";
 	};
 
 	ess-switch {
@@ -74,6 +68,7 @@
 
 		led_gpio {
 			led_red {
+				label = "power_led";
 				gpio = <57>;
 				func = <0>;
 				out = <GPIO_OUT_LOW>;
@@ -82,6 +77,7 @@
 				oe = <GPIO_OE_ENABLE>;
 			};
 			led_blue {
+				label = "blink_led";
 				gpio = <79>;
 				func = <0>;
 				out = <GPIO_OUT_LOW>;
@@ -90,6 +86,7 @@
 				oe = <GPIO_OE_ENABLE>;
 			};
 			led_green {
+				label = "system_led";
 				gpio = <58>;
 				func = <0>;
 				out = <GPIO_OUT_LOW>;

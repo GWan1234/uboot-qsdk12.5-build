@@ -16,10 +16,7 @@
 #include <asm/u-boot.h>
 #include <asm/arch-qca-common/smem.h>
 #include <asm/arch-qca-common/clk.h>
-
-#if !defined(CONFIG_HTTPD)
 #include <asm/arch-qca-common/gpio.h>
-#endif
 
 #ifdef CONFIG_ARCH_IPQ5018
 #include <asm/arch-ipq5018/clk.h>

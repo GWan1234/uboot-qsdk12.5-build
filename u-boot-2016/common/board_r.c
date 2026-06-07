@@ -64,9 +64,8 @@
 #ifdef CONFIG_AVR32
 #include <asm/arch/mmu.h>
 #endif
-
-#if defined(CONFIG_HTTPD)
-#include <asm/arch-qca-common/gpio.h>
+#ifdef CONFIG_HTTPD
+#include <ipq_api.h>
 #endif
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -555,11 +554,6 @@ static int initr_ethaddr(void)
 {
 	bd_t *bd = gd->bd;
 
-#if defined(CONFIG_HTTPD)
-	ipq_btn_init();
-	ipq_led_init();
-#endif
-
 	/* kept around for legacy kernels only ... ignore the next section */
 	eth_getenv_enetaddr("ethaddr", bd->bi_enetaddr);
 #ifdef CONFIG_HAS_ETH1
@@ -580,6 +574,15 @@ static int initr_ethaddr(void)
 	return 0;
 }
 #endif /* CONFIG_CMD_NET */
+
+#ifdef CONFIG_HTTPD
+static int initr_ipq_gpio(void)
+{
+	ipq_gpio_init();
+	led_on("power_led");
+	return 0;
+}
+#endif
 
 #ifdef CONFIG_CMD_KGDB
 static int initr_kgdb(void)
@@ -906,6 +909,9 @@ init_fnc_t init_sequence_r[] = {
 	/* PPC has a udelay(20) here dating from 2002. Why? */
 #ifdef CONFIG_CMD_NET
 	initr_ethaddr,
+#endif
+#ifdef CONFIG_HTTPD
+	initr_ipq_gpio,
 #endif
 #ifdef CONFIG_BOARD_LATE_INIT
 	board_late_init,

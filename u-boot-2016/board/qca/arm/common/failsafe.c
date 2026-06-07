@@ -21,7 +21,6 @@
 #include <common.h>
 #include <cli.h>
 #include <image.h>
-#include <asm/gpio.h>
 #include <fdtdec.h>
 #include <part.h>
 #include <spi.h>

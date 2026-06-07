@@ -16,9 +16,6 @@
 #include <asm/types.h>
 #include <fdtdec.h>
 #include <asm/arch-qca-common/gpio.h>
-#if defined(CONFIG_HTTPD)
-#include <ipq_api.h>
-#endif
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -141,57 +138,3 @@ int qca_gpio_deinit(int offset)
 	}
 	return 0;
 }
-
-#if defined(CONFIG_HTTPD)
-void ipq_gpio_init(const char *gpio_name, const int debug_state)
-{
-	int node;
-	struct qca_gpio_config gpio_config;
-
-	node = fdt_path_offset(gd->fdt_blob, gpio_name);
-	if (node < 0) {
-		if (debug_state)
-			printf("Could not find %s node\n", gpio_name);
-		return;
-	}
-
-	gpio_config.gpio	= fdtdec_get_uint(gd->fdt_blob,
-						  node, "gpio", 0);
-	gpio_config.func	= fdtdec_get_uint(gd->fdt_blob,
-						  node, "func", 0);
-	gpio_config.out		= fdtdec_get_uint(gd->fdt_blob,
-						  node, "out", 0);
-	gpio_config.pull	= fdtdec_get_uint(gd->fdt_blob,
-						  node, "pull", 0);
-	gpio_config.drvstr	= fdtdec_get_uint(gd->fdt_blob,
-						  node, "drvstr", 0);
-	gpio_config.oe		= fdtdec_get_uint(gd->fdt_blob,
-						  node, "oe", 0);
-	gpio_config.vm		= fdtdec_get_uint(gd->fdt_blob,
-						  node, "vm", 0);
-	gpio_config.od_en	= fdtdec_get_uint(gd->fdt_blob,
-						  node, "od_en", 0);
-	gpio_config.pu_res	= fdtdec_get_uint(gd->fdt_blob,
-						  node, "pu_res", 0);
-	gpio_config.sr_en	= fdtdec_get_uint(gd->fdt_blob,
-						  node, "sr_en", 0);
-	gpio_tlmm_config(&gpio_config);
-}
-
-void ipq_btn_init(void)
-{
-	ipq_gpio_init("reset_key", 1);
-	ipq_gpio_init("wps_key", 0);
-	ipq_gpio_init("screen_key", 0);
-}
-
-void ipq_led_init(void)
-{
-	ipq_gpio_init("power_led", 1);
-	ipq_gpio_init("blink_led", 1);
-	ipq_gpio_init("system_led", 1);
-
-	led_on("power_led");
-	mdelay(500);
-}
-#endif
