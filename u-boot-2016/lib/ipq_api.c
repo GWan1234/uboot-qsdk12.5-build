@@ -33,7 +33,7 @@
 #include <linux/mtd/mtd.h>
 #include <nand.h>
 #include <ubi_uboot.h>
-#include <failsafe/fw.h>
+#include <failsafe/fw_dec.h>
 #include <mapmem.h>
 #include <flashrw.h>
 

@@ -27,7 +27,7 @@
 #include <sdhci.h>
 #include <part.h>
 #include <u-boot/md5.h>
-#include <failsafe/fw.h>
+#include <failsafe/fw_dec.h>
 #include <capture.h>
 
 #include "webconsole.h"

@@ -15,7 +15,7 @@
 #include <command.h>
 #include <errno.h>
 #include <stdbool.h>
-#include <failsafe/fw.h>
+#include <failsafe/fw_dec.h>
 
 #include "untar.h"
 

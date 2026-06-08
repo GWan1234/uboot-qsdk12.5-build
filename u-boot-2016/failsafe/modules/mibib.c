@@ -25,7 +25,7 @@
 #include <asm/arch-qca-common/smem.h>
 #include <net/httpd.h>
 #include <failsafe/failsafe.h>
-#include <failsafe/fw.h>
+#include <failsafe/fw_dec.h>
 #include <ipq_api.h>
 
 #include "mibib.h"

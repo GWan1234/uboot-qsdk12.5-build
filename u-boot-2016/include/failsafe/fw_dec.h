@@ -1,5 +1,25 @@
-#ifndef __FW_H__
-#define __FW_H__
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2026 chenxin527. All Rights Reserved.
+ *
+ * This file is part of the project uboot-qsdk12.5-build
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+#ifndef __FW_DEC_H__
+#define __FW_DEC_H__
 
 typedef enum {
     FW_TYPE_UNKNOWN = -1,
@@ -64,4 +84,4 @@ typedef enum {
 fw_type_t check_fw_type(uintptr_t addr);
 char *fw_type_to_string(fw_type_t fw_type);
 
-#endif /* __FW_H__ */
+#endif /* __FW_DEC_H__ */

@@ -32,7 +32,7 @@
 #include <nand.h>
 #include <ubi_uboot.h>
 #include <failsafe/failsafe.h>
-#include <failsafe/fw.h>
+#include <failsafe/fw_dec.h>
 #include <ipq_api.h>
 #include <u-boot/md5.h>
 #include <net/httpd.h>
