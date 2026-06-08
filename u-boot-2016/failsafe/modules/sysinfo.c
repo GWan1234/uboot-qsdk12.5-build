@@ -1,18 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2026 Yuzhii0718
+ * Copyright (C) 2026 chenxin527. All Rights Reserved.
  *
- * All rights reserved.
+ * This file is part of the project uboot-qsdk12.5-build
  *
- * This file is part of the project bl-mt798x-dhcpd
- * You may not use, copy, modify or distribute this file except in compliance with the license agreement.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- * Failsafe flash backup
- */
-
-/*
- * Modified by: chenxin527
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <common.h>
@@ -63,6 +66,17 @@ struct smem_ptable {
 	struct smem_ptn parts[SMEM_PTABLE_PARTS_MAX];
 } __attribute__ ((__packed__));
 
+static void handle_response_message(struct httpd_response *response,
+    int code, const char *data, const char *content_type)
+{
+	response->status = HTTP_RESP_STD;
+	response->data = data ? data : "";
+	response->size = strlen(response->data);
+	response->info.code = code;
+	response->info.connection_close = 1;
+	response->info.content_type = content_type ? content_type : "text/plain";
+}
+
 void sysinfo_handler(enum httpd_uri_handler_status status,
         struct httpd_request *request,
         struct httpd_response *response)
@@ -92,12 +106,7 @@ void sysinfo_handler(enum httpd_uri_handler_status status,
 
 	buf = malloc(left);
 	if (!buf) {
-		response->status = HTTP_RESP_STD;
-		response->data = "{}";
-		response->size = strlen(response->data);
-		response->info.code = 500;
-		response->info.connection_close = 1;
-		response->info.content_type = "application/json";
+		handle_response_message(response, 500, "no mem", NULL);
 		return;
 	}
 
@@ -266,13 +275,6 @@ void sysinfo_handler(enum httpd_uri_handler_status status,
 
 	len += snprintf(buf + len, left - len, "}");
 
-	response->status = HTTP_RESP_STD;
-	response->data = buf;
-	response->size = strlen(buf);
-	response->info.code = 200;
-	response->info.connection_close = 1;
-	response->info.content_type = "application/json";
-
-	/* response data must stay valid until sent */
+	handle_response_message(response, 200, buf, "application/json");
 	response->session_data = buf;
 }
