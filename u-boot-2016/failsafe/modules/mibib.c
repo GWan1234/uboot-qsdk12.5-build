@@ -24,6 +24,7 @@
 #include <nand.h>
 #include <asm/arch-qca-common/smem.h>
 #include <net/httpd.h>
+#include <failsafe/failsafe.h>
 #include <failsafe/fw.h>
 #include <ipq_api.h>
 

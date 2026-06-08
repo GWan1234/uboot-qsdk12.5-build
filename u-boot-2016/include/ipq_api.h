@@ -1,3 +1,28 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2026 chenxin527. All Rights Reserved.
+ *
+ * This file is part of the project uboot-qsdk12.5-build
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+#ifndef __IPQ_API__
+#define __IPQ_API__
+
+#include <ipq_led.h>
+
 typedef struct {
 	bool spi;
 	bool nand;
@@ -51,9 +76,6 @@ void check_network_settings(void);
 void do_httpd_check(void);
 void detect_flash_device(void);
 void ipq_gpio_init(void);
-void led_on(const char *gpio_name);
-void led_off(const char *gpio_name);
-void led_toggle(const char *gpio_name);
 size_t json_escape(const char *input, char *output, size_t output_buffer_size);
 bool mmc_part_exists(const char *part_name);
 const void *get_mibib_ptable_offset(const void *addr, size_t limit, mibib_type_t mibib_type);
@@ -75,23 +97,4 @@ static inline int string_to_flash_type(const char *str)
 }
 #endif
 
-static inline void handle_start_led_state(void)
-{
-	led_off("power_led");
-	led_off("system_led");
-	led_on("blink_led");
-}
-
-static inline void handle_fail_led_state(void)
-{
-    led_off("blink_led");
-	led_off("system_led");
-	led_on("power_led");
-}
-
-static inline void handle_success_led_state(void)
-{
-	led_off("blink_led");
-    led_off("power_led");
-	led_on("system_led");
-}
+#endif /* __IPQ_API__ */

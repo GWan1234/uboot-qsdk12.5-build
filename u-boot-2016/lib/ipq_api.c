@@ -1,3 +1,23 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2026 chenxin527. All Rights Reserved.
+ *
+ * This file is part of the project uboot-qsdk12.5-build
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <common.h>
 #include <cli.h>
 #include <errno.h>
@@ -24,11 +44,6 @@ extern struct sdhci_host mmc_host;
 #endif
 
 typedef struct {
-	unsigned int gpio;
-	unsigned int active_level;
-} led_info_t;
-
-typedef struct {
 	const char *name;
 	unsigned int gpio;
 	unsigned int active_level;
@@ -51,67 +66,6 @@ void ipq_gpio_init(void)
 		if (node >= 0)
 			qca_gpio_init(node);
 	}
-}
-
-static int fdt_get_led_info_by_label(const char *led_label, led_info_t *led_info)
-{
-	int parent, node;
-	int ret, strings_count;
-	const char *node_label;
-
-	if (!led_label)
-		return -EINVAL;
-
-	parent = fdt_path_offset(gd->fdt_blob, "/tlmm-gpio/led_gpio");
-	if (parent < 0)
-		return -ENOENT;
-
-	fdt_for_each_subnode(gd->fdt_blob, node, parent) {
-		strings_count = fdt_count_strings(gd->fdt_blob, node, "label");
-		for (int i = 0; i < strings_count; i++) {
-			node_label = NULL;
-			ret = fdt_get_string_index(gd->fdt_blob, node, "label", i, &node_label);
-			if (!ret && node_label && !strcmp(node_label, led_label)) {
-				led_info->gpio = fdtdec_get_uint(gd->fdt_blob, node, "gpio", 0);
-				led_info->active_level = fdtdec_get_uint(gd->fdt_blob, node, "active_level", GPIO_ACTIVE_HIGH);
-				return 0;
-			}
-		}
-	}
-
-	return -ENOENT;
-}
-
-void led_on(const char *label)
-{
-	int ret;
-	led_info_t led;
-
-	ret = fdt_get_led_info_by_label(label, &led);
-	if (!ret && led.gpio)
-		gpio_set_value(led.gpio,
-			(led.active_level == GPIO_ACTIVE_HIGH) ? GPIO_OUT_HIGH : GPIO_OUT_LOW);
-}
-
-void led_off(const char *label)
-{
-	int ret;
-	led_info_t led;
-
-	ret = fdt_get_led_info_by_label(label, &led);
-	if (!ret && led.gpio)
-		gpio_set_value(led.gpio,
-			(led.active_level == GPIO_ACTIVE_HIGH) ? GPIO_OUT_LOW : GPIO_OUT_HIGH);
-}
-
-void led_toggle(const char *label)
-{
-	int ret;
-	led_info_t led;
-
-	ret = fdt_get_led_info_by_label(label, &led);
-	if (!ret && led.gpio)
-		gpio_set_value(led.gpio, !gpio_get_value(led.gpio));
 }
 
 static inline bool is_button_pressed(unsigned int button_gpio, unsigned int active_level)
