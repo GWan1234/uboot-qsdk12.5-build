@@ -435,4 +435,9 @@ extern loff_t board_env_size;
  */
 #define CONFIG_TELNETD
 
+/*
+ * wget support
+ */
+#define CONFIG_WGET
+
 #endif /* _IPQ6018_H */

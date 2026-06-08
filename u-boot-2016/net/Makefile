@@ -24,3 +24,4 @@ obj-$(CONFIG_DHCPD)    += dhcpd.o
 obj-$(CONFIG_HTTPD)    += httpd.o
 obj-$(CONFIG_TCP)      += tcp.o
 obj-$(CONFIG_TELNETD)  += telnetd.o
+obj-$(CONFIG_WGET)     += wget.o
