@@ -245,8 +245,12 @@ static int netboot_common(enum proto_t proto, cmd_tbl_t *cmdtp, int argc,
 		return CMD_RET_SUCCESS;
 	}
 
-	/* flush cache */
-	flush_cache(load_addr, size);
+	/*
+	 * tftpput 传输完比较大的数据后 flush cache 会导致机器异常重启（原因暂不明），
+	 * 不过 tftpput 完成后也不需要 flush cache，这里直接针对 tftpput 禁用 flush cache。
+	 */
+	if (proto != TFTPPUT)
+		flush_cache(load_addr, size);
 
 	bootstage_mark(BOOTSTAGE_ID_NET_LOADED);
 
