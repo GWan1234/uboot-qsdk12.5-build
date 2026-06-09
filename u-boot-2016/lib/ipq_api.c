@@ -277,13 +277,13 @@ void detect_flash_device(void)
 
 	spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
 			CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
-	if (spi) {
+	if (spi && spi->size > 0) {
 		len += strlcpy(flash_list + len, "SPI", sizeof(flash_list));
 		dfd->spi = true;
 	}
 
 	nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
-	if (nand->name) {
+	if (nand->name && nand->size > 0 && nand->writesize > 0) {
 		len += sprintf(flash_list + len, "%sNAND", len ? ", " : "");
 		dfd->nand = true;
 	}
