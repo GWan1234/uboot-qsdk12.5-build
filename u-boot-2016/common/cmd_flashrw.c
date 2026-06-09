@@ -36,6 +36,7 @@ extern struct sdhci_host mmc_host;
 #define SMEM_PTN_NAME_MAX     16
 #define GPT_PART_NAME "0:GPT"
 #define GPT_BACKUP_PART_NAME "0:GPTBACKUP"
+#define GPT_SIZE_IN_BLOCKS 34
 
 #ifdef CONFIG_IPQ_MIBIB_RELOAD
 #define HEADER_MAGIC1 0xFE569FAC
@@ -43,6 +44,7 @@ extern struct sdhci_host mmc_host;
 #define HEADER_VERSION 4
 
 #define SZ_1M 0x00100000
+#define SZ_4G ((unsigned long long)0x100000000)
 
 struct header {
 	unsigned magic[2];
@@ -701,6 +703,8 @@ static int read_partition(const char *part_name, const ulong load_addr)
     detected_flash_device_t *dfd = &detected_flash_device;
 	block_dev_desc_t *mmc_dev;
 	disk_partition_t disk_info = {0};
+	ulong offset_blocks = 0, size_blocks = 0;
+	unsigned long long tmp_size_bytes;
 	uint32_t offset_bytes = 0, size_bytes = 0;
     uint32_t flash_type;
     char buf[128];
@@ -742,20 +746,30 @@ static int read_partition(const char *part_name, const ulong load_addr)
 		if (!mmc_dev)
 			goto part_not_found;
 
-		ret = get_partition_info_efi_by_name(mmc_dev, (char *)part_name, &disk_info);
-		if (ret)
-			goto part_not_found;
+		if (!strcmp(part_name, GPT_PART_NAME)) {
+			offset_blocks = 0;
+			size_blocks = GPT_SIZE_IN_BLOCKS;
+			size_bytes = GPT_SIZE_IN_BLOCKS * mmc_dev->blksz;
+		} else {
+			ret = get_partition_info_efi_by_name(mmc_dev, (char *)part_name, &disk_info);
+			if (ret)
+				goto part_not_found;
 
-		size_bytes = (uint32_t)(disk_info.size * disk_info.blksz);
+			offset_blocks = (ulong)disk_info.start;
+			size_blocks = (ulong)disk_info.size;
 
-        sprintf(buf, "mmc read 0x%lx 0x%lx 0x%lx",
-            load_addr, (ulong)disk_info.start, (ulong)disk_info.size);
+			tmp_size_bytes = (unsigned long long)disk_info.size * (unsigned long long)disk_info.blksz;
+			if (tmp_size_bytes > SZ_4G)
+				goto part_too_big;
+
+			size_bytes = (uint32_t)tmp_size_bytes;
+		}
+
+        sprintf(buf, "mmc read 0x%lx 0x%lx 0x%lx", load_addr, offset_blocks, size_blocks);
 	}
 
-	if (!is_memory_region_available(load_addr, size_bytes)) {
-        puts("Error: partition size too large\n");
-        return CMD_RET_FAILURE;
-    }
+	if (!is_memory_region_available(load_addr, size_bytes))
+		goto part_too_big;
 
 	printf("#Executing: %s\n", buf);
 
@@ -768,19 +782,22 @@ static int read_partition(const char *part_name, const ulong load_addr)
     setenv_hex("fileaddr", load_addr);
     setenv_hex("filesize", size_bytes);
     if (dfd->mmc) {
-        ulong size_in_blocks;
-        mmc_dev = mmc_get_dev(mmc_host.dev_num);
-        if (mmc_dev && mmc_dev->blksz) {
-            size_in_blocks = size_bytes / mmc_dev->blksz +
-                            (size_bytes % mmc_dev->blksz != 0);
-            setenv_hex("filesize_blks", size_in_blocks);
-        }
+        if (!size_blocks) {
+			mmc_dev = mmc_get_dev(mmc_host.dev_num);
+			if (mmc_dev && mmc_dev->blksz)
+				size_blocks = size_bytes / mmc_dev->blksz + (size_bytes % mmc_dev->blksz != 0);
+		}
+		setenv_hex("filesize_blks", size_blocks);
     }
 
     return CMD_RET_SUCCESS;
 
 part_not_found:
     printf("Partition %s not found\n", part_name);
+    return CMD_RET_FAILURE;
+
+part_too_big:
+    puts("Error: partition size too large\n");
     return CMD_RET_FAILURE;
 }
 
