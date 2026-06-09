@@ -17,6 +17,7 @@
 #include <net/wget.h>
 #include <linux/sizes.h>
 #include <linux/compat.h>
+#include <ipq_api.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -222,6 +223,11 @@ static int wget_parse_response(struct wget_pdata *pdata)
 
 	printf("Saving to 0x%08lx\n", (ulong)pdata->data_ptr);
 
+	if (!is_memory_region_available((uintptr_t)pdata->data_ptr, pdata->data_len)) {
+        puts("Error: file size too large\n");
+        return 1;
+    }
+
 	if (hdr_size == pdata->resp_hdr_len)
 		return 0;
 
@@ -266,7 +272,7 @@ static void wget_rx(struct wget_pdata *pdata, struct tcp_cb_data *cbd)
 				return;
 
 			if (ret > 0) {
-				tcp_close_conn(cbd->conn, 0);
+				tcp_close_conn(cbd->conn, 1);
 				return;
 			}
 
@@ -554,6 +560,11 @@ static int do_wget(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[])
 		load_addr = simple_strtoul(loadaddr, NULL, 16);
 		url = argv[1];
 	}
+
+	if (!is_load_addr_valid(load_addr)) {
+        puts("Error: specified load address not allowed\n");
+        return CMD_RET_FAILURE;
+    }
 
 	ret = start_wget(load_addr, url, NULL);
 	if (ret)
