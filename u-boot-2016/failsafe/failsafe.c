@@ -673,6 +673,10 @@ int start_web_failsafe(void)
 
 	net_loop(TCP);
 
+	inst = httpd_find_instance(80);
+	if (inst)
+		httpd_free_instance(inst);
+
 #if defined(CONFIG_DHCPD)
 	dhcpd_stop();
 #endif
