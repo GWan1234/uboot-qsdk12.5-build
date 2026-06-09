@@ -600,6 +600,7 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 
 		if (pdata->upload_size == pdata->payload_size) {
 			/* upload completed */
+			flush_cache((ulong)pdata->upload_ptr, pdata->payload_size);
 			pdata->upload_ptr[pdata->payload_size] = 0;
 			pdata->status = HTTPD_S_FULL_RCVD;
 		} else {
@@ -655,6 +656,7 @@ static int httpd_recv_payload(struct httpd_instance *inst,
 		}
 #endif
 		led_on("blink_led");
+		flush_cache((ulong)pdata->upload_ptr, pdata->payload_size);
 		pdata->upload_ptr[pdata->payload_size] = 0;
 		pdata->status = HTTPD_S_FULL_RCVD;
 		/* remove uploading mark */
