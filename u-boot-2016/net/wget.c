@@ -153,7 +153,7 @@ static int wget_recv_data(struct wget_pdata *pdata, void *data, size_t len)
 		percentage = (unsigned long long)pdata->data_rcvd_len * 100 /
 				(unsigned long long)pdata->data_len;
 
-		if (initial_recv || percentage > pdata->last_percentage + 1 ||
+		if (initial_recv || percentage > pdata->last_percentage ||
 		    pdata->data_rcvd_len == pdata->data_len) {
 			printf("%zu/%zu (%u%%) received.\r",
 			       pdata->data_rcvd_len, pdata->data_len,
@@ -163,6 +163,7 @@ static int wget_recv_data(struct wget_pdata *pdata, void *data, size_t len)
 	}
 
 	if (pdata->data_rcvd_len == pdata->data_len) {
+		flush_cache((ulong)pdata->data_ptr, pdata->data_len);
 		net_boot_file_size = (u32)pdata->data_len;
 		putc('\n');
 		return 1;
