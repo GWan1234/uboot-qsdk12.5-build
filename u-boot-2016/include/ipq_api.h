@@ -23,6 +23,8 @@
 
 #include <ipq_led.h>
 
+DECLARE_GLOBAL_DATA_PTR;
+
 typedef struct {
 	bool spi;
 	bool nand;
@@ -41,11 +43,46 @@ extern detected_flash_device_t detected_flash_device;
 #define CONFIG_LOADADDR 0x44000000
 #endif
 
-/*
- * 每次启动都会检查环境变量：ipaddr、netmask 和 serverip，并将其重置为默认值。
- * 若想要自定义这三个环境变量，需添加 custom_network 环境变量（任意合法非空值即可）。
- */
-#define CONFIG_FORCE_NETWORK_ENV
+static inline bool is_load_addr_valid(uintptr_t load_addr)
+{
+	/*
+     * Do not load files to the reserved region or the
+     * region where linux is executed.
+     */
+#ifdef CONFIG_IPQ806X
+    if ((load_addr < IPQ_TFTP_MIN_ADDR) || (load_addr >= IPQ_TFTP_MAX_ADDR))
+#else
+    if ((load_addr < IPQ_TFTP_MIN_ADDR) || (load_addr >= CONFIG_SYS_SDRAM_END) ||
+        ((load_addr >= CONFIG_IPQ_FDT_HIGH) && (load_addr < CONFIG_TZ_END_ADDR)))
+#endif /* CONFIG_IPQ806X */
+        return false;
+
+	return true;
+}
+
+static inline bool is_memory_region_available(uintptr_t load_addr, size_t size)
+{
+	uintptr_t end_addr;
+
+	if (!is_load_addr_valid(load_addr))
+		return false;
+
+	end_addr = load_addr + size;
+
+	/*
+	 * The file to be loaded should not overwrite the
+	 * code/stack area.
+	 */
+#ifdef CONFIG_IPQ806X
+    if (end_addr >= IPQ_TFTP_MAX_ADDR)
+#else
+    if ((end_addr >= CONFIG_SYS_SDRAM_END) ||
+        ((end_addr >= CONFIG_IPQ_FDT_HIGH) && (end_addr < CONFIG_TZ_END_ADDR)))
+#endif /* CONFIG_IPQ806X */
+        return false;
+
+	return true;
+}
 
 #define CONFIG_TFTP_TSIZE
 #if defined(CONFIG_TFTP_TSIZE)
@@ -70,9 +107,7 @@ typedef enum {
     MIBIB_TYPE_NOR
 } mibib_type_t;
 
-#if defined(CONFIG_FORCE_NETWORK_ENV)
-void check_network_settings(void);
-#endif
+void do_network_check(void);
 void do_httpd_check(void);
 void detect_flash_device(void);
 void ipq_gpio_init(void);

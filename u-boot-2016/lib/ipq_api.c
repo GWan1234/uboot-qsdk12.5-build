@@ -150,61 +150,66 @@ static bool failsafe_env_exists(void)
 	return true;
 }
 
-void do_httpd_check(void)
+static bool check_9008_mode_and_failsafe_env(void)
 {
 	ulong ts;
 	int counter = 3;
-	bool led_state_on, abort = false, start_httpd = false;
+	bool led_state_on, abort = false;
 
-	if (is_9008_mode || failsafe_env_exists()) {
-		puts(is_9008_mode ? "currently in 9008 mode" : "failsafe env variable defined");
-		printf(", enter web failsafe mode after: %-2d", counter);
+	if (!is_9008_mode && !failsafe_env_exists())
+		return false;
 
-		/* Wait 3s for phy link to settle down */
-		while (!abort && counter > 0) {
-			counter--;
-			ts = get_timer(0);
-			led_state_on = false;
-			led_off("power_led");
+	puts(is_9008_mode ? "currently in 9008 mode" : "failsafe env variable defined");
+	printf(", enter web failsafe mode after: %-2d", counter);
 
-			do {
-				if (tstc()) { /* we got a key press	*/
-					abort = true;
-					counter = 0;
-					(void) getc(); /* consume input	*/
-					break;;
-				}
-				if (!led_state_on && get_timer(ts) >= 500) {
-					led_state_on = true;
-					led_on("power_led");
-				}
-				udelay(10000);
-			} while (!abort && get_timer(ts) < 1000);
+	/* Wait 3s for phy link to settle down */
+	while (!abort && counter > 0) {
+		counter--;
+		ts = get_timer(0);
+		led_state_on = false;
+		led_off("power_led");
 
-			printf("\b\b%-2d", counter);
-		}
+		do {
+			if (tstc()) { /* we got a key press	*/
+				abort = true;
+				counter = 0;
+				(void) getc(); /* consume input	*/
+				break;;
+			}
+			if (!led_state_on && get_timer(ts) >= 500) {
+				led_state_on = true;
+				led_on("power_led");
+			}
+			udelay(10000);
+		} while (!abort && get_timer(ts) < 1000);
 
-		putc('\n');
-		led_on("power_led");
-		start_httpd = true;
+		printf("\b\b%-2d", counter);
 	}
 
-	if (!start_httpd)
-		start_httpd = is_any_button_pressed_for_enough_time();
+	putc('\n');
+	led_on("power_led");
 
-	if (abort) {
-		led_on("power_led");
+	/* 用户手动打断，直接进入命令行模式，不返回 */
+	if (abort)
 		cli_loop();
-	}
 
-	if (start_httpd) {
+	return true;
+}
+
+void do_httpd_check(void)
+{
+	if (check_9008_mode_and_failsafe_env() ||
+		is_any_button_pressed_for_enough_time()) {
 		run_command("httpd", 0);
 		cli_loop();
 	}
 }
 
-#if defined(CONFIG_FORCE_NETWORK_ENV)
-void check_network_settings(void)
+/**
+ * 每次启动都会检查环境变量：ipaddr、netmask 和 serverip，并将其重置为默认值。
+ * 若想要自定义这三个环境变量，需添加 custom_network 环境变量（任意合法非空值即可）。
+ */
+void do_network_check(void)
 {
 	if (getenv("custom_network"))
 		return;
@@ -213,38 +218,37 @@ void check_network_settings(void)
 	const char *current_ipaddr, *current_netmask, *current_serverip;
 	const char *default_ipaddr, *default_netmask, *default_serverip;
 
-# if defined(CONFIG_IPADDR)
+#ifdef CONFIG_IPADDR
 	default_ipaddr = __stringify(CONFIG_IPADDR);
-# else
+#else
 	default_ipaddr = "192.168.1.1";
-# endif /* CONFIG_IPADDR */
-# if defined(CONFIG_NETMASK)
+#endif /* CONFIG_IPADDR */
+#ifdef CONFIG_NETMASK
 	default_netmask = __stringify(CONFIG_NETMASK);
-# else
+#else
 	default_netmask = "255.255.255.0";
-# endif /* CONFIG_NETMASK */
-# if defined(CONFIG_SERVERIP)
+#endif /* CONFIG_NETMASK */
+#ifdef CONFIG_SERVERIP
 	default_serverip = __stringify(CONFIG_SERVERIP);
-# else
+#else
 	default_serverip = "192.168.1.2";
-# endif /* CONFIG_SERVERIP */
+#endif /* CONFIG_SERVERIP */
 
 	current_ipaddr = getenv("ipaddr");
-	current_netmask = getenv("netmask");
-	current_serverip = getenv("serverip");
-
 	if (!current_ipaddr || strcmp(current_ipaddr, default_ipaddr)) {
 		setenv("ipaddr", default_ipaddr);
 		net_ip = string_to_ip(default_ipaddr);
 		modified++;
 	}
 
+	current_netmask = getenv("netmask");
 	if (!current_netmask || strcmp(current_netmask, default_netmask)) {
 		setenv("netmask", default_netmask);
 		net_netmask = string_to_ip(default_netmask);
 		modified++;
 	}
 
+	current_serverip = getenv("serverip");
 	if (!current_serverip || strcmp(current_serverip, default_serverip)) {
 		setenv("serverip", default_serverip);
 		net_server_ip = string_to_ip(default_serverip);
@@ -252,15 +256,13 @@ void check_network_settings(void)
 	}
 
 	if (modified) {
-		printf("\"custom_network\" env variable not defined, "
-			"reset network settings to default values:\n");
+		puts("\"custom_network\" env variable not defined, reset network settings to default values:\n");
 		printf("    ipaddr: %s\n", default_ipaddr);
 		printf("    netmask: %s\n", default_netmask);
 		printf("    serverip: %s\n", default_serverip);
 		saveenv();
 	}
 }
-#endif /* CONFIG_FORCE_NETWORK_ENV */
 
 void detect_flash_device(void)
 {

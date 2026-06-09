@@ -89,13 +89,10 @@ void main_loop(void)
 	update_tftp(0UL, NULL, NULL);
 #endif /* CONFIG_UPDATE_TFTP */
 
-#if defined(CONFIG_FORCE_NETWORK_ENV)
-	check_network_settings();
-#endif
-
 #if defined(CONFIG_HTTPD)
 	set_default_flash_type_in_9008_mode();
 	reload_mibib_from_flash_in_9008_mode();
+	do_network_check();
 	do_httpd_check();
 #endif
 

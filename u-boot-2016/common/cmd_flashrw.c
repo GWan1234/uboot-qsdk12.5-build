@@ -27,7 +27,6 @@
 #include <asm/arch-qca-common/qpic_nand.h>
 #include <ipq_api.h>
 
-DECLARE_GLOBAL_DATA_PTR;
 #ifndef CONFIG_SDHCI_SUPPORT
 extern qca_mmc mmc_host;
 #else
@@ -702,7 +701,7 @@ static int read_partition(const char *part_name, const ulong load_addr)
     detected_flash_device_t *dfd = &detected_flash_device;
 	block_dev_desc_t *mmc_dev;
 	disk_partition_t disk_info = {0};
-	uint32_t offset_in_bytes = 0, size_in_bytes = 0;
+	uint32_t offset_bytes = 0, size_bytes = 0;
     uint32_t flash_type;
     char buf[128];
 	int ret;
@@ -717,7 +716,7 @@ static int read_partition(const char *part_name, const ulong load_addr)
 	case SMEM_BOOT_ONENAND_FLASH:
 	case SMEM_BOOT_QSPI_NAND_FLASH:
 	case SMEM_BOOT_SPI_FLASH:
-		ret = getpart_offset_size((char *)part_name, &offset_in_bytes, &size_in_bytes);
+		ret = getpart_offset_size((char *)part_name, &offset_bytes, &size_bytes);
 		if (!ret) {
             if (flash_type == SMEM_BOOT_NAND_FLASH ||
                 flash_type == SMEM_BOOT_ONENAND_FLASH ||
@@ -725,10 +724,10 @@ static int read_partition(const char *part_name, const ulong load_addr)
                 (flash_type == SMEM_BOOT_SPI_FLASH &&
                     get_which_flash_param((char *)part_name))) {
                 sprintf(buf, "nand read 0x%lx 0x%lx 0x%lx",
-                    load_addr, (ulong)offset_in_bytes, (ulong)size_in_bytes);
+                    load_addr, (ulong)offset_bytes, (ulong)size_bytes);
             } else {
                 sprintf(buf, "sf probe && sf read 0x%lx 0x%lx 0x%lx",
-                    load_addr, (ulong)offset_in_bytes, (ulong)size_in_bytes);
+                    load_addr, (ulong)offset_bytes, (ulong)size_bytes);
             }
             break;
         }
@@ -747,24 +746,13 @@ static int read_partition(const char *part_name, const ulong load_addr)
 		if (ret)
 			goto part_not_found;
 
-		size_in_bytes = (uint32_t)(disk_info.size * disk_info.blksz);
+		size_bytes = (uint32_t)(disk_info.size * disk_info.blksz);
 
         sprintf(buf, "mmc read 0x%lx 0x%lx 0x%lx",
             load_addr, (ulong)disk_info.start, (ulong)disk_info.size);
 	}
 
-	/*
-	 * The file to be loaded should not overwrite the
-	 * code/stack area.
-	 */
-#ifdef CONFIG_IPQ806X
-    if ((load_addr + size_in_bytes) >= IPQ_TFTP_MAX_ADDR)
-#else
-    if (((load_addr + size_in_bytes) >= CONFIG_SYS_SDRAM_END) ||
-        (((load_addr + size_in_bytes) >= CONFIG_IPQ_FDT_HIGH) &&
-            ((load_addr + size_in_bytes) < CONFIG_TZ_END_ADDR)))
-#endif /* CONFIG_IPQ806X */
-    {
+	if (!is_memory_region_available(load_addr, size_bytes)) {
         puts("Error: partition size too large\n");
         return CMD_RET_FAILURE;
     }
@@ -778,13 +766,13 @@ static int read_partition(const char *part_name, const ulong load_addr)
 	}
 
     setenv_hex("fileaddr", load_addr);
-    setenv_hex("filesize", size_in_bytes);
+    setenv_hex("filesize", size_bytes);
     if (dfd->mmc) {
         ulong size_in_blocks;
         mmc_dev = mmc_get_dev(mmc_host.dev_num);
         if (mmc_dev && mmc_dev->blksz) {
-            size_in_blocks = size_in_bytes / mmc_dev->blksz +
-                            (size_in_bytes % mmc_dev->blksz != 0);
+            size_in_blocks = size_bytes / mmc_dev->blksz +
+                            (size_bytes % mmc_dev->blksz != 0);
             setenv_hex("filesize_blks", size_in_blocks);
         }
     }
@@ -818,20 +806,7 @@ static int do_flash_read(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv
         return CMD_RET_USAGE;
 	}
 
-    /*
-     * Do not load files to the reserved region or the
-     * region where linux is executed.
-     */
-#ifdef CONFIG_IPQ806X
-    if ((load_addr < IPQ_TFTP_MIN_ADDR) ||
-        (load_addr >= IPQ_TFTP_MAX_ADDR))
-#else
-    if ((load_addr < IPQ_TFTP_MIN_ADDR) ||
-        (load_addr >= CONFIG_SYS_SDRAM_END) ||
-        ((load_addr >= CONFIG_IPQ_FDT_HIGH) &&
-        (load_addr < CONFIG_TZ_END_ADDR)))
-#endif /* CONFIG_IPQ806X */
-    {
+	if (!is_load_addr_valid(load_addr)) {
         puts("Error: specified load address not allowed\n");
         return CMD_RET_FAILURE;
     }
