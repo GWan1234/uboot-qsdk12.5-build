@@ -338,7 +338,7 @@ static void update_block_number(void)
 			(unsigned long long)tftp_tsize;
 		if (progress != last_progress) {
 			last_progress = progress;
-			printf("\b\b\b\b%2lu%% ", progress);
+			printf("%lu/%d (%lu%%)\r", tmp_size, tftp_tsize, progress);
 		}
 	}
 #endif /* CONFIG_TFTP_DIGITAL_PROGRESS */
@@ -350,8 +350,7 @@ static void tftp_complete(void)
 #ifdef CONFIG_TFTP_TSIZE
 # ifdef CONFIG_TFTP_DIGITAL_PROGRESS
 	if (tftp_tsize && last_progress < 100)
-		printf("\b\b\b\b100%%");
-	printf("\n");
+		printf("%d/%d (100%%)", tftp_tsize, tftp_tsize);
 # else
 	/* Print hash marks for the last packet received */
 	while (tftp_tsize && tftp_tsize_num_hash < 49) {
@@ -365,14 +364,18 @@ static void tftp_complete(void)
 	time_start = get_timer(time_start);
 	if (time_start > 0) {
 #ifdef CONFIG_TFTP_DIGITAL_PROGRESS
-		printf("Speed: ");
+		puts("  ");
 #else
 		puts("\n\t ");	/* Line up with "Loading: " */
 #endif /* CONFIG_TFTP_DIGITAL_PROGRESS */
 		print_size(net_boot_file_size /
 			time_start * 1000, "/s");
 	}
+#ifdef CONFIG_TFTP_DIGITAL_PROGRESS
+	putc('\n');
+#else
 	puts("\ndone\n");
+#endif /* CONFIG_TFTP_DIGITAL_PROGRESS */
 	net_set_state(NETLOOP_SUCCESS);
 }
 
@@ -605,9 +608,6 @@ static void tftp_handler(uchar *pkt, unsigned dest, struct in_addr sip,
 				debug("size = %s, %d\n",
 				      (char *)pkt + i + 6, tftp_tsize);
 # ifdef CONFIG_TFTP_DIGITAL_PROGRESS
-				printf("Filesize: ");
-				print_size(tftp_tsize, "");
-				printf("\n");
 				if (tftp_tsize) {
 #  ifdef CONFIG_CMD_TFTPPUT
 					ulong tmp_size = tftp_put_active ? sent_bytes : net_boot_file_size;
@@ -617,7 +617,7 @@ static void tftp_handler(uchar *pkt, unsigned dest, struct in_addr sip,
 					ulong progress = (unsigned long long)tmp_size * 100 /
 						(unsigned long long)tftp_tsize;
 					last_progress = progress;
-					printf("Progress: %2lu%% ", progress);
+					printf("%lu/%d (%lu%%)\r", tmp_size, tftp_tsize, progress);
 				}
 # endif /* CONFIG_TFTP_DIGITAL_PROGRESS */
 			}
