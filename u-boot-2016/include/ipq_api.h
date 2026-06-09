@@ -77,7 +77,8 @@ static inline bool is_memory_region_available(uintptr_t load_addr, size_t size)
     if (end_addr >= IPQ_TFTP_MAX_ADDR)
 #else
     if ((end_addr >= CONFIG_SYS_SDRAM_END) ||
-        ((end_addr >= CONFIG_IPQ_FDT_HIGH) && (end_addr < CONFIG_TZ_END_ADDR)))
+        ((end_addr >= CONFIG_IPQ_FDT_HIGH) && (end_addr < CONFIG_TZ_END_ADDR)) ||
+		((load_addr < CONFIG_IPQ_FDT_HIGH) && (end_addr >= CONFIG_TZ_END_ADDR)))
 #endif /* CONFIG_IPQ806X */
         return false;
 
