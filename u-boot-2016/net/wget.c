@@ -87,11 +87,15 @@ static int asprintf(char **strp, const char *fmt, ...)
 
 static void __wget_cleanup(struct wget_pdata *pdata)
 {
-	if (pdata->req_hdr)
+	if (pdata->req_hdr) {
 		free(pdata->req_hdr);
+		pdata->req_hdr = NULL;
+	}
 
-	if (pdata->resp_hdr)
+	if (pdata->resp_hdr) {
 		free(pdata->resp_hdr);
+		pdata->resp_hdr = NULL;
+	}
 }
 
 static void wget_initiate(struct wget_pdata *pdata, struct tcp_cb_data *cbd)
