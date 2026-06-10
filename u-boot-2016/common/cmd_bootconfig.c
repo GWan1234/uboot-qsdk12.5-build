@@ -63,6 +63,7 @@ struct bootconfig_info {
 } __attribute__ ((__packed__));
 
 typedef struct {
+	const char *part_name; /* BOOTCONFIG 分区名 */
 	ulong offset; /* BOOTCONFIG 分区偏移量 */
 	size_t size; /* BOOTCONFIG 有效数据大小 */
 	struct bootconfig_info info;
@@ -168,7 +169,7 @@ static int read_bootconfig(const char *part_name, bootconfig_info_t *bootcfg, in
 		return -EINVAL;
 	}
 
-	if (bootcfg->info.numaltpart > NUM_ALT_PARTITION) {
+	if (!ignore_error && bootcfg->info.numaltpart > NUM_ALT_PARTITION) {
 		printf("Warning: numaltpart (%u) exceeds maximum (%d), truncating\n",
 		       bootcfg->info.numaltpart, NUM_ALT_PARTITION);
 		bootcfg->info.numaltpart = NUM_ALT_PARTITION;
@@ -231,58 +232,61 @@ static int compare_bootconfig(bootconfig_info_t *cfg1, bootconfig_info_t *cfg2)
 }
 
 /**
- * do_bootconfig_sync - Sync BOOTCONFIG1 with BOOTCONFIG
+ * do_bootconfig_sync - Sync 0:BOOTCONFIG1 with 0:BOOTCONFIG or vice versa
  */
-static int do_bootconfig_sync(void)
+static int do_bootconfig_sync(bool reverse)
 {
-	bootconfig_info_t bootcfg;
-	bootconfig_info_t bootcfg1;
+	bootconfig_info_t src, dst;
 	int ret;
 
-	/* Check if BOOTCONFIG1 partition exists */
+	/* Check if 0:BOOTCONFIG1 partition exists */
 	ret = get_bootconfig_part_offset(BOOTCONFIG1_PART_NAME);
 	if (ret < 0) {
 		printf("Partition %s does not exist, skip sync\n", BOOTCONFIG1_PART_NAME);
 		return CMD_RET_SUCCESS;
 	}
 
-	bootcfg.size = sizeof(struct bootconfig_info);
-	bootcfg1.size = sizeof(struct bootconfig_info);
-
-	/* Read BOOTCONFIG partition */
-	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg, 0);
-	if (ret) {
-		printf("Failed to read %s partition\n", BOOTCONFIG_PART_NAME);
-		return CMD_RET_FAILURE;
+	if (reverse) {
+		/* 0:BOOTCONFIG1 -> 0:BOOTCONFIG */
+		src.part_name = BOOTCONFIG1_PART_NAME;
+		dst.part_name = BOOTCONFIG_PART_NAME;
+	} else {
+		/* 0:BOOTCONFIG -> 0:BOOTCONFIG1 */
+		src.part_name = BOOTCONFIG_PART_NAME;
+		dst.part_name = BOOTCONFIG1_PART_NAME;
 	}
 
-	/* Read BOOTCONFIG1 partition */
-	ret = read_bootconfig(BOOTCONFIG1_PART_NAME, &bootcfg1, 1);
-	if (ret) {
-		printf("Failed to read %s partition\n", BOOTCONFIG1_PART_NAME);
+	src.size = sizeof(struct bootconfig_info);
+	dst.size = sizeof(struct bootconfig_info);
+
+	/* Read source BOOTCONFIG partition */
+	ret = read_bootconfig(src.part_name, &src, 0);
+	if (ret)
 		return CMD_RET_FAILURE;
-	}
+
+	/* Read destination BOOTCONFIG partition */
+	ret = read_bootconfig(dst.part_name, &dst, 1);
+	if (ret)
+		return CMD_RET_FAILURE;
+
+	printf("Syncing %s -> %s: ", src.part_name, dst.part_name);
 
 	/* Compare the two bootconfig structures */
-	ret = compare_bootconfig(&bootcfg, &bootcfg1);
+	ret = compare_bootconfig(&src, &dst);
 	if (ret) {
-		puts("✓ BOOTCONFIG and BOOTCONFIG1 are already in sync\n\n");
+		puts("already in sync\n\n");
 		return CMD_RET_SUCCESS;
 	}
 
 	/* They are different, need to sync */
-	puts("✗ BOOTCONFIG and BOOTCONFIG1 are inconsistent\n");
-	puts("Syncing BOOTCONFIG1 with BOOTCONFIG...\n");
+	memcpy(&dst.info, &src.info, src.size);
 
-	memcpy(&bootcfg1.info, &bootcfg.info, bootcfg.size);
-
-	/* Write BOOTCONFIG data to BOOTCONFIG1 partition */
-	ret = write_bootconfig(&bootcfg1);
+	ret = write_bootconfig(&dst);
 	if (!ret) {
-		puts("✓ BOOTCONFIG1 successfully synced with BOOTCONFIG\n\n");
+		puts("success\n\n");
 		return CMD_RET_SUCCESS;
 	} else {
-		puts("✗ Failed to sync BOOTCONFIG1 with BOOTCONFIG\n\n");
+		printf("failure (errno: %d)\n\n", ret);
 		return CMD_RET_FAILURE;
 	}
 }
@@ -432,8 +436,8 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 		puts("\nBootconfig updated successfully\n\n");
 	}
 
-	/* Always sync 0:BOOTCONFIG1 with 0:BOOTCONFIG */
-	return do_bootconfig_sync();
+	/* Always sync 0:BOOTCONFIG -> 0:BOOTCONFIG1 */
+	return do_bootconfig_sync(false);
 }
 
 /**
@@ -449,8 +453,18 @@ static int do_bootconfig(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv
 		return do_bootconfig_print();
 
 	/* bootconfig sync */
-	if (strcmp(argv[1], "sync") == 0)
-		return do_bootconfig_sync();
+	if (strcmp(argv[1], "sync") == 0) {
+		if (argc > 2) {
+			if (strcmp(argv[2], "reverse") == 0) {
+				return do_bootconfig_sync(true);
+			} else {
+				puts("Usage: bootconfig sync [reverse]\n");
+				return CMD_RET_USAGE;
+			}
+		} else {
+			return do_bootconfig_sync(false);
+		}
+	}
 
 	/* bootconfig get <name> */
 	if (strcmp(argv[1], "get") == 0) {
@@ -477,13 +491,14 @@ U_BOOT_CMD(
 	bootconfig, 4, 0, do_bootconfig,
 	"manage boot configuration",
 	"bootconfig print           - Print all bootconfig information\n"
-	"bootconfig sync            - Compare and sync BOOTCONFIG1 with BOOTCONFIG\n"
+	"bootconfig sync [reverse]  - Sync 0:BOOTCONFIG1 with 0:BOOTCONFIG or vice versa\n"
 	"bootconfig get <name>      - Get primaryboot value for a partition\n"
 	"bootconfig set <name|firmware|all> <0|1> - Set primaryboot value for partition(s)\n"
 	"\n"
 	"Examples:\n"
 	"  bootconfig print                    - Display all bootconfig info\n"
-	"  bootconfig sync                     - Check and sync BOOTCONFIG1 with BOOTCONFIG\n"
+	"  bootconfig sync                     - Sync 0:BOOTCONFIG -> 0:BOOTCONFIG1\n"
+	"  bootconfig sync reverse             - Sync 0:BOOTCONFIG1 -> 0:BOOTCONFIG\n"
 	"  bootconfig get rootfs               - Get rootfs primaryboot value\n"
 	"  bootconfig set rootfs 1             - Set rootfs primaryboot to 1\n"
 	"  bootconfig set firmware 0           - Set firmware partitions (0:HLOS, rootfs, 0:WIFIFW) to 0\n"
