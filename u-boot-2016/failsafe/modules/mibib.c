@@ -52,7 +52,7 @@ void mibib_reload_handler(enum httpd_uri_handler_status status,
 	response->info.connection_close = 1;
 	response->info.content_type = "application/json";
 
-    if (!is_9008_mode) {
+    if (!is_9008_mode()) {
         handle_fail_led_state();
         response->data = "{\"status\":\"fail\","
                         "\"info\":{\"type\":\"not_in_9008_mode\"}}";

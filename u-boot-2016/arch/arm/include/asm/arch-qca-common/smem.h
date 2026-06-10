@@ -52,7 +52,7 @@ struct version_entry
 	char oem_version_string[OEM_VERSION_STRING_LENGTH];
 } __attribute__ ((__packed__));
 
-extern bool is_9008_mode;
+bool is_9008_mode(void);
 
 const void *get_smem_ptable_addr(void);
 bool smem_part_exists(const char *part_name);

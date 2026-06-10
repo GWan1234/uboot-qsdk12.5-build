@@ -693,7 +693,7 @@ static int do_httpd(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	int ret;
 
 #if defined(CONFIG_HTTPD_DEBUG)
-	if (getenv("httpd_debug") || is_9008_mode)
+	if (getenv("httpd_debug") || is_9008_mode())
 		httpd_debug_on = true;
 	else
 		httpd_debug_on = false;

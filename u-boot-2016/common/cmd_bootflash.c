@@ -29,7 +29,7 @@ static int do_bootflash(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[
     detected_flash_device_t *dfd = &detected_flash_device;
     const char *flash_type_str;
 
-    if (!is_9008_mode) {
+    if (!is_9008_mode()) {
         puts("use in 9008 mode only\n");
         return CMD_RET_FAILURE;
     }

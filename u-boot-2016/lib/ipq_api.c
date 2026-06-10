@@ -156,10 +156,10 @@ static bool check_9008_mode_and_failsafe_env(void)
 	int counter = 3;
 	bool led_state_on, abort = false;
 
-	if (!is_9008_mode && !failsafe_env_exists())
+	if (!is_9008_mode() && !failsafe_env_exists())
 		return false;
 
-	puts(is_9008_mode ? "currently in 9008 mode" : "failsafe env variable defined");
+	puts(is_9008_mode() ? "currently in 9008 mode" : "failsafe env variable defined");
 	printf(", enter web failsafe mode after: %-2d", counter);
 
 	/* Wait 3s for phy link to settle down */
@@ -572,7 +572,7 @@ void reload_mibib_from_flash_in_9008_mode(void)
 {
 	detected_flash_device_t *dfd = &detected_flash_device;
 
-	if (!is_9008_mode)
+	if (!is_9008_mode())
 		return;
 
 	if (dfd->spi && !reload_mibib_from_spi())
@@ -591,7 +591,7 @@ void set_default_flash_type_in_9008_mode(void)
 	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
 	detected_flash_device_t *dfd = &detected_flash_device;
 
-	if (!is_9008_mode)
+	if (!is_9008_mode())
 		return;
 
 	/* SPI-NOR 具有最高优先级 */

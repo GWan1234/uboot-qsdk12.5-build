@@ -113,7 +113,7 @@ void sysinfo_handler(enum httpd_uri_handler_status status,
 	len += snprintf(buf + len, left - len, "{");
 
     len += snprintf(buf + len, left - len,
-        "\"is_9008_mode\":%s,", is_9008_mode ? "true" : "false");
+        "\"is_9008_mode\":%s,", is_9008_mode() ? "true" : "false");
 
     json_escape(version_string, esc_version_string, sizeof(esc_version_string));
     len += snprintf(buf + len, left - len, "\"uboot_version\":\"%s\",", esc_version_string);
