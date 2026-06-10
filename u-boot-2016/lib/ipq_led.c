@@ -51,7 +51,7 @@ static int led_get_info_by_label(const char *led_label, led_info_t *led_info)
 		return 0;
 	}
 
-	parent = fdt_path_offset(gd->fdt_blob, "/tlmm-gpio/led_gpio");
+	parent = fdt_path_offset(gd->fdt_blob, "/leds");
 	if (parent < 0)
 		return -ENOENT;
 
@@ -120,7 +120,7 @@ void led_control_all(led_op_t op)
 	int parent, node;
 	unsigned int gpio, active_level, value;
 
-	parent = fdt_path_offset(gd->fdt_blob, "/tlmm-gpio/led_gpio");
+	parent = fdt_path_offset(gd->fdt_blob, "/leds");
 	if (parent < 0)
 		return;
 

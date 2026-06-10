@@ -28,6 +28,74 @@
 		i2c1 = "/i2c@78ba000";
 	};
 
+	keys {
+		compatible = "gpio-keys";
+
+		reset {
+			gpio = <56>;
+			func = <0>;
+			drvstr = <GPIO_8MA>;
+			pull = <GPIO_PULL_UP>;
+			oe = <GPIO_OE_DISABLE>;
+			active_level = <GPIO_ACTIVE_LOW>;
+		};
+
+		joylink {
+			gpio = <72>;
+			func = <0>;
+			drvstr = <GPIO_8MA>;
+			pull = <GPIO_PULL_UP>;
+			oe = <GPIO_OE_DISABLE>;
+			active_level = <GPIO_ACTIVE_LOW>;
+		};
+
+		screen {
+			gpio = <71>;
+			func = <0>;
+			drvstr = <GPIO_8MA>;
+			pull = <GPIO_PULL_UP>;
+			oe = <GPIO_OE_DISABLE>;
+			active_level = <GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		led_red {
+			label = "power_led";
+			gpio = <57>;
+			func = <0>;
+			out = <GPIO_OUT_HIGH>;
+			drvstr = <GPIO_8MA>;
+			pull = <GPIO_PULL_DOWN>;
+			oe = <GPIO_OE_ENABLE>;
+			active_level = <GPIO_ACTIVE_HIGH>;
+		};
+
+		led_blue {
+			label = "blink_led";
+			gpio = <79>;
+			func = <0>;
+			out = <GPIO_OUT_LOW>;
+			drvstr = <GPIO_8MA>;
+			pull = <GPIO_PULL_DOWN>;
+			oe = <GPIO_OE_ENABLE>;
+			active_level = <GPIO_ACTIVE_HIGH>;
+		};
+
+		led_green {
+			label = "system_led";
+			gpio = <58>;
+			func = <0>;
+			out = <GPIO_OUT_LOW>;
+			drvstr = <GPIO_8MA>;
+			pull = <GPIO_PULL_DOWN>;
+			oe = <GPIO_OE_ENABLE>;
+			active_level = <GPIO_ACTIVE_HIGH>;
+		};
+	};
+
 	ess-switch {
 		switch_mac_mode = <PORT_WRAPPER_PSGMII>;
 		switch_mac_mode1 = <PORT_WRAPPER_SGMII_PLUS>;
@@ -56,73 +124,6 @@
 			port@5 {
 				phy_address = <12>;
 				phy_type = <QCA8081_PHY_TYPE>;
-			};
-		};
-	};
-
-	tlmm-gpio {
-		stb1 = <69>;
-		stb2 = <70>;
-		clk = <73>;
-		dio = <74>;
-
-		led_gpio {
-			led_red {
-				label = "power_led";
-				gpio = <57>;
-				func = <0>;
-				out = <GPIO_OUT_HIGH>;
-				drvstr = <GPIO_8MA>;
-				pull = <GPIO_PULL_DOWN>;
-				oe = <GPIO_OE_ENABLE>;
-				active_level = <GPIO_ACTIVE_HIGH>;
-			};
-			led_blue {
-				label = "blink_led";
-				gpio = <79>;
-				func = <0>;
-				out = <GPIO_OUT_LOW>;
-				drvstr = <GPIO_8MA>;
-				pull = <GPIO_PULL_DOWN>;
-				oe = <GPIO_OE_ENABLE>;
-				active_level = <GPIO_ACTIVE_HIGH>;
-			};
-			led_green {
-				label = "system_led";
-				gpio = <58>;
-				func = <0>;
-				out = <GPIO_OUT_LOW>;
-				drvstr = <GPIO_8MA>;
-				pull = <GPIO_PULL_DOWN>;
-				oe = <GPIO_OE_ENABLE>;
-				active_level = <GPIO_ACTIVE_HIGH>;
-			};
-		};
-
-		key_gpio {
-			reset {
-				gpio = <56>;
-				func = <0>;
-				drvstr = <GPIO_8MA>;
-				pull = <GPIO_PULL_UP>;
-				oe = <GPIO_OE_DISABLE>;
-				active_level = <GPIO_ACTIVE_LOW>;
-			};
-			joylink {
-				gpio = <72>;
-				func = <0>;
-				drvstr = <GPIO_8MA>;
-				pull = <GPIO_PULL_UP>;
-				oe = <GPIO_OE_DISABLE>;
-				active_level = <GPIO_ACTIVE_LOW>;
-			};
-			screen {
-				gpio = <71>;
-				func = <0>;
-				drvstr = <GPIO_8MA>;
-				pull = <GPIO_PULL_UP>;
-				oe = <GPIO_OE_DISABLE>;
-				active_level = <GPIO_ACTIVE_LOW>;
 			};
 		};
 	};

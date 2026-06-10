@@ -56,10 +56,7 @@ DECLARE_GLOBAL_DATA_PTR;
 void ipq_gpio_init(void)
 {
 	int node;
-	const char *node_paths[] = {
-		"/tlmm-gpio/led_gpio",
-		"/tlmm-gpio/key_gpio"
-	};
+	const char *node_paths[] = {"/leds", "/keys"};
 
 	for (int i = 0; i < ARRAY_SIZE(node_paths); i++) {
 		node = fdt_path_offset(gd->fdt_blob, node_paths[i]);
@@ -79,7 +76,7 @@ static bool is_any_button_pressed(button_info_t *button_info)
 	int parent, node;
 	unsigned int gpio, active_level;
 
-	parent = fdt_path_offset(gd->fdt_blob, "/tlmm-gpio/key_gpio");
+	parent = fdt_path_offset(gd->fdt_blob, "/keys");
 	if (parent < 0)
 		return false;
 
