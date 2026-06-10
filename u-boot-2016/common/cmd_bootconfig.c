@@ -20,16 +20,9 @@
 
 #include <common.h>
 #include <command.h>
-#include <asm/arch-qca-common/smem.h>
-#include <part.h>
-#include <linux/mtd/mtd.h>
-#include <nand.h>
 #include <mmc.h>
 #include <sdhci.h>
-#include <spi.h>
-#include <spi_flash.h>
 #include <malloc.h>
-#include <mapmem.h>
 #include <errno.h>
 #include <ipq_api.h>
 #include <flashrw.h>
@@ -40,10 +33,10 @@ extern qca_mmc mmc_host;
 extern struct sdhci_host mmc_host;
 #endif
 
-#define BOOTCONFIG_PART_NAME    "0:BOOTCONFIG"
-#define BOOTCONFIG1_PART_NAME   "0:BOOTCONFIG1"
-#define ALT_PART_NAME_LENGTH    16
-#define NUM_ALT_PARTITION       16
+#define BOOTCONFIG_PART_NAME            "0:BOOTCONFIG"
+#define BOOTCONFIG_BACKUP_PART_NAME     "0:BOOTCONFIG1"
+#define ALT_PART_NAME_LENGTH            16
+#define NUM_ALT_PARTITION               16
 #define BOOTCONFIG_MAGIC_START          0xA3A2A1A0
 #define BOOTCONFIG_MAGIC_START_TRYMODE  0xA3A2A1A1
 #define BOOTCONFIG_MAGIC_END            0xB3B2B1B0
@@ -69,8 +62,8 @@ typedef struct {
 	struct bootconfig_info info;
 } bootconfig_info_t;
 
-static qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-static detected_flash_device_t *dfd = &detected_flash_device;
+static const qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+static const detected_flash_device_t *dfd = &detected_flash_device;
 
 /**
  * get_bootconfig_part_offset - Get bootconfig partition offset
@@ -115,13 +108,13 @@ static int get_bootconfig_part_offset(const char *part_name)
 /**
  * read_bootconfig - Read bootconfig data to bootcfg structure
  */
-static int read_bootconfig(const char *part_name, bootconfig_info_t *bootcfg, int ignore_error)
+static int read_bootconfig(bootconfig_info_t *bootcfg, bool skip_validation)
 {
 	int offset_bytes, ret;
 
-	offset_bytes = get_bootconfig_part_offset(part_name);
+	offset_bytes = get_bootconfig_part_offset(bootcfg->part_name);
 	if (offset_bytes < 0) {
-		printf("Partition %s not found\n", part_name);
+		printf("Partition %s not found\n", bootcfg->part_name);
 		return -ENOENT;
 	}
 
@@ -153,23 +146,26 @@ static int read_bootconfig(const char *part_name, bootconfig_info_t *bootcfg, in
 	}
 
 	if (ret) {
-		printf("Failed to read bootconfig from partition %s\n", part_name);
+		printf("Failed to read bootconfig data from partition %s\n", bootcfg->part_name);
 		return ret;
 	}
 
+	if (skip_validation)
+		return 0;
+
 	/* Validate magic numbers */
-	if (!ignore_error && bootcfg->info.magic_start != BOOTCONFIG_MAGIC_START &&
+	if (bootcfg->info.magic_start != BOOTCONFIG_MAGIC_START &&
 	    bootcfg->info.magic_start != BOOTCONFIG_MAGIC_START_TRYMODE) {
-		printf("Invalid magic_start: 0x%08x in %s\n", bootcfg->info.magic_start, part_name);
+		printf("Invalid magic_start: 0x%08x in %s\n", bootcfg->info.magic_start, bootcfg->part_name);
 		return -EINVAL;
 	}
 
-	if (!ignore_error && bootcfg->info.magic_end != BOOTCONFIG_MAGIC_END) {
-		printf("Invalid magic_end: 0x%08x in %s\n", bootcfg->info.magic_end, part_name);
+	if (bootcfg->info.magic_end != BOOTCONFIG_MAGIC_END) {
+		printf("Invalid magic_end: 0x%08x in %s\n", bootcfg->info.magic_end, bootcfg->part_name);
 		return -EINVAL;
 	}
 
-	if (!ignore_error && bootcfg->info.numaltpart > NUM_ALT_PARTITION) {
+	if (bootcfg->info.numaltpart > NUM_ALT_PARTITION) {
 		printf("Warning: numaltpart (%u) exceeds maximum (%d), truncating\n",
 		       bootcfg->info.numaltpart, NUM_ALT_PARTITION);
 		bootcfg->info.numaltpart = NUM_ALT_PARTITION;
@@ -207,28 +203,10 @@ static int write_bootconfig(bootconfig_info_t *bootcfg)
 		return -EINVAL;
 	}
 
-	if (ret) {
-		printf("Failed to write bootconfig partition at offset: 0x%lx\n", bootcfg->offset);
-		return ret;
-	}
+	if (ret)
+		printf("Failed to write bootconfig data back to partition %s\n", bootcfg->part_name);
 
-	return 0;
-}
-
-/**
- * compare_bootconfig - Compare two bootconfig structures
- */
-static int compare_bootconfig(bootconfig_info_t *cfg1, bootconfig_info_t *cfg2)
-{
-	if (cfg1->info.magic_start != cfg2->info.magic_start ||
-	    cfg1->info.magic_end != cfg2->info.magic_end ||
-	    cfg1->info.age != cfg2->info.age ||
-	    cfg1->info.numaltpart != cfg2->info.numaltpart) {
-		return 0; /* Not equal */
-	}
-
-	return memcmp(cfg1->info.per_part_entry, cfg2->info.per_part_entry,
-		      sizeof(cfg1->info.per_part_entry)) == 0;
+	return ret;
 }
 
 /**
@@ -240,40 +218,40 @@ static int do_bootconfig_sync(bool reverse)
 	int ret;
 
 	/* Check if 0:BOOTCONFIG1 partition exists */
-	ret = get_bootconfig_part_offset(BOOTCONFIG1_PART_NAME);
+	ret = get_bootconfig_part_offset(BOOTCONFIG_BACKUP_PART_NAME);
 	if (ret < 0) {
-		printf("Partition %s does not exist, skip sync\n", BOOTCONFIG1_PART_NAME);
+		printf("Partition %s does not exist, skip sync\n", BOOTCONFIG_BACKUP_PART_NAME);
 		return CMD_RET_SUCCESS;
 	}
 
 	if (reverse) {
 		/* 0:BOOTCONFIG1 -> 0:BOOTCONFIG */
-		src.part_name = BOOTCONFIG1_PART_NAME;
+		src.part_name = BOOTCONFIG_BACKUP_PART_NAME;
 		dst.part_name = BOOTCONFIG_PART_NAME;
 	} else {
 		/* 0:BOOTCONFIG -> 0:BOOTCONFIG1 */
 		src.part_name = BOOTCONFIG_PART_NAME;
-		dst.part_name = BOOTCONFIG1_PART_NAME;
+		dst.part_name = BOOTCONFIG_BACKUP_PART_NAME;
 	}
 
 	src.size = sizeof(struct bootconfig_info);
 	dst.size = sizeof(struct bootconfig_info);
 
 	/* Read source BOOTCONFIG partition */
-	ret = read_bootconfig(src.part_name, &src, 0);
+	ret = read_bootconfig(&src, false);
 	if (ret)
 		return CMD_RET_FAILURE;
 
 	/* Read destination BOOTCONFIG partition */
-	ret = read_bootconfig(dst.part_name, &dst, 1);
+	ret = read_bootconfig(&dst, true);
 	if (ret)
 		return CMD_RET_FAILURE;
 
 	printf("Syncing %s -> %s: ", src.part_name, dst.part_name);
 
 	/* Compare the two bootconfig structures */
-	ret = compare_bootconfig(&src, &dst);
-	if (ret) {
+	ret = memcmp(&dst.info, &src.info, src.size);
+	if (!ret) {
 		puts("already in sync\n\n");
 		return CMD_RET_SUCCESS;
 	}
@@ -297,15 +275,16 @@ static int do_bootconfig_sync(bool reverse)
 static int do_bootconfig_print(void)
 {
 	bootconfig_info_t bootcfg;
-	int i, ret;
+	int ret;
 
+	bootcfg.part_name = BOOTCONFIG_PART_NAME;
 	bootcfg.size = sizeof(struct bootconfig_info);
 
-	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg, 0);
+	ret = read_bootconfig(&bootcfg, false);
 	if (ret)
 		return CMD_RET_FAILURE;
 
-	printf("\n========== Bootconfig Information ==========\n");
+	puts("\n========== Bootconfig Information ==========\n");
 	printf("Magic Start:      0x%08x %s\n", bootcfg.info.magic_start,
 	       bootcfg.info.magic_start == BOOTCONFIG_MAGIC_START ? "(Normal)" :
 	       bootcfg.info.magic_start == BOOTCONFIG_MAGIC_START_TRYMODE ? "(Try Mode)" : "(Unknown)");
@@ -315,11 +294,11 @@ static int do_bootconfig_print(void)
 	printf("\n%-3s %-16s %s\n", "Idx", "Partition Name", "Primary Boot");
 	printf("--------------------------------------------\n");
 
-	for (i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
+	for (int i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
 		printf("%3d: %-16s %u\n", i, bootcfg.info.per_part_entry[i].name,
 		       bootcfg.info.per_part_entry[i].primaryboot);
 	}
-	printf("============================================\n\n");
+	puts("============================================\n\n");
 
 	return CMD_RET_SUCCESS;
 }
@@ -327,18 +306,19 @@ static int do_bootconfig_print(void)
 /**
  * do_bootconfig_get - Get primaryboot value for a partition
  */
-static int do_bootconfig_get(char *part_name)
+static int do_bootconfig_get(const char *part_name)
 {
 	bootconfig_info_t bootcfg;
-	int i, ret;
+	int ret;
 
+	bootcfg.part_name = BOOTCONFIG_PART_NAME;
 	bootcfg.size = sizeof(struct bootconfig_info);
 
-	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg, 0);
+	ret = read_bootconfig(&bootcfg, false);
 	if (ret)
 		return CMD_RET_FAILURE;
 
-	for (i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
+	for (int i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
 		if (strncmp(bootcfg.info.per_part_entry[i].name, part_name,
 			    ALT_PART_NAME_LENGTH) == 0) {
 			printf("%s = %u\n", part_name, bootcfg.info.per_part_entry[i].primaryboot);
@@ -353,10 +333,10 @@ static int do_bootconfig_get(char *part_name)
 /**
  * do_bootconfig_set - Set primaryboot value for partition(s)
  */
-static int do_bootconfig_set(char *part_name, uint32_t value)
+static int do_bootconfig_set(const char *part_name, uint32_t value)
 {
 	bootconfig_info_t bootcfg;
-	int i, modified = 0;
+	int idx, modified = 0;
 	int ret;
 
 	if (value != 0 && value != 1) {
@@ -364,38 +344,35 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 		return CMD_RET_FAILURE;
 	}
 
+	bootcfg.part_name = BOOTCONFIG_PART_NAME;
 	bootcfg.size = sizeof(struct bootconfig_info);
 
-	ret = read_bootconfig(BOOTCONFIG_PART_NAME, &bootcfg, 0);
+	ret = read_bootconfig(&bootcfg, false);
 	if (ret)
 		return CMD_RET_FAILURE;
 
-	/* Handle "all" special case */
 	if (strcmp(part_name, "all") == 0) {
-		for (i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
-			if (bootcfg.info.per_part_entry[i].primaryboot != value) {
-				bootcfg.info.per_part_entry[i].primaryboot = value;
+		/* Handle "all" special case */
+		for (idx = 0; idx < bootcfg.info.numaltpart && idx < NUM_ALT_PARTITION; idx++) {
+			if (bootcfg.info.per_part_entry[idx].primaryboot != value) {
+				bootcfg.info.per_part_entry[idx].primaryboot = value;
 				modified++;
-				printf("Set %s to %u\n", bootcfg.info.per_part_entry[i].name, value);
+				printf("Set %s to %u\n", bootcfg.info.per_part_entry[idx].name, value);
 			} else {
-				printf("%s already %u\n", bootcfg.info.per_part_entry[i].name, value);
+				printf("%s already %u\n", bootcfg.info.per_part_entry[idx].name, value);
 			}
 		}
 		if (modified == 0)
 			printf("All partitions already have value %u, no change\n", value);
 	} else if (strcmp(part_name, "firmware") == 0) {
 		/* Handle firmware partitions */
-		const char *fw_parts[] = {
-			"0:HLOS",
-			"rootfs",
-			"0:WIFIFW"
-		};
-		for (i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
+		const char *fw_parts[] = {"0:HLOS", "rootfs", "0:WIFIFW"};
+		for (idx = 0; idx < bootcfg.info.numaltpart && idx < NUM_ALT_PARTITION; idx++) {
 			for (int j = 0; j < ARRAY_SIZE(fw_parts); j++) {
-				if (strncmp(bootcfg.info.per_part_entry[i].name, fw_parts[j],
+				if (strncmp(bootcfg.info.per_part_entry[idx].name, fw_parts[j],
 						ALT_PART_NAME_LENGTH) == 0) {
-					if (bootcfg.info.per_part_entry[i].primaryboot != value) {
-						bootcfg.info.per_part_entry[i].primaryboot = value;
+					if (bootcfg.info.per_part_entry[idx].primaryboot != value) {
+						bootcfg.info.per_part_entry[idx].primaryboot = value;
 						modified++;
 						printf("Set %s to %u\n", fw_parts[j], value);
 					} else {
@@ -409,11 +386,11 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 			printf("All firmware partitions already have value %u, no change\n", value);
 	} else {
 		/* Handle specific partition */
-		for (i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
-			if (strncmp(bootcfg.info.per_part_entry[i].name, part_name,
+		for (idx = 0; idx < bootcfg.info.numaltpart && idx < NUM_ALT_PARTITION; idx++) {
+			if (strncmp(bootcfg.info.per_part_entry[idx].name, part_name,
 				    ALT_PART_NAME_LENGTH) == 0) {
-				if (bootcfg.info.per_part_entry[i].primaryboot != value) {
-					bootcfg.info.per_part_entry[i].primaryboot = value;
+				if (bootcfg.info.per_part_entry[idx].primaryboot != value) {
+					bootcfg.info.per_part_entry[idx].primaryboot = value;
 					modified = 1;
 					printf("Set %s to %u\n", part_name, value);
 				} else {
@@ -422,7 +399,7 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 				break;
 			}
 		}
-		if (i >= bootcfg.info.numaltpart || i >= NUM_ALT_PARTITION) {
+		if (idx >= bootcfg.info.numaltpart || idx >= NUM_ALT_PARTITION) {
 			printf("Partition entry '%s' not found\n", part_name);
 			return CMD_RET_FAILURE;
 		}
