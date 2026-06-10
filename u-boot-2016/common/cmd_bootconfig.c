@@ -269,6 +269,34 @@ static int do_bootconfig_sync(bool reverse)
 	}
 }
 
+static int read_bootconfig_data_and_write_back_if_needed(bootconfig_info_t *bootcfg)
+{
+	bootconfig_info_t backup_bootcfg;
+	int ret;
+
+	bootcfg->part_name = BOOTCONFIG_PART_NAME;
+	bootcfg->size = sizeof(struct bootconfig_info);
+
+	ret = read_bootconfig(bootcfg, false);
+	if (ret == 0 || ret == -ENOENT)
+		return ret;
+
+	backup_bootcfg.part_name = BOOTCONFIG_BACKUP_PART_NAME;
+	backup_bootcfg.size = sizeof(struct bootconfig_info);
+
+	printf("Read bootconfig data from partition %s\n", backup_bootcfg.part_name);
+
+	ret = read_bootconfig(&backup_bootcfg, false);
+	if (ret) {
+		puts("Bootconfig data corrupted, please restore manually\n");
+		return ret;
+	}
+
+	printf("Write bootconfig data back to partition %s\n", bootcfg->part_name);
+	memcpy(&bootcfg->info, &backup_bootcfg.info, backup_bootcfg.size);
+	return write_bootconfig(bootcfg);
+}
+
 /**
  * do_bootconfig_print - Print all bootconfig information
  */
@@ -277,10 +305,7 @@ static int do_bootconfig_print(void)
 	bootconfig_info_t bootcfg;
 	int ret;
 
-	bootcfg.part_name = BOOTCONFIG_PART_NAME;
-	bootcfg.size = sizeof(struct bootconfig_info);
-
-	ret = read_bootconfig(&bootcfg, false);
+	ret = read_bootconfig_data_and_write_back_if_needed(&bootcfg);
 	if (ret)
 		return CMD_RET_FAILURE;
 
@@ -311,10 +336,7 @@ static int do_bootconfig_get(const char *part_name)
 	bootconfig_info_t bootcfg;
 	int ret;
 
-	bootcfg.part_name = BOOTCONFIG_PART_NAME;
-	bootcfg.size = sizeof(struct bootconfig_info);
-
-	ret = read_bootconfig(&bootcfg, false);
+	ret = read_bootconfig_data_and_write_back_if_needed(&bootcfg);
 	if (ret)
 		return CMD_RET_FAILURE;
 
@@ -344,10 +366,7 @@ static int do_bootconfig_set(const char *part_name, uint32_t value)
 		return CMD_RET_FAILURE;
 	}
 
-	bootcfg.part_name = BOOTCONFIG_PART_NAME;
-	bootcfg.size = sizeof(struct bootconfig_info);
-
-	ret = read_bootconfig(&bootcfg, false);
+	ret = read_bootconfig_data_and_write_back_if_needed(&bootcfg);
 	if (ret)
 		return CMD_RET_FAILURE;
 
