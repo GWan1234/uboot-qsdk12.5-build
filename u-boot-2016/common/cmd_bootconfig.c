@@ -377,10 +377,8 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 				printf("%s already %u\n", bootcfg.info.per_part_entry[i].name, value);
 			}
 		}
-		if (modified == 0) {
+		if (modified == 0)
 			printf("All partitions already have value %u, no change\n", value);
-			return CMD_RET_SUCCESS;
-		}
 	} else if (strcmp(part_name, "firmware") == 0) {
 		/* Handle firmware partitions */
 		const char *fw_parts[] = {
@@ -403,10 +401,8 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 				}
 			}
 		}
-		if (modified == 0) {
+		if (modified == 0)
 			printf("All firmware partitions already have value %u, no change\n", value);
-			return CMD_RET_SUCCESS;
-		}
 	} else {
 		/* Handle specific partition */
 		for (i = 0; i < bootcfg.info.numaltpart && i < NUM_ALT_PARTITION; i++) {
@@ -418,7 +414,6 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 					printf("Set %s to %u\n", part_name, value);
 				} else {
 					printf("%s already %u, no change\n", part_name, value);
-					return CMD_RET_SUCCESS;
 				}
 				break;
 			}
@@ -432,14 +427,13 @@ static int do_bootconfig_set(char *part_name, uint32_t value)
 	/* Only write back if modifications were made */
 	if (modified) {
 		ret = write_bootconfig(&bootcfg);
-		if (!ret) {
-			puts("\nBootconfig updated successfully\n\n");
-			ret = do_bootconfig_sync();
-		}
-		return ret ? CMD_RET_FAILURE : CMD_RET_SUCCESS;
+		if (ret)
+			return CMD_RET_FAILURE;
+		puts("\nBootconfig updated successfully\n\n");
 	}
 
-	return CMD_RET_SUCCESS;
+	/* Always sync 0:BOOTCONFIG1 with 0:BOOTCONFIG */
+	return do_bootconfig_sync();
 }
 
 /**
