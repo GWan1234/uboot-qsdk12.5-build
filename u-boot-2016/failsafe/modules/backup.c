@@ -216,7 +216,7 @@ void backup_handler(enum httpd_uri_handler_status status,
         struct httpd_request *request,
         struct httpd_response *response)
 {
-	detected_flash_device_t *dfd = &detected_flash_device;
+	const detected_flash_device_t *dfd = &detected_flash_device;
 	struct backup_session *st;
 	struct httpd_form_value *mode, *target, *start, *end;
 	char target_name[64] = "";

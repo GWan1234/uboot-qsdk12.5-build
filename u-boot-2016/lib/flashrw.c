@@ -38,7 +38,7 @@ extern qca_mmc mmc_host;
 extern struct sdhci_host mmc_host;
 #endif
 
-static detected_flash_device_t *dfd = &detected_flash_device;
+static const detected_flash_device_t *dfd = &detected_flash_device;
 
 int read_data_from_spi(ulong offset, size_t size, void *buf, size_t buf_size)
 {

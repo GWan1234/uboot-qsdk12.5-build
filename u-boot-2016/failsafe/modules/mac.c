@@ -56,8 +56,8 @@ enum {
 	WRITE_MAC_DATA
 };
 
-static qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-static detected_flash_device_t *dfd = &detected_flash_device;
+static const qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+static const detected_flash_device_t *dfd = &detected_flash_device;
 
 static void handle_response_message(struct httpd_response *response,
 		int code, const char *msg, const char *content_type)

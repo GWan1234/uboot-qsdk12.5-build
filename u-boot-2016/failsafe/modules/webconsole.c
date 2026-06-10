@@ -150,7 +150,7 @@ void webconsole_upload_handler(enum httpd_uri_handler_status status,
 {
 	struct httpd_form_value *file;
 	block_dev_desc_t *mmc_dev;
-	detected_flash_device_t *dfd = &detected_flash_device;
+	const detected_flash_device_t *dfd = &detected_flash_device;
 	ulong size_blocks;
 	char *buf;
 	size_t len = 0;

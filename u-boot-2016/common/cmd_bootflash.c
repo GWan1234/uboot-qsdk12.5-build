@@ -26,7 +26,7 @@
 static int do_bootflash(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
     qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-    detected_flash_device_t *dfd = &detected_flash_device;
+    const detected_flash_device_t *dfd = &detected_flash_device;
     const char *flash_type_str;
 
     if (!is_9008_mode()) {

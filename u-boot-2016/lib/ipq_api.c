@@ -365,7 +365,7 @@ bool mmc_part_exists(const char *part_name)
 	int ret;
 	block_dev_desc_t *mmc_dev;
 	disk_partition_t disk_info = {0};
-	detected_flash_device_t *dfd = &detected_flash_device;
+	const detected_flash_device_t *dfd = &detected_flash_device;
 
 	if (!dfd->mmc)
 		return false;
@@ -567,7 +567,7 @@ done:
 
 void reload_mibib_from_flash_in_9008_mode(void)
 {
-	detected_flash_device_t *dfd = &detected_flash_device;
+	const detected_flash_device_t *dfd = &detected_flash_device;
 
 	if (!is_9008_mode())
 		return;
@@ -586,7 +586,7 @@ void reload_mibib_from_flash_in_9008_mode(void)
 void set_default_flash_type_in_9008_mode(void)
 {
 	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-	detected_flash_device_t *dfd = &detected_flash_device;
+	const detected_flash_device_t *dfd = &detected_flash_device;
 
 	if (!is_9008_mode())
 		return;

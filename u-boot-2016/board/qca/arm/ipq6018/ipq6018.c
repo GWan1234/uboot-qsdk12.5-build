@@ -409,7 +409,7 @@ void set_flash_secondary_type(qca_smem_flash_info_t *smem)
 	 * initialized, as there is no smem entry to differentiate between the
 	 * two.
 	 */
-	detected_flash_device_t *dfd = &detected_flash_device;
+	const detected_flash_device_t *dfd = &detected_flash_device;
 
 	if (dfd->mmc)
 		smem->flash_secondary_type = SMEM_BOOT_MMC_FLASH;

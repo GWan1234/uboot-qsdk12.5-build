@@ -232,7 +232,7 @@ char * const argv[])
 	block_dev_desc_t *blk_dev;
 #endif
 	disk_partition_t disk_info = {0};
-	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+	const qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
 	flash_type = (flash_type_new != -1) ? flash_type_new : sfi->flash_type;
 #ifdef CONFIG_CMD_NAND
 	nand_info_t *nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
@@ -647,8 +647,8 @@ char * const argv[])
 
 static int do_flupdate(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
-	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-	detected_flash_device_t *dfd = &detected_flash_device;
+	const qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+	const detected_flash_device_t *dfd = &detected_flash_device;
 	const char *flash_type_str;
 
 	if (argc < 2 || argc > 3)
@@ -699,8 +699,8 @@ flash_not_found:
 #ifdef CONFIG_CMD_FLASHREAD
 static int read_partition(const char *part_name, const ulong load_addr)
 {
-	qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-    detected_flash_device_t *dfd = &detected_flash_device;
+	const qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+    const detected_flash_device_t *dfd = &detected_flash_device;
 	block_dev_desc_t *mmc_dev;
 	disk_partition_t disk_info = {0};
 	ulong offset_blocks = 0, size_blocks = 0;

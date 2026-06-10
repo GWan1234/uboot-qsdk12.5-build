@@ -418,7 +418,7 @@ int net_loop(enum proto_t protocol)
 	net_restarted = 0;
 	net_dev_exists = 0;
 	net_try_count = 1;
-	detected_flash_device_t *dfd = &detected_flash_device;
+	const detected_flash_device_t *dfd = &detected_flash_device;
 	debug_cond(DEBUG_INT_STATE, "--- net_loop Entry\n");
 
 	bootstage_mark_name(BOOTSTAGE_ID_ETH_START, "eth_start");

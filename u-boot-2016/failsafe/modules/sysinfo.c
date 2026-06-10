@@ -49,8 +49,8 @@ DECLARE_GLOBAL_DATA_PTR;
 #define SMEM_PTN_NAME_MAX     16
 #define SMEM_PTABLE_PARTS_MAX 32
 
-static qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-static detected_flash_device_t *dfd = &detected_flash_device;
+static const qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
+static const detected_flash_device_t *dfd = &detected_flash_device;
 
 struct smem_ptn {
 	char name[SMEM_PTN_NAME_MAX];

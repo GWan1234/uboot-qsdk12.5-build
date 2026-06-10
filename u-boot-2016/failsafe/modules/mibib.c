@@ -36,7 +36,7 @@ void mibib_reload_handler(enum httpd_uri_handler_status status,
 {
     static char resp[256];
     qca_smem_flash_info_t *sfi = &qca_smem_flash_info;
-    detected_flash_device_t *dfd = &detected_flash_device;
+    const detected_flash_device_t *dfd = &detected_flash_device;
     struct spi_flash *spi;
     nand_info_t *nand;
     struct httpd_form_value *mibib;

@@ -73,7 +73,7 @@ static ulong factory_fw_kernel_size;
 static char info[666];
 static char resp[888];
 static fw_type_t fw_type;
-static detected_flash_device_t *dfd = &detected_flash_device;
+static const detected_flash_device_t *dfd = &detected_flash_device;
 
 /* Implemented in: u-boot-2016/board/qca/arm/common/cmd_bootqca.c */
 extern int config_select(unsigned int addr, char *rcmd, int rcmd_size);
