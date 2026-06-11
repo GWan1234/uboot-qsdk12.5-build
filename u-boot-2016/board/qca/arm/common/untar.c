@@ -273,7 +273,7 @@ static int do_untar(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]) {
 		return CMD_RET_USAGE;
 	}
 
-	fw_type = check_fw_type((uintptr_t)file_addr);
+	fw_type = check_fw_type((uintptr_t)file_addr, file_size);
 	if (fw_type == FW_TYPE_SYSUPGRADE) {
 		adj_file_addr = file_addr;
 		adj_file_size = file_size;

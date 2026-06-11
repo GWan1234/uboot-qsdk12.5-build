@@ -19,18 +19,22 @@
  */
 
 #include <common.h>
+#include <ipq_api.h>
 #include <failsafe/fw_dec.h>
 
 #define U16_DATA_AT_OFFSET(n) (*((const u16 *)(n)))
 #define U32_DATA_AT_OFFSET(n) (*((const u32 *)(n)))
 #define U64_DATA_AT_OFFSET(n) (*((const u64 *)(n)))
 
-fw_type_t check_fw_type(uintptr_t addr)
+fw_type_t check_fw_type(uintptr_t addr, size_t size)
 {
 	switch (U32_DATA_AT_OFFSET(addr)) {
 	case HEADER_MAGIC_CDT:
 		return FW_TYPE_CDT;
 	case HEADER_MAGIC_ELF:
+		if (get_mibib_ptable_offset((const void *)addr,
+				size, MIBIB_TYPE_NOR) != NULL)
+			return FW_TYPE_SIMG_NOR;
 		return FW_TYPE_ELF;
 	case HEADER_MAGIC_FIT:
 		if (U32_DATA_AT_OFFSET(addr + 0x5C) == HEADER_MAGIC_QSDK) {

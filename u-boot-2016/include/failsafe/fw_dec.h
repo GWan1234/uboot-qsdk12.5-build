@@ -81,7 +81,7 @@ typedef enum {
 #define HEADER_MAGIC_GLINET_V4     0x74636166
 #define HEADER_MAGIC_JDCLOUD       0x636D6D65
 
-fw_type_t check_fw_type(uintptr_t addr);
+fw_type_t check_fw_type(uintptr_t addr, size_t size);
 char *fw_type_to_string(fw_type_t fw_type);
 
 #endif /* __FW_DEC_H__ */

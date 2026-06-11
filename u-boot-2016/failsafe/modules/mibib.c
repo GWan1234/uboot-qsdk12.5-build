@@ -70,7 +70,7 @@ void mibib_reload_handler(enum httpd_uri_handler_status status,
         return;
     }
 
-    fw_type = check_fw_type((uintptr_t)mibib->data);
+    fw_type = check_fw_type((uintptr_t)mibib->data, mibib->size);
     switch (fw_type) {
     case FW_TYPE_MIBIB_NAND:
         if (!dfd->nand)

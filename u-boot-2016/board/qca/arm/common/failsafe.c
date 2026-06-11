@@ -334,17 +334,6 @@ static int get_factory_fw_kernel_size(const void *data_addr, const ulong data_si
 	return RET_FAILURE;
 }
 
-static bool is_simg_nor(const void *data_addr, const ulong data_size)
-{
-	if (check_fw_type((uintptr_t)data_addr) != FW_TYPE_ELF)
-		return false;
-
-	if (get_mibib_ptable_offset(data_addr, data_size, MIBIB_TYPE_NOR) == NULL)
-		return false;
-
-	return true;
-}
-
 // =============================================================================
 // 帮助函数（刷写相关）
 // =============================================================================
@@ -590,15 +579,12 @@ static int failsafe_validate_simg(const void *data_addr, const ulong data_size)
 		nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
 		flash_device_size = nand->size;
         break;
-    case FW_TYPE_ELF:
-		if (is_simg_nor(data_addr, data_size)) {
-			fw_type = FW_TYPE_SIMG_NOR;
-			RETURN_IF_NOR_FLASH_NOT_FOUND;
-			spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
-						CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
-			flash_device_size = spi->size;
-			break;
-		}
+    case FW_TYPE_SIMG_NOR:
+		RETURN_IF_NOR_FLASH_NOT_FOUND;
+		spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
+					CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
+		flash_device_size = spi->size;
+		break;
     default:
         handle_wrong_fw_type("Single Image", fw_type);
         return RET_WRONG_FW_TYPE;
@@ -792,15 +778,12 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 			writable_size,
 			data_addr, writable_size);
 		break;
-	case FW_TYPE_ELF:
-		if (is_simg_nor(data_addr, data_size)) {
-			fw_type = FW_TYPE_SIMG_NOR;
-			RETURN_IF_NOR_FLASH_NOT_FOUND;
-			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-				"sf probe && sf update 0x%lx 0x0 0x%lx",
-				data_addr, data_size);
-			break;
-		}
+	case FW_TYPE_SIMG_NOR:
+		RETURN_IF_NOR_FLASH_NOT_FOUND;
+		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+			"sf probe && sf update 0x%lx 0x0 0x%lx",
+			data_addr, data_size);
+		break;
 	default:
 		handle_wrong_fw_type("Single Image", fw_type);
 		return RET_WRONG_FW_TYPE;
@@ -841,7 +824,7 @@ int failsafe_validate_image(const int upgrade_type, const char *filename,
 {
 	int ret;
 
-	fw_type = check_fw_type((uintptr_t)data_addr);
+	fw_type = check_fw_type((uintptr_t)data_addr, data_size);
 
 	memset(info, 0, sizeof(info));
 	memset(resp, 0, sizeof(resp));
@@ -912,7 +895,7 @@ int failsafe_write_image(const int upgrade_type, const ulong data_addr,
     int ret;
 
 	runcmd.count = 0;
-	fw_type = check_fw_type((uintptr_t)data_addr);
+	fw_type = check_fw_type((uintptr_t)data_addr, data_size);
 
 	memset(info, 0, sizeof(info));
 	memset(resp, 0, sizeof(resp));
