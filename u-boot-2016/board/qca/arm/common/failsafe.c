@@ -40,10 +40,6 @@ extern struct sdhci_host mmc_host;
 
 #define FAILSAFE_CAPTURE_OUTPUT_SIZE 0x400
 
-#define  FLASH_TYPE_STR_SPI   "SPI-NOR"
-#define  FLASH_TYPE_STR_NAND  "NAND"
-#define  FLASH_TYPE_STR_EMMC  "EMMC"
-
 #define MAX_CMD_COUNT  10
 #define MAX_CMD_LEN    256
 
@@ -71,6 +67,30 @@ extern int config_select(unsigned int addr, char *rcmd, int rcmd_size);
 // =============================================================================
 // 错误处理函数
 // =============================================================================
+
+#define RETURN_IF_NOR_FLASH_NOT_FOUND \
+    do {    \
+        if (!dfd->spi) {    \
+            handle_flash_not_found(fw_type, "SPI-NOR");   \
+            return RET_FLASH_NOT_FOUND; \
+        }   \
+    } while (0)
+
+#define RETURN_IF_NAND_FLASH_NOT_FOUND \
+    do {    \
+        if (!dfd->nand) {    \
+            handle_flash_not_found(fw_type, "NAND");   \
+            return RET_FLASH_NOT_FOUND; \
+        }   \
+    } while (0)
+
+#define RETURN_IF_MMC_FLASH_NOT_FOUND \
+    do {    \
+        if (!dfd->mmc) {    \
+            handle_flash_not_found(fw_type, "EMMC");   \
+            return RET_FLASH_NOT_FOUND; \
+        }   \
+    } while (0)
 
 static void handle_wrong_fw_type(const char *expected_file_type_str, const fw_type_t fw_type)
 {
@@ -420,10 +440,7 @@ static int failsafe_validate_firmware(const void *data_addr, const ulong data_si
 
     switch (fw_type) {
     case FW_TYPE_FIT:
-		if (!dfd->mmc) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_MMC_FLASH_NOT_FOUND;
         ret = get_factory_fw_kernel_size(data_addr, data_size);
 		if (ret)
 			break;
@@ -433,10 +450,7 @@ static int failsafe_validate_firmware(const void *data_addr, const ulong data_si
         ret = check_file_size_is_valid("firmware rootfs", "rootfs", data_size - factory_fw_kernel_size);
         break;
     case FW_TYPE_SYSUPGRADE:
-		if (!dfd->mmc) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_MMC_FLASH_NOT_FOUND;
 		ret = parse_tar_image(data_addr, (size_t)data_size,
 				NULL, &kernel_size, NULL, &rootfs_size);
         if (ret) {
@@ -449,10 +463,7 @@ static int failsafe_validate_firmware(const void *data_addr, const ulong data_si
         ret = check_file_size_is_valid("firmware rootfs", "rootfs", (ulong)rootfs_size);
         break;
     case FW_TYPE_ASUSWRT_EMMC:
-		if (!dfd->mmc) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_MMC_FLASH_NOT_FOUND;
         ret = check_part_exists("0:HLOS", 1);
         if (ret)
             break;
@@ -460,20 +471,14 @@ static int failsafe_validate_firmware(const void *data_addr, const ulong data_si
         break;
 	case FW_TYPE_GLINET_V3:
 	case FW_TYPE_GLINET_V4:
-		if (!dfd->nand) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_NAND);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_NAND_FLASH_NOT_FOUND;
 		ret = check_part_exists("rootfs", 1);
         if (ret)
             break;
 		ret = get_gl_fw_node_name(data_addr);
 		break;
     case FW_TYPE_JDCLOUD:
-		if (!dfd->mmc) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_MMC_FLASH_NOT_FOUND;
         ret = check_part_exists("0:HLOS", 1);
         if (ret)
             break;
@@ -489,10 +494,7 @@ static int failsafe_validate_firmware(const void *data_addr, const ulong data_si
         ret = get_jdc_fw_node_name(data_addr);
         break;
     case FW_TYPE_UBI:
-        if (!dfd->nand) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_NAND);
-			return RET_FLASH_NOT_FOUND;
-		}
+        RETURN_IF_NAND_FLASH_NOT_FOUND;
         ret = check_file_size_is_valid("firmware", "rootfs", data_size);
         break;
     default:
@@ -556,22 +558,13 @@ static int failsafe_validate_ptable(const void *data_addr, const ulong data_size
 {
 	switch(fw_type) {
 	case FW_TYPE_GPT:
-		if (!dfd->mmc) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_MMC_FLASH_NOT_FOUND;
 		return RET_SUCCESS;
     case FW_TYPE_MIBIB_NAND:
-        if (!dfd->nand) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_NAND);
-			return RET_FLASH_NOT_FOUND;
-		}
+        RETURN_IF_NAND_FLASH_NOT_FOUND;
         return check_file_size_is_valid("MIBIB", "0:MIBIB", data_size);
     case FW_TYPE_MIBIB_NOR:
-        if (!dfd->spi) {
-            handle_flash_not_found(fw_type, FLASH_TYPE_STR_SPI);
-			return RET_FLASH_NOT_FOUND;
-        }
+        RETURN_IF_NOR_FLASH_NOT_FOUND;
         return check_file_size_is_valid("MIBIB", "0:MIBIB", data_size);
     default:
         handle_wrong_fw_type("Partition Table (GPT or MIBIB)", fw_type);
@@ -588,28 +581,19 @@ static int failsafe_validate_simg(const void *data_addr, const ulong data_size)
 
     switch(fw_type) {
     case FW_TYPE_SIMG_EMMC:
-        if (!dfd->mmc) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
-			return RET_FLASH_NOT_FOUND;
-		}
+        RETURN_IF_MMC_FLASH_NOT_FOUND;
 		mmc = find_mmc_device(mmc_host.dev_num);
 		flash_device_size = mmc->capacity_user;
         break;
     case FW_TYPE_SIMG_NAND:
-        if (!dfd->nand) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_NAND);
-			return RET_FLASH_NOT_FOUND;
-		}
+        RETURN_IF_NAND_FLASH_NOT_FOUND;
 		nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
 		flash_device_size = nand->size;
         break;
     case FW_TYPE_ELF:
 		if (is_simg_nor(data_addr, data_size)) {
 			fw_type = FW_TYPE_SIMG_NOR; /* 更新 fw_type，方便后续 failsafe_write_simg 使用 */
-			if (!dfd->spi) {
-				handle_flash_not_found(fw_type, FLASH_TYPE_STR_SPI);
-				return RET_FLASH_NOT_FOUND;
-			}
+			RETURN_IF_NOR_FLASH_NOT_FOUND;
 			spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
 						CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
 			flash_device_size = spi->size;
@@ -648,10 +632,7 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 
 	switch (fw_type) {
 	case FW_TYPE_FIT:
-		if (!dfd->mmc) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_MMC_FLASH_NOT_FOUND;
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"flash 0:HLOS 0x%lx 0x%lx",
 			data_addr, factory_fw_kernel_size);
@@ -664,10 +645,7 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 		break;
 	case FW_TYPE_GLINET_V3:
 	case FW_TYPE_GLINET_V4:
-		if (!dfd->nand) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_NAND);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_NAND_FLASH_NOT_FOUND;
 		setenv("verbose", "1"); /* 执行 xtract_n_flash 时输出详细信息 */
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"xtract_n_flash 0x%lx %s rootfs",
@@ -676,10 +654,7 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 			"bootconfig set firmware 0", MAX_CMD_LEN);
 		break;
 	case FW_TYPE_JDCLOUD:
-		if (!dfd->mmc) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_MMC_FLASH_NOT_FOUND;
 		setenv("verbose", "1"); /* 执行 xtract_n_flash 时输出详细信息 */
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"xtract_n_flash 0x%lx %s 0:HLOS",
@@ -697,10 +672,7 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 		break;
 	case FW_TYPE_SYSUPGRADE:
 	case FW_TYPE_ASUSWRT_EMMC:
-		if (!dfd->mmc) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_MMC_FLASH_NOT_FOUND;
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"untar 0x%lx 0x%lx", data_addr, data_size);
 		strlcpy(runcmd.list[runcmd.count++],
@@ -711,10 +683,7 @@ static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 			"bootconfig set firmware 0", MAX_CMD_LEN);
 		break;
 	case FW_TYPE_UBI:
-		if (!dfd->nand) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_NAND);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_NAND_FLASH_NOT_FOUND;
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"flash rootfs 0x%lx 0x%lx", data_addr, data_size);
 		strlcpy(runcmd.list[runcmd.count++],
@@ -782,25 +751,16 @@ static int failsafe_write_ptable(const ulong data_addr, const ulong data_size)
 
 	switch(fw_type) {
 	case FW_TYPE_GPT:
-		if (!dfd->mmc) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_MMC_FLASH_NOT_FOUND;
 		handle_gpt_write_cmd(data_addr, data_size);
 		break;
     case FW_TYPE_MIBIB_NAND:
-        if (!dfd->nand) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_NAND);
-			return RET_FLASH_NOT_FOUND;
-		}
+        RETURN_IF_NAND_FLASH_NOT_FOUND;
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"flash 0:MIBIB 0x%lx 0x%lx", data_addr, data_size);
         break;
     case FW_TYPE_MIBIB_NOR:
-        if (!dfd->spi) {
-            handle_flash_not_found(fw_type, FLASH_TYPE_STR_SPI);
-			return RET_FLASH_NOT_FOUND;
-        }
+        RETURN_IF_NOR_FLASH_NOT_FOUND;
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"flash 0:MIBIB 0x%lx 0x%lx", data_addr, data_size);
         break;
@@ -820,17 +780,11 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 
 	switch (fw_type) {
 	case FW_TYPE_SIMG_EMMC:
-		if (!dfd->mmc) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_EMMC);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_MMC_FLASH_NOT_FOUND;
 		handle_gpt_write_cmd(data_addr, data_size);
 		break;
 	case FW_TYPE_SIMG_NAND:
-		if (!dfd->nand) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_NAND);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_NAND_FLASH_NOT_FOUND;
 		writable_size = get_nand_writable_data_size((const uint32_t)data_size);
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"nand erase 0x0 0x%lx && "
@@ -839,10 +793,7 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 			data_addr, writable_size);
 		break;
 	case FW_TYPE_SIMG_NOR:
-		if (!dfd->spi) {
-			handle_flash_not_found(fw_type, FLASH_TYPE_STR_SPI);
-			return RET_FLASH_NOT_FOUND;
-		}
+		RETURN_IF_NOR_FLASH_NOT_FOUND;
 		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
 			"sf probe && sf update 0x%lx 0x0 0x%lx",
 			data_addr, data_size);
