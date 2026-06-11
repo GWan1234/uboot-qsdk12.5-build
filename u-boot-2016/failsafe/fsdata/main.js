@@ -3858,6 +3858,7 @@ const consoleManager = (() => {
     function showWelcomeMessage() {
         addTerminalLine('system', 'Welcome to U-Boot Web Terminal');
         addTerminalLine('system', 'Type "help" to see available commands');
+        addTerminalLine('system', 'Double-click the terminal area to focus on the input box');
         addTerminalLine('separator', '');
     }
 
@@ -4159,6 +4160,8 @@ const consoleManager = (() => {
         document.body.appendChild(fileInput);
         fileInput.click();
         document.body.removeChild(fileInput);
+
+        focusInput();
     }
 
     /**
