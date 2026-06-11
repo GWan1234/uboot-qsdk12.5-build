@@ -592,7 +592,7 @@ static int failsafe_validate_simg(const void *data_addr, const ulong data_size)
         break;
     case FW_TYPE_ELF:
 		if (is_simg_nor(data_addr, data_size)) {
-			fw_type = FW_TYPE_SIMG_NOR; /* 更新 fw_type，方便后续 failsafe_write_simg 使用 */
+			fw_type = FW_TYPE_SIMG_NOR;
 			RETURN_IF_NOR_FLASH_NOT_FOUND;
 			spi = spi_flash_probe(CONFIG_SF_DEFAULT_BUS, CONFIG_SF_DEFAULT_CS,
 						CONFIG_SF_DEFAULT_SPEED, CONFIG_SF_DEFAULT_MODE);
@@ -792,12 +792,15 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 			writable_size,
 			data_addr, writable_size);
 		break;
-	case FW_TYPE_SIMG_NOR:
-		RETURN_IF_NOR_FLASH_NOT_FOUND;
-		snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-			"sf probe && sf update 0x%lx 0x0 0x%lx",
-			data_addr, data_size);
-		break;
+	case FW_TYPE_ELF:
+		if (is_simg_nor(data_addr, data_size)) {
+			fw_type = FW_TYPE_SIMG_NOR;
+			RETURN_IF_NOR_FLASH_NOT_FOUND;
+			snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+				"sf probe && sf update 0x%lx 0x0 0x%lx",
+				data_addr, data_size);
+			break;
+		}
 	default:
 		handle_wrong_fw_type("Single Image", fw_type);
 		return RET_WRONG_FW_TYPE;
