@@ -107,9 +107,21 @@ static LIST_HEAD(inst_head);
 static void httpd_tcp_callback(struct tcp_cb_data *cbd);
 static void httpd_std_err_response(struct tcp_cb_data *cbd, u32 code);
 
-void __weak *httpd_get_upload_buffer_ptr(size_t size)
+static void *httpd_get_upload_buffer_ptr(size_t size)
 {
-	return (void *)(IPQ_TFTP_MIN_ADDR);
+	uintptr_t load_addr;
+
+	if (gd->ram_size >= SZ_MIB(512))
+		load_addr = CONFIG_SYS_SDRAM_BASE + SZ_MIB(256);
+	else
+		load_addr = IPQ_TFTP_MIN_ADDR;
+
+	if (!is_memory_region_available(load_addr, size)) {
+        puts("Error: file size too large\n");
+        return NULL;
+    }
+
+	return (void *)load_addr;
 }
 
 static void dummy_urih_cb(enum httpd_uri_handler_status status,

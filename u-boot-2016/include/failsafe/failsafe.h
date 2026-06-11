@@ -22,6 +22,7 @@
 #define __FAILSAFE_H__
 
 #include <ipq_led.h>
+#include <net/httpd.h>
 
 #if defined(CONFIG_HTTPD_DEBUG)
 extern bool httpd_debug_on;
@@ -73,5 +74,11 @@ static inline void handle_success_led_state(void)
 	led_all_off();
 	led_on("system_led");
 }
+
+int boot_from_mem(const ulong data_addr);
+int failsafe_validate_image(const int upgrade_type, const char *filename,
+        const void *data_addr, const ulong data_size, struct httpd_response *response);
+int failsafe_write_image(const int upgrade_type, const ulong data_addr,
+        const ulong data_size, struct httpd_response *response);
 
 #endif /* __FAILSAFE_H__ */

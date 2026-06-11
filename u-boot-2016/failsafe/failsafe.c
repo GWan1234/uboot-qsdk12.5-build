@@ -8,16 +8,10 @@
  */
 
 #include <common.h>
-#include <command.h>
-#include <console.h>
 #include <malloc.h>
-#include <membuff.h>
-#include <net.h>
 #include <version.h>
 #include <net/tcp.h>
 #include <net/httpd.h>
-#include <linux/stringify.h>
-#include <asm/arch-qca-common/smem.h>
 #include <failsafe/failsafe.h>
 #include <ipq_api.h>
 #if defined(CONFIG_DHCPD)
@@ -54,23 +48,6 @@ static int upgrade_type;
 struct reboot_session {
 	int dummy;
 };
-
-int __weak boot_from_mem(const ulong data_addr)
-{
-	return RET_FAILURE;
-}
-
-int __weak failsafe_validate_image(const int upgrade_type, const char *filename,
-	const void *data_addr, const ulong data_size, struct httpd_response *response)
-{
-	return RET_SUCCESS;
-}
-
-int __weak failsafe_write_image(const int upgrade_type, const ulong data_addr,
-		const ulong data_size, struct httpd_response *response)
-{
-	return RET_FAILURE;
-}
 
 static int gunzip_and_send(struct httpd_response *response,
 		const struct fs_desc *file, const char *filename)

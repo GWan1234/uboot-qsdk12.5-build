@@ -19,23 +19,15 @@
  */
 
 #include <common.h>
-#include <cli.h>
-#include <image.h>
-#include <fdtdec.h>
-#include <part.h>
 #include <spi.h>
 #include <spi_flash.h>
 #include <mmc.h>
 #include <sdhci.h>
-#include <asm/arch-qca-common/smem.h>
-#include <linux/mtd/mtd.h>
 #include <nand.h>
-#include <ubi_uboot.h>
 #include <failsafe/failsafe.h>
 #include <failsafe/fw_dec.h>
 #include <ipq_api.h>
 #include <u-boot/md5.h>
-#include <net/httpd.h>
 #include <capture.h>
 
 #include "untar.h"
@@ -45,8 +37,6 @@ extern qca_mmc mmc_host;
 #else
 extern struct sdhci_host mmc_host;
 #endif
-
-DECLARE_GLOBAL_DATA_PTR;
 
 #define FAILSAFE_CAPTURE_OUTPUT_SIZE 0x400
 
@@ -78,45 +68,9 @@ static const detected_flash_device_t *dfd = &detected_flash_device;
 /* Implemented in: u-boot-2016/board/qca/arm/common/cmd_bootqca.c */
 extern int config_select(unsigned int addr, char *rcmd, int rcmd_size);
 
-void *httpd_get_upload_buffer_ptr(size_t size)
-{
-	uintptr_t load_addr;
-
-	if (gd->ram_size >= SZ_MIB(512))
-		load_addr = CONFIG_SYS_SDRAM_BASE + SZ_MIB(256);
-	else
-		load_addr = IPQ_TFTP_MIN_ADDR;
-
-	if (!is_memory_region_available(load_addr, size)) {
-        puts("Error: file size too large\n");
-        return NULL;
-    }
-
-	return (void *)load_addr;
-}
-
-int boot_from_mem(const ulong data_addr)
-{
-    int ret;
-	char rcmd[99], bootm_arg[66];
-
-	puts("\n"
-        "********************************\n"
-        " INITRAMFS BOOTING\n"
-        " DO NOT POWER OFF DEVICE\n"
-        "********************************\n");
-
-    ret = config_select((unsigned int)data_addr, bootm_arg, sizeof(bootm_arg));
-
-    if (!ret)
-		snprintf(rcmd, sizeof(rcmd), "bootm %s", bootm_arg);
-	else
-		snprintf(rcmd, sizeof(rcmd), "bootm 0x%lx", data_addr);
-
-	printf("\n### Executing: %s\n", rcmd);
-
-	return run_command(rcmd, 0);
-}
+// =============================================================================
+// 错误处理函数
+// =============================================================================
 
 static void handle_wrong_fw_type(const char *expected_file_type_str, const fw_type_t fw_type)
 {
@@ -204,6 +158,10 @@ static void handle_run_command_failed(const char *cmd, const char *output)
 		"{\"type\":\"run_cmd_failed\",\"cmd\":\"%s\",\"output\":\"%s\"}",
 		esc_cmd, esc_output);
 }
+
+// =============================================================================
+// 帮助函数（验证相关）
+// =============================================================================
 
 /**
  * check_part_exists - 检查指定分区是否存在
@@ -355,6 +313,105 @@ static int get_factory_fw_kernel_size(const void *data_addr, const ulong data_si
 	handle_invalid_factory_fw();
 	return RET_FAILURE;
 }
+
+static bool is_simg_nor(const void *data_addr, const ulong data_size)
+{
+	if (check_fw_type((uintptr_t)data_addr) != FW_TYPE_ELF)
+		return false;
+
+	if (get_mibib_ptable_offset(data_addr, data_size, MIBIB_TYPE_NOR) == NULL)
+		return false;
+
+	return true;
+}
+
+// =============================================================================
+// 帮助函数（刷写相关）
+// =============================================================================
+
+static void print_upgrade_hint(const char *upgrade_type_str)
+{
+	printf("\n"
+		"********************************\n"
+		" %s UPGRADING\n"
+		" DO NOT POWER OFF DEVICE\n"
+		"********************************\n", upgrade_type_str);
+}
+
+static void handle_gpt_write_cmd(const ulong data_addr, const ulong data_size)
+{
+	block_dev_desc_t *mmc_dev;
+    ulong data_size_blocks;
+
+    mmc_dev = mmc_get_dev(mmc_host.dev_num);
+    if (mmc_dev == NULL)
+        data_size_blocks = 0;
+    else
+        data_size_blocks = data_size / mmc_dev->blksz
+                             + (data_size % mmc_dev->blksz != 0);
+
+	snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
+		"mmc erase 0x0 0x%lx && "
+		"mmc write 0x%lx 0x0 0x%lx",
+		data_size_blocks,
+		data_addr, data_size_blocks);
+}
+
+static ulong get_nand_writable_data_size(const uint32_t data_size)
+{
+	uint32_t adj_size, writable_size = data_size;
+	nand_info_t *nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
+
+	if (nand->writesize) {
+		adj_size = data_size % nand->writesize;
+		if (adj_size)
+			writable_size += nand->writesize - adj_size;
+	}
+
+	return (ulong)writable_size;
+}
+
+static int exec_command(void *cmd)
+{
+	return run_command((const char *)cmd, 0);
+}
+
+static int failsafe_run_command_capture(const char *cmd)
+{
+	char output[FAILSAFE_CAPTURE_OUTPUT_SIZE];
+	int ret;
+
+	printf("\n### Executing: %s\n", cmd);
+
+	ret = call_func_capture(exec_command, (void *)cmd,
+			output, sizeof(output), NULL);
+
+	if (ret)
+		handle_run_command_failed(cmd, output);
+
+	return ret;
+}
+
+static int failsafe_run_command_list(void)
+{
+    struct cmdlist *p = &runcmd;
+
+    if (p->count > MAX_CMD_COUNT) {
+        printf("\nError: too many commands (current: %d, max: %d), "
+			"please increase MAX_CMD_COUNT\n", p->count, MAX_CMD_COUNT);
+        return RET_FAILURE;
+    }
+
+    for (int i = 0; i < p->count; i++)
+        if (failsafe_run_command_capture(p->list[i]))
+            return RET_FAILURE;
+
+    return RET_SUCCESS;
+}
+
+// =============================================================================
+// 文件验证函数
+// =============================================================================
 
 static int failsafe_validate_firmware(const void *data_addr, const ulong data_size)
 {
@@ -522,17 +579,6 @@ static int failsafe_validate_ptable(const void *data_addr, const ulong data_size
     }
 }
 
-static bool is_simg_nor(const void *data_addr, const ulong data_size)
-{
-	if (check_fw_type((uintptr_t)data_addr) != FW_TYPE_ELF)
-		return false;
-
-	if (get_mibib_ptable_offset(data_addr, data_size, MIBIB_TYPE_NOR) == NULL)
-		return false;
-
-	return true;
-}
-
 static int failsafe_validate_simg(const void *data_addr, const ulong data_size)
 {
 	struct mmc *mmc;
@@ -592,122 +638,9 @@ static int failsafe_validate_initramfs(const void *data_addr, const ulong data_s
     return RET_SUCCESS;
 }
 
-int failsafe_validate_image(const int upgrade_type, const char *filename,
-	const void *data_addr, const ulong data_size, struct httpd_response *response)
-{
-	int ret;
-
-	fw_type = check_fw_type((uintptr_t)data_addr);
-
-	memset(info, 0, sizeof(info));
-	memset(resp, 0, sizeof(resp));
-
-	httpd_debug("fw_type = %d (%s), data_addr = 0x%lx, data_size = %lu (0x%lx)\n",
-		fw_type, fw_type_to_string(fw_type), (ulong)data_addr, data_size, data_size);
-
-	switch (upgrade_type) {
-	case WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE:
-		ret = failsafe_validate_firmware(data_addr, data_size);
-		break;
-	case WEBFAILSAFE_UPGRADE_TYPE_UBOOT:
-		ret = failsafe_validate_uboot(data_addr, data_size);
-		break;
-	case WEBFAILSAFE_UPGRADE_TYPE_ART:
-		ret = failsafe_validate_art(data_addr, data_size);
-		break;
-	case WEBFAILSAFE_UPGRADE_TYPE_CDT:
-		ret = failsafe_validate_cdt(data_addr, data_size);
-		break;
-	case WEBFAILSAFE_UPGRADE_TYPE_PTABLE:
-		ret = failsafe_validate_ptable(data_addr, data_size);
-		break;
-	case WEBFAILSAFE_UPGRADE_TYPE_SIMG:
-		ret = failsafe_validate_simg(data_addr, data_size);
-		break;
-	case WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS:
-		ret = failsafe_validate_initramfs(data_addr, data_size);
-		break;
-	default:
-		handle_wrong_upgrade_type();
-		ret = RET_WRONG_UPGRADE_TYPE;
-	}
-
-	if (!ret) {
-		char *hexchars = "0123456789abcdef";
-		char md5_str[33], esc_filename[512];
-		u8 md5_sum[16];
-
-		memset(md5_str, 0, sizeof(md5_str));
-		md5((u8 *)data_addr, data_size, md5_sum);
-
-		for (int i = 0; i < 16; i++) {
-			u8 hex = (md5_sum[i] >> 4) & 0xf;
-			md5_str[i * 2] = hexchars[hex];
-			hex = md5_sum[i] & 0xf;
-			md5_str[i * 2 + 1] = hexchars[hex];
-		}
-
-		json_escape(filename, esc_filename, sizeof(esc_filename));
-		snprintf(info, sizeof(info),
-			"{\"type\":\"%s\",\"size\":\"%lu\",\"md5\":\"%s\",\"name\":\"%s\"}",
-			fw_type_to_string(fw_type), data_size, md5_str, esc_filename[0] ? esc_filename : "NONE");
-	}
-
-	snprintf(resp, sizeof(resp),
-		"{\"status\":\"%s\",\"info\":%s}",
-		ret ? "fail" : "success", info);
-	response->data = resp;
-	response->size = strlen(response->data);
-
-	return ret;
-}
-
-static int exec_command(void *cmd)
-{
-	return run_command((const char *)cmd, 0);
-}
-
-static int failsafe_run_command_capture(const char *cmd)
-{
-	char output[FAILSAFE_CAPTURE_OUTPUT_SIZE];
-	int ret;
-
-	printf("\n### Executing: %s\n", cmd);
-
-	ret = call_func_capture(exec_command, (void *)cmd,
-			output, sizeof(output), NULL);
-
-	if (ret)
-		handle_run_command_failed(cmd, output);
-
-	return ret;
-}
-
-static int failsafe_run_command_list(void)
-{
-    struct cmdlist *p = &runcmd;
-
-    if (p->count > MAX_CMD_COUNT) {
-        printf("\nError: too many commands (current: %d, max: %d), "
-			"please increase MAX_CMD_COUNT\n", p->count, MAX_CMD_COUNT);
-        return RET_FAILURE;
-    }
-
-    for (int i = 0; i < p->count; i++)
-        if (failsafe_run_command_capture(p->list[i]))
-            return RET_FAILURE;
-
-    return RET_SUCCESS;
-}
-
-static void print_upgrade_hint(const char *upgrade_type_str)
-{
-	printf("\n"
-		"********************************\n"
-		" %s UPGRADING\n"
-		" DO NOT POWER OFF DEVICE\n"
-		"********************************\n", upgrade_type_str);
-}
+// =============================================================================
+// 文件刷写函数
+// =============================================================================
 
 static int failsafe_write_firmware(const ulong data_addr, const ulong data_size)
 {
@@ -843,25 +776,6 @@ static int failsafe_write_cdt(const ulong data_addr, const ulong data_size)
 	return failsafe_run_command_list();
 }
 
-static void handle_gpt_write_cmd(const ulong data_addr, const ulong data_size)
-{
-	block_dev_desc_t *mmc_dev;
-    ulong data_size_in_blocks;
-
-    mmc_dev = mmc_get_dev(mmc_host.dev_num);
-    if (mmc_dev == NULL)
-        data_size_in_blocks = 0;
-    else
-        data_size_in_blocks = data_size / mmc_dev->blksz
-                             + (data_size % mmc_dev->blksz != 0);
-
-	snprintf(runcmd.list[runcmd.count++], MAX_CMD_LEN,
-		"mmc erase 0x0 0x%lx && "
-		"mmc write 0x%lx 0x0 0x%lx",
-		data_size_in_blocks,
-		data_addr, data_size_in_blocks);
-}
-
 static int failsafe_write_ptable(const ulong data_addr, const ulong data_size)
 {
 	print_upgrade_hint("PTABLE");
@@ -896,20 +810,6 @@ static int failsafe_write_ptable(const ulong data_addr, const ulong data_size)
     }
 
 	return failsafe_run_command_list();
-}
-
-static ulong get_nand_writable_data_size(const uint32_t data_size)
-{
-	uint32_t adj_size, writable_size = data_size;
-	nand_info_t *nand = &nand_info[CONFIG_NAND_FLASH_INFO_IDX];
-
-	if (nand->writesize) {
-		adj_size = data_size % nand->writesize;
-		if (adj_size)
-			writable_size += nand->writesize - adj_size;
-	}
-
-	return (ulong)writable_size;
 }
 
 static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
@@ -955,8 +855,105 @@ static int failsafe_write_simg(const ulong data_addr, const ulong data_size)
 	return failsafe_run_command_list();
 }
 
+// =============================================================================
+// 暴露给外部的 API
+// =============================================================================
+
+int boot_from_mem(const ulong data_addr)
+{
+    int ret;
+	char rcmd[99], bootm_arg[66];
+
+	puts("\n"
+        "********************************\n"
+        " INITRAMFS BOOTING\n"
+        " DO NOT POWER OFF DEVICE\n"
+        "********************************\n");
+
+    ret = config_select((unsigned int)data_addr, bootm_arg, sizeof(bootm_arg));
+
+    if (!ret)
+		snprintf(rcmd, sizeof(rcmd), "bootm %s", bootm_arg);
+	else
+		snprintf(rcmd, sizeof(rcmd), "bootm 0x%lx", data_addr);
+
+	printf("\n### Executing: %s\n", rcmd);
+
+	return run_command(rcmd, 0);
+}
+
+int failsafe_validate_image(const int upgrade_type, const char *filename,
+		const void *data_addr, const ulong data_size, struct httpd_response *response)
+{
+	int ret;
+
+	fw_type = check_fw_type((uintptr_t)data_addr);
+
+	memset(info, 0, sizeof(info));
+	memset(resp, 0, sizeof(resp));
+
+	httpd_debug("fw_type = %d (%s), data_addr = 0x%lx, data_size = %lu (0x%lx)\n",
+		fw_type, fw_type_to_string(fw_type), (ulong)data_addr, data_size, data_size);
+
+	switch (upgrade_type) {
+	case WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE:
+		ret = failsafe_validate_firmware(data_addr, data_size);
+		break;
+	case WEBFAILSAFE_UPGRADE_TYPE_UBOOT:
+		ret = failsafe_validate_uboot(data_addr, data_size);
+		break;
+	case WEBFAILSAFE_UPGRADE_TYPE_ART:
+		ret = failsafe_validate_art(data_addr, data_size);
+		break;
+	case WEBFAILSAFE_UPGRADE_TYPE_CDT:
+		ret = failsafe_validate_cdt(data_addr, data_size);
+		break;
+	case WEBFAILSAFE_UPGRADE_TYPE_PTABLE:
+		ret = failsafe_validate_ptable(data_addr, data_size);
+		break;
+	case WEBFAILSAFE_UPGRADE_TYPE_SIMG:
+		ret = failsafe_validate_simg(data_addr, data_size);
+		break;
+	case WEBFAILSAFE_UPGRADE_TYPE_INITRAMFS:
+		ret = failsafe_validate_initramfs(data_addr, data_size);
+		break;
+	default:
+		handle_wrong_upgrade_type();
+		ret = RET_WRONG_UPGRADE_TYPE;
+	}
+
+	if (!ret) {
+		char *hexchars = "0123456789abcdef";
+		char md5_str[33], esc_filename[512];
+		u8 md5_sum[16];
+
+		memset(md5_str, 0, sizeof(md5_str));
+		md5((u8 *)data_addr, data_size, md5_sum);
+
+		for (int i = 0; i < 16; i++) {
+			u8 hex = (md5_sum[i] >> 4) & 0xf;
+			md5_str[i * 2] = hexchars[hex];
+			hex = md5_sum[i] & 0xf;
+			md5_str[i * 2 + 1] = hexchars[hex];
+		}
+
+		json_escape(filename, esc_filename, sizeof(esc_filename));
+		snprintf(info, sizeof(info),
+			"{\"type\":\"%s\",\"size\":\"%lu\",\"md5\":\"%s\",\"name\":\"%s\"}",
+			fw_type_to_string(fw_type), data_size, md5_str, esc_filename[0] ? esc_filename : "NONE");
+	}
+
+	snprintf(resp, sizeof(resp),
+		"{\"status\":\"%s\",\"info\":%s}",
+		ret ? "fail" : "success", info);
+	response->data = resp;
+	response->size = strlen(response->data);
+
+	return ret;
+}
+
 int failsafe_write_image(const int upgrade_type, const ulong data_addr,
-			const ulong data_size, struct httpd_response *response)
+		const ulong data_size, struct httpd_response *response)
 {
     int ret;
 
