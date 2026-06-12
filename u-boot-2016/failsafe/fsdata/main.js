@@ -3462,6 +3462,57 @@ const consoleManager = (() => {
     }
 
     /**
+     * 处理命令列表
+     * @param {Array} baseCommands - 后端返回的基础命令列表
+     * @returns {Array} 处理后的完整命令列表（包含变体）
+     */
+    function processCommandList(baseCommands) {
+        // 定义需要生成变体的命令及其变体后缀
+        const commandsWithVariants = {
+            'md': { variants: ['.b', '.w', '.l'] },
+            'mm': { variants: ['.b', '.w', '.l'] },
+            'nm': { variants: ['.b', '.w', '.l'] },
+            'mw': { variants: ['.b', '.w', '.l'] },
+            'cp': { variants: ['.b', '.w', '.l'] },
+            'cmp': { variants: ['.b', '.w', '.l'] },
+            'loop': { variants: ['.b', '.w', '.l'] },
+            'itest': { variants: ['.b', '.w', '.l', '.s'] }
+        };
+
+        // 创建基础命令名称的 Set 用于快速查找
+        const baseCommandNames = new Set(baseCommands.map(cmd => cmd.name));
+
+        // 构建最终的命令列表
+        const allCommands = [...baseCommands];
+
+        // 为存在的命令生成变体
+        for (const [baseCmd, config] of Object.entries(commandsWithVariants)) {
+            if (baseCommandNames.has(baseCmd)) {
+                // 找到原始命令对象以获取其 usage
+                const originalCmd = baseCommands.find(cmd => cmd.name === baseCmd);
+                const originalUsage = originalCmd ? originalCmd.usage : "";
+
+                // 为每个变体后缀生成命令
+                for (const variant of config.variants) {
+                    const variantName = baseCmd + variant;
+                    // 避免重复添加（如果后端已经返回了变体命令）
+                    if (!baseCommandNames.has(variantName)) {
+                        allCommands.push({
+                            name: variantName,
+                            usage: originalUsage + " (" + variant.substring(1) + ")"
+                        });
+                    }
+                }
+            }
+        }
+
+        // 按名称排序
+        allCommands.sort((a, b) => a.name.localeCompare(b.name));
+
+        return allCommands;
+    }
+
+    /**
      * 加载命令列表
      */
     async function loadCommands() {
@@ -3486,10 +3537,13 @@ const consoleManager = (() => {
             const data = await response.json();
 
             if (data && data.cmdlist && Array.isArray(data.cmdlist)) {
-                state.commands = data.cmdlist.map(cmd => ({
+                // 基础命令列表
+                const baseCommands = data.cmdlist.map(cmd => ({
                     name: cmd.name,
                     usage: cmd.usage || ""
                 }));
+
+                state.commands = processCommandList(baseCommands);
 
                 // 构建命令名称映射（用于快速精确匹配）
                 state.commandNames.clear();
