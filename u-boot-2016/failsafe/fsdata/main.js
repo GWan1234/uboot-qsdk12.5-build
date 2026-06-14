@@ -3357,6 +3357,21 @@ const consoleManager = (() => {
             }],
             ['tftpput', {
                 reasonKey: 'console.cmd.forbid.reason.common'
+            }],
+            ['editenv', {
+                reasonKey: 'console.cmd.forbid.reason.common'
+            }],
+            ['mm', {
+                reasonKey: 'console.cmd.forbid.reason.common'
+            }],
+            ['nm', {
+                reasonKey: 'console.cmd.forbid.reason.common'
+            }],
+            ['loop', {
+                reasonKey: 'console.cmd.forbid.reason.common'
+            }],
+            ['go', {
+                reasonKey: 'console.cmd.forbid.reason.common'
             }]
         ])
     };
@@ -3470,12 +3485,9 @@ const consoleManager = (() => {
         // 定义需要生成变体的命令及其变体后缀
         const commandsWithVariants = {
             'md': { variants: ['.b', '.w', '.l'] },
-            'mm': { variants: ['.b', '.w', '.l'] },
-            'nm': { variants: ['.b', '.w', '.l'] },
             'mw': { variants: ['.b', '.w', '.l'] },
             'cp': { variants: ['.b', '.w', '.l'] },
             'cmp': { variants: ['.b', '.w', '.l'] },
-            'loop': { variants: ['.b', '.w', '.l'] },
             'itest': { variants: ['.b', '.w', '.l', '.s'] }
         };
 
