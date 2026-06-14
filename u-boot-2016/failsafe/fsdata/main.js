@@ -4050,44 +4050,53 @@ const consoleManager = (() => {
     }
 
     /**
-     * 发送命令并执行
+     * 处理用户输入
      */
-    async function send() {
+    function processUserInput() {
         const inputEl = getElements().input;
+        if (!inputEl) return null;
 
-        if (!inputEl) return;
-
-        const line = inputEl.value.trim();
-        if (!line) {
+        const rawInput = inputEl.value;
+        if (!rawInput) {
             addTerminalLine('command', '');
-            inputEl.value = "";
-            return;
+            return "__DO_REPEAT__";
         }
 
-        // 回显命令到终端
-        addTerminalLine('command', line);
+        inputEl.value = '';
 
-        inputEl.value = "";
+        const trimmedInput = rawInput.trim();
+        if (!trimmedInput) {
+            addTerminalLine('command', '');
+            return "__CANCEL_REPEAT__";
+        }
 
-        // 隐藏提示框
+        addTerminalLine('command', trimmedInput);
         hideSuggestions();
 
-        // 添加到历史记录
-        state.history.unshift(line);
+        if (!validateCommand(trimmedInput)) {
+            setStatus(t("console.status.ready"));
+            return "__CANCEL_REPEAT__";
+        }
+
+        state.history.unshift(trimmedInput);
         if (state.history.length > 50) {
             state.history.length = 50;
         }
         state.histPos = -1;
 
-        // 验证命令
-        if (!validateCommand(line)) {
-            setStatus(t("console.status.ready"));
-            return;
-        }
+        return trimmedInput;
+    }
+
+    /**
+     * 发送命令并执行
+     */
+    async function send() {
+        const cmdLine = processUserInput();
+        if (!cmdLine) return;
 
         try {
             const formData = new FormData();
-            formData.append("cmd", line);
+            formData.append("cmd", cmdLine);
 
             setStatus(t("console.status.running"));
 

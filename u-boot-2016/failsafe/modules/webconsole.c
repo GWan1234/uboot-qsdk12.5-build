@@ -42,6 +42,16 @@ extern struct sdhci_host mmc_host;
 #define WEBCONSOLE_RECORD_OUT_SIZE			16666
 #define WEBCONSOLE_UPLOAD_FILE_INFO_SIZE	999
 
+/* Implemented in u-boot-2016/common/cli_hush.c */
+extern bool is_last_command_repeatable(void);
+extern void webconsole_init_repeat_flag(void);
+extern void webconsole_repeat_last_command(bool repeat);
+
+static struct {
+	char data[WEBCONSOLE_MAX_CMD_SIZE + 1];
+	bool repeatable;
+} command = { .repeatable = false };
+
 static void handle_response_message(struct httpd_response *response,
     int code, const char *data, int data_size, const char *content_type)
 {
@@ -53,7 +63,7 @@ static void handle_response_message(struct httpd_response *response,
 	response->info.content_type = content_type ? content_type : "text/plain";
 }
 
-void webconsole_free_session_data(struct httpd_response *response)
+static void webconsole_free_session_data(struct httpd_response *response)
 {
 	if (response->session_data) {
 		free(response->session_data);
@@ -71,9 +81,12 @@ void webconsole_exec_handler(enum httpd_uri_handler_status status,
 	struct httpd_response *response)
 {
 	struct httpd_form_value *raw_cmd;
-	char cmd[WEBCONSOLE_MAX_CMD_SIZE + 1];
+	const char *echo_str = "";
+	const char *do_repeat_str = "__DO_REPEAT__";
+	const char *cancel_repeat_str = "__CANCEL_REPEAT__";
 	char *buf;
-	size_t len = 0;
+	size_t out_len = 0;
+	int ret;
 
 	if (status == HTTP_CB_CLOSED) {
 		webconsole_free_session_data(response);
@@ -96,8 +109,26 @@ void webconsole_exec_handler(enum httpd_uri_handler_status status,
 		return;
 	}
 
-	memset(cmd, 0, sizeof(cmd));
-	memcpy(cmd, raw_cmd->data, min_t(size_t, WEBCONSOLE_MAX_CMD_SIZE, raw_cmd->size));
+	if (raw_cmd->size == strlen(do_repeat_str) &&
+		!strcmp(raw_cmd->data, do_repeat_str)) {
+		if (!command.repeatable) {
+			handle_response_message(response, 200, "", -1, NULL);
+			return;
+		}
+		webconsole_repeat_last_command(true);
+		echo_str = "<REPEAT>";
+	} else if (raw_cmd->size == strlen(cancel_repeat_str) &&
+		!strcmp(raw_cmd->data, cancel_repeat_str)) {
+		command.repeatable = false;
+		webconsole_repeat_last_command(false);
+		handle_response_message(response, 200, "", -1, NULL);
+		return;
+	} else {
+		strlcpy(command.data, raw_cmd->data, sizeof(command.data));
+		webconsole_init_repeat_flag();
+		webconsole_repeat_last_command(false);
+		echo_str = command.data;
+	}
 
 	buf = malloc(WEBCONSOLE_RECORD_OUT_SIZE);
 	if (!buf) {
@@ -105,12 +136,14 @@ void webconsole_exec_handler(enum httpd_uri_handler_status status,
 		return;
 	}
 
-	printf("\nIPQ# %s\n", cmd);
+	printf("\nIPQ# %s\n", echo_str);
 
-	call_func_capture(webconsole_run_command, cmd,
-			buf, WEBCONSOLE_RECORD_OUT_SIZE, &len);
+	ret = call_func_capture(webconsole_run_command, command.data,
+			buf, WEBCONSOLE_RECORD_OUT_SIZE, &out_len);
 
-	handle_response_message(response, 200, buf, len, NULL);
+	command.repeatable = (!ret && is_last_command_repeatable()) ? true : false;
+
+	handle_response_message(response, 200, buf, out_len, NULL);
 	response->session_data = buf;
 }
 

@@ -3232,6 +3232,23 @@ static int parse_stream_outer(struct in_str *inp, int flag)
 #endif /* __U_BOOT__ */
 }
 
+#if defined(__U_BOOT__) && defined(CONFIG_HTTPD)
+bool is_last_command_repeatable(void)
+{
+	return flag_repeat ? true : false;
+}
+
+void webconsole_init_repeat_flag(void)
+{
+	flag_repeat = 1;
+}
+
+void webconsole_repeat_last_command(bool repeat)
+{
+	do_repeat = repeat ? 1 : 0;
+}
+#endif /* __U_BOOT__ && CONFIG_HTTPD */
+
 #ifndef __U_BOOT__
 static int parse_string_outer(const char *s, int flag)
 #else
