@@ -4106,6 +4106,8 @@ const consoleManager = (() => {
         const cmdLine = processUserInput();
         if (!cmdLine) return;
 
+        focusInput();
+
         try {
             const formData = new FormData();
             formData.append("cmd", cmdLine);
