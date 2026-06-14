@@ -28,7 +28,7 @@
 #include "modules/network.h"
 #include "modules/sysinfo.h"
 #include "modules/syslog.h"
-#include "modules/webconsole.h"
+#include "modules/webterm.h"
 
 #if defined(CONFIG_HTTPD_DEBUG)
 bool httpd_debug_on;
@@ -621,10 +621,10 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/env/reset/single", &env_reset_single_handler, NULL);
 	httpd_register_uri_handler(inst, "/env/restore", &env_restore_handler, NULL);
 
-	httpd_register_uri_handler(inst, "/console.html", &html_handler, NULL);
-	httpd_register_uri_handler(inst, "/console/exec", &webconsole_exec_handler, NULL);
-	httpd_register_uri_handler(inst, "/console/upload", &webconsole_upload_handler, NULL);
-	httpd_register_uri_handler(inst, "/console/cmdlist", &webconsole_cmdlist_handler, NULL);
+	httpd_register_uri_handler(inst, "/webterm.html", &html_handler, NULL);
+	httpd_register_uri_handler(inst, "/webterm/exec", &webterm_exec_handler, NULL);
+	httpd_register_uri_handler(inst, "/webterm/upload", &webterm_upload_handler, NULL);
+	httpd_register_uri_handler(inst, "/webterm/cmdlist", &webterm_cmdlist_handler, NULL);
 
 	httpd_register_uri_handler(inst, "", &not_found_handler, NULL);
 

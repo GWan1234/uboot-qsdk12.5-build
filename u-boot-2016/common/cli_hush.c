@@ -3238,12 +3238,12 @@ bool is_last_command_repeatable(void)
 	return flag_repeat ? true : false;
 }
 
-void webconsole_init_repeat_flag(void)
+void webterm_init_repeat_flag(void)
 {
 	flag_repeat = 1;
 }
 
-void webconsole_repeat_last_command(bool repeat)
+void webterm_repeat_last_command(bool repeat)
 {
 	do_repeat = repeat ? 1 : 0;
 }

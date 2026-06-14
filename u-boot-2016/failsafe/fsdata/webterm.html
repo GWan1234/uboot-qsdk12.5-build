@@ -4,12 +4,12 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title data-i18n="console.title"></title>
+    <title data-i18n="webterm.title"></title>
     <link rel="stylesheet" href="/style.css">
     <script src="/main.js"></script>
 </head>
 
-<body onload="appInit('console')" data-page="console">
+<body onload="appInit('webterm')" data-page="webterm">
     <div class="app">
         <aside id="sidebar" class="sidebar"></aside>
         <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -17,7 +17,7 @@
         <div class="main">
             <div id="m">
                 <div class="card-title-section">
-                    <h1 data-i18n="console.title"></h1>
+                    <h1 data-i18n="webterm.title"></h1>
                 </div>
 
                 <div class="card-main-section">
@@ -29,7 +29,7 @@
                                 <span class="line-content terminal-input-wrapper">
                                     <input type="text" id="terminal_input" class="terminal-input"
                                             autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
-                                            data-i18n-attr="placeholder:console.cmd.placeholder">
+                                            data-i18n-attr="placeholder:webterm.cmd.placeholder">
                                 </span>
                             </div>
                         </div>
@@ -50,10 +50,10 @@
 
                         <div class="terminal-toolbar">
                             <div class="terminal-actions">
-                                <button type="button" class="terminal-btn" onclick="consoleManager.focusInput()" data-i18n="console.input"></button>
-                                <button type="button" class="terminal-btn" onclick="consoleManager.send()" data-i18n="console.send"></button>
-                                <button type="button" class="terminal-btn" onclick="consoleManager.uploadFile()" data-i18n="console.upload"></button>
-                                <button type="button" class="terminal-btn" onclick="consoleManager.clear()" data-i18n="console.clear"></button>
+                                <button type="button" class="terminal-btn" onclick="webTerminalManager.focusInput()" data-i18n="webterm.input"></button>
+                                <button type="button" class="terminal-btn" onclick="webTerminalManager.send()" data-i18n="webterm.send"></button>
+                                <button type="button" class="terminal-btn" onclick="webTerminalManager.uploadFile()" data-i18n="webterm.upload"></button>
+                                <button type="button" class="terminal-btn" onclick="webTerminalManager.clear()" data-i18n="webterm.clear"></button>
                             </div>
                         </div>
                     </div>

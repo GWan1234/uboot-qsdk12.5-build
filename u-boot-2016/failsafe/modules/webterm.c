@@ -30,7 +30,7 @@
 #include <failsafe/fw_dec.h>
 #include <capture.h>
 
-#include "webconsole.h"
+#include "webterm.h"
 
 #ifndef CONFIG_SDHCI_SUPPORT
 extern qca_mmc mmc_host;
@@ -38,17 +38,17 @@ extern qca_mmc mmc_host;
 extern struct sdhci_host mmc_host;
 #endif
 
-#define WEBCONSOLE_MAX_CMD_SIZE				256
-#define WEBCONSOLE_RECORD_OUT_SIZE			16666
-#define WEBCONSOLE_UPLOAD_FILE_INFO_SIZE	999
+#define WEBTERM_MAX_CMD_SIZE			256
+#define WEBTERM_RECORD_OUT_SIZE			16666
+#define WEBTERM_UPLOAD_FILE_INFO_SIZE	999
 
 /* Implemented in u-boot-2016/common/cli_hush.c */
 extern bool is_last_command_repeatable(void);
-extern void webconsole_init_repeat_flag(void);
-extern void webconsole_repeat_last_command(bool repeat);
+extern void webterm_init_repeat_flag(void);
+extern void webterm_repeat_last_command(bool repeat);
 
 static struct {
-	char data[WEBCONSOLE_MAX_CMD_SIZE + 1];
+	char data[WEBTERM_MAX_CMD_SIZE + 1];
 	bool repeatable;
 } command = { .repeatable = false };
 
@@ -63,7 +63,7 @@ static void handle_response_message(struct httpd_response *response,
 	response->info.content_type = content_type ? content_type : "text/plain";
 }
 
-static void webconsole_free_session_data(struct httpd_response *response)
+static void webterm_free_session_data(struct httpd_response *response)
 {
 	if (response->session_data) {
 		free(response->session_data);
@@ -71,12 +71,12 @@ static void webconsole_free_session_data(struct httpd_response *response)
 	}
 }
 
-static int webconsole_run_command(void *cmd)
+static int webterm_run_command(void *cmd)
 {
 	return run_command((const char *)cmd, 0);
 }
 
-void webconsole_exec_handler(enum httpd_uri_handler_status status,
+void webterm_exec_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response)
 {
@@ -89,7 +89,7 @@ void webconsole_exec_handler(enum httpd_uri_handler_status status,
 	int ret;
 
 	if (status == HTTP_CB_CLOSED) {
-		webconsole_free_session_data(response);
+		webterm_free_session_data(response);
 		return;
 	}
 
@@ -115,22 +115,22 @@ void webconsole_exec_handler(enum httpd_uri_handler_status status,
 			handle_response_message(response, 200, "", -1, NULL);
 			return;
 		}
-		webconsole_repeat_last_command(true);
+		webterm_repeat_last_command(true);
 		echo_str = "<REPEAT>";
 	} else if (raw_cmd->size == strlen(cancel_repeat_str) &&
 		!strcmp(raw_cmd->data, cancel_repeat_str)) {
 		command.repeatable = false;
-		webconsole_repeat_last_command(false);
+		webterm_repeat_last_command(false);
 		handle_response_message(response, 200, "", -1, NULL);
 		return;
 	} else {
 		strlcpy(command.data, raw_cmd->data, sizeof(command.data));
-		webconsole_init_repeat_flag();
-		webconsole_repeat_last_command(false);
+		webterm_init_repeat_flag();
+		webterm_repeat_last_command(false);
 		echo_str = command.data;
 	}
 
-	buf = malloc(WEBCONSOLE_RECORD_OUT_SIZE);
+	buf = malloc(WEBTERM_RECORD_OUT_SIZE);
 	if (!buf) {
 		handle_response_message(response, 500, "no mem", -1, NULL);
 		return;
@@ -138,8 +138,8 @@ void webconsole_exec_handler(enum httpd_uri_handler_status status,
 
 	printf("\nIPQ# %s\n", echo_str);
 
-	ret = call_func_capture(webconsole_run_command, command.data,
-			buf, WEBCONSOLE_RECORD_OUT_SIZE, &out_len);
+	ret = call_func_capture(webterm_run_command, command.data,
+			buf, WEBTERM_RECORD_OUT_SIZE, &out_len);
 
 	command.repeatable = (!ret && is_last_command_repeatable()) ? true : false;
 
@@ -177,7 +177,7 @@ static int print_file_info(void *arg)
 	return 0;
 }
 
-void webconsole_upload_handler(enum httpd_uri_handler_status status,
+void webterm_upload_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response)
 {
@@ -189,7 +189,7 @@ void webconsole_upload_handler(enum httpd_uri_handler_status status,
 	size_t len = 0;
 
 	if (status == HTTP_CB_CLOSED) {
-		webconsole_free_session_data(response);
+		webterm_free_session_data(response);
 		return;
 	}
 
@@ -215,10 +215,10 @@ void webconsole_upload_handler(enum httpd_uri_handler_status status,
         }
     }
 
-	buf = malloc(WEBCONSOLE_UPLOAD_FILE_INFO_SIZE);
+	buf = malloc(WEBTERM_UPLOAD_FILE_INFO_SIZE);
 	if (buf) {
 		call_func_capture(print_file_info, file,
-			buf, WEBCONSOLE_UPLOAD_FILE_INFO_SIZE, &len);
+			buf, WEBTERM_UPLOAD_FILE_INFO_SIZE, &len);
 		handle_response_message(response, 200, buf, len, NULL);
 		response->session_data = buf;
 	} else {
@@ -229,7 +229,7 @@ void webconsole_upload_handler(enum httpd_uri_handler_status status,
 	}
 }
 
-void webconsole_cmdlist_handler(enum httpd_uri_handler_status status,
+void webterm_cmdlist_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response)
 {
@@ -240,7 +240,7 @@ void webconsole_cmdlist_handler(enum httpd_uri_handler_status status,
 	char esc_cmd_usage[512];
 
 	if (status == HTTP_CB_CLOSED) {
-		webconsole_free_session_data(response);
+		webterm_free_session_data(response);
 		return;
 	}
 

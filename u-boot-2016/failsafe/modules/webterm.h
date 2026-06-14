@@ -18,17 +18,17 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _FAILSAFE_WEBCONSOLE_H_
-#define _FAILSAFE_WEBCONSOLE_H_
+#ifndef _FAILSAFE_WEBTERM_H_
+#define _FAILSAFE_WEBTERM_H_
 
-void webconsole_exec_handler(enum httpd_uri_handler_status status,
+void webterm_exec_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response);
-void webconsole_upload_handler(enum httpd_uri_handler_status status,
+void webterm_upload_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response);
-void webconsole_cmdlist_handler(enum httpd_uri_handler_status status,
+void webterm_cmdlist_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response);
 
-#endif /* _FAILSAFE_WEBCONSOLE_H_ */
+#endif /* _FAILSAFE_WEBTERM_H_ */

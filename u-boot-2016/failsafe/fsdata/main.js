@@ -67,10 +67,10 @@ class SidebarManager {
             '/mibib.html': 'mibib',
             '/backup.html': 'backup',
             '/env.html': 'env',
-            '/console.html': 'console',
             '/mac.html': 'mac',
             '/network.html': 'network',
             '/settings.html': 'settings',
+            '/webterm.html': 'webterm',
             '/flashing.html': 'flashing',
             '/booting.html': 'booting',
             '/reboot.html': 'reboot',
@@ -132,7 +132,7 @@ class SidebarManager {
                     { path: "/mac.html", labelKey: "nav.mac", id: "mac" },
                     { path: "/env.html", labelKey: "nav.env", id: "env" },
                     { path: "/backup.html", labelKey: "nav.backup", id: "backup" },
-                    { path: "/console.html", labelKey: "nav.console", id: "console" }
+                    { path: "/webterm.html", labelKey: "nav.webterm", id: "webterm" }
                 ]
             }
         };
@@ -1087,9 +1087,9 @@ const pageConfigs = {
         needUpload: false,
         init: () => networkManager.init()
     },
-    console: {
+    webterm: {
         needUpload: false,
-        init: () => consoleManager.init()
+        init: () => webTerminalManager.init()
     },
     settings: {
         needUpload: false,
@@ -3320,19 +3320,19 @@ const networkManager = (() => {
 })();
 
 // ==============================
-// Web 控制台模块
+// 网页终端模块
 // ==============================
 
 /**
- * 控制台管理器
+ * 网页终端管理器
  * 负责处理 U-Boot 命令的发送、输出接收和管理，以及文件上传功能和命令自动补全提示
  */
-const consoleManager = (() => {
+const webTerminalManager = (() => {
     let elements = null;
     let state = {
         history: [],
         histPos: -1,
-        persistKey: "failsafe_console_output",
+        persistKey: "failsafe_webterm_output",
         persistMax: 200000,
         commands: [],           // 存储所有命令对象 {name, usage}
         commandNames: new Map(), // 存储命令名称到完整对象的映射
@@ -3343,35 +3343,35 @@ const consoleManager = (() => {
         fileInfoTimeout: null,
         forbiddenCommands: new Map([
             ['bootp', {
-                reasonKey: 'console.cmd.forbid.reason.common'
+                reasonKey: 'webterm.cmd.forbid.reason.common'
             }],
             ['dhcp', {
-                reasonKey: 'console.cmd.forbid.reason.common'
+                reasonKey: 'webterm.cmd.forbid.reason.common'
             }],
             ['ping', {
-                reasonKey: 'console.cmd.forbid.reason.common'
+                reasonKey: 'webterm.cmd.forbid.reason.common'
             }],
             ['tftpboot', {
-                reasonKey: 'console.cmd.forbid.reason.common',
-                altKey: 'console.cmd.forbid.alt.tftpb'
+                reasonKey: 'webterm.cmd.forbid.reason.common',
+                altKey: 'webterm.cmd.forbid.alt.tftpb'
             }],
             ['tftpput', {
-                reasonKey: 'console.cmd.forbid.reason.common'
+                reasonKey: 'webterm.cmd.forbid.reason.common'
             }],
             ['editenv', {
-                reasonKey: 'console.cmd.forbid.reason.common'
+                reasonKey: 'webterm.cmd.forbid.reason.common'
             }],
             ['mm', {
-                reasonKey: 'console.cmd.forbid.reason.common'
+                reasonKey: 'webterm.cmd.forbid.reason.common'
             }],
             ['nm', {
-                reasonKey: 'console.cmd.forbid.reason.common'
+                reasonKey: 'webterm.cmd.forbid.reason.common'
             }],
             ['loop', {
-                reasonKey: 'console.cmd.forbid.reason.common'
+                reasonKey: 'webterm.cmd.forbid.reason.common'
             }],
             ['go', {
-                reasonKey: 'console.cmd.forbid.reason.common'
+                reasonKey: 'webterm.cmd.forbid.reason.common'
             }]
         ])
     };
@@ -3533,7 +3533,7 @@ const consoleManager = (() => {
         state.loadingCommands = true;
 
         try {
-            const response = await fetch("/console/cmdlist", {
+            const response = await fetch("/webterm/cmdlist", {
                 method: "GET",
                 cache: "no-store",
                 headers: {
@@ -3721,7 +3721,7 @@ const consoleManager = (() => {
             els.suggestionsBox.className = "cmd-suggestions no-match";
             els.suggestionsList.innerHTML = `
                 <div class="no-match-message">
-                    ${escapeHtml(rawCommand) + ": " + t("console.cmd.nomatch")}
+                    ${escapeHtml(rawCommand) + ": " + t("webterm.cmd.nomatch")}
                 </div>
             `;
             els.suggestionsBox.style.display = "block";
@@ -4042,13 +4042,13 @@ const consoleManager = (() => {
             fullCommandName = matches[0].name;
         } else {
             // 命令没有精确匹配，且无前缀匹配或有不止一个前缀匹配
-            addTerminalLine('error', `${rawCommand}: ${t("console.cmd.unknown")}`);
+            addTerminalLine('error', `${rawCommand}: ${t("webterm.cmd.unknown")}`);
             return false;
         }
 
         const forbiddenInfo = isForbiddenCommand(fullCommandName);
         if (forbiddenInfo) {
-            addTerminalLine('error', `${fullCommandName}: ${t("console.cmd.forbid.hint")}`);
+            addTerminalLine('error', `${fullCommandName}: ${t("webterm.cmd.forbid.hint")}`);
             if (forbiddenInfo.reasonKey) {
                 addTerminalLine('error', t(forbiddenInfo.reasonKey));
             }
@@ -4086,7 +4086,7 @@ const consoleManager = (() => {
         hideSuggestions();
 
         if (!validateCommand(trimmedInput)) {
-            setStatus(t("console.status.ready"));
+            setStatus(t("webterm.status.ready"));
             return "__CANCEL_REPEAT__";
         }
 
@@ -4112,9 +4112,9 @@ const consoleManager = (() => {
             const formData = new FormData();
             formData.append("cmd", cmdLine);
 
-            setStatus(t("console.status.running"));
+            setStatus(t("webterm.status.running"));
 
-            const response = await fetch("/console/exec", {
+            const response = await fetch("/webterm/exec", {
                 method: "POST",
                 body: formData
             });
@@ -4122,7 +4122,7 @@ const consoleManager = (() => {
             const text = await response.text();
 
             if (!response.ok) {
-                const errorMsg = `${t("console.status.http")} ${response.status}${text ? ": " + text : ""}`;
+                const errorMsg = `${t("webterm.status.http")} ${response.status}${text ? ": " + text : ""}`;
                 addTerminalLine('error', errorMsg);
                 setStatus(errorMsg, true);
                 return;
@@ -4145,7 +4145,7 @@ const consoleManager = (() => {
                 }
             }
 
-            setStatus(t("console.status.done"));
+            setStatus(t("webterm.status.done"));
 
         } catch (error) {
             const errorMsg = formatError(error);
@@ -4167,7 +4167,7 @@ const consoleManager = (() => {
             } catch (e) {
                 // 忽略清理错误
             }
-            setStatus(t("console.status.cleared"));
+            setStatus(t("webterm.status.cleared"));
         }
 
         focusInput();
@@ -4187,7 +4187,7 @@ const consoleManager = (() => {
             const file = fileInput.files[0];
             if (!file) return;
 
-            showFileInfo(`${t("console.uploading")} ${file.name}`);
+            showFileInfo(`${t("webterm.uploading")} ${file.name}`);
             showFileProgress(true);
             setFileProgress(0);
 
@@ -4201,7 +4201,7 @@ const consoleManager = (() => {
                     if (event.lengthComputable && event.total > 0) {
                         const percent = parseInt((event.loaded / event.total) * 100);
                         setFileProgress(percent);
-                        showFileInfo(`${t("console.uploading")} ${file.name} (${percent}%)`);
+                        showFileInfo(`${t("webterm.uploading")} ${file.name} (${percent}%)`);
                     }
                 });
 
@@ -4214,16 +4214,16 @@ const consoleManager = (() => {
                             if (text) {
                                 addTerminalLine('output', text);
                             }
-                            showFileInfo(`✓ ${t("console.upload.success")}`, true);
-                            setStatus(t("console.upload.success"));
+                            showFileInfo(`✓ ${t("webterm.upload.success")}`, true);
+                            setStatus(t("webterm.upload.success"));
                         } else {
-                            showFileInfo(`✗ ${t("console.status.http")} ${xhr.status}`, false);
-                            setStatus(`${t("console.status.http")} ${xhr.status}`, true);
+                            showFileInfo(`✗ ${t("webterm.status.http")} ${xhr.status}`, false);
+                            setStatus(`${t("webterm.status.http")} ${xhr.status}`, true);
                         }
                     }
                 };
 
-                xhr.open("POST", "/console/upload");
+                xhr.open("POST", "/webterm/upload");
                 xhr.send(formData);
 
             } catch (error) {
@@ -4307,7 +4307,7 @@ const consoleManager = (() => {
         // 预加载命令列表（不阻塞UI）
         loadCommands();
 
-        setStatus(t("console.status.ready"));
+        setStatus(t("webterm.status.ready"));
 
         focusInput();
     }
@@ -5852,7 +5852,7 @@ const I18N = (() => {
             "nav.settings": "Theme Settings",
             "nav.network": "Network Settings",
             "nav.backup": "Flash Backup",
-            "nav.console": "Web Console",
+            "nav.webterm": "Web Terminal",
             "nav.mac": "MAC Manage",
             "nav.env": "Env Manage",
             "nav.reboot": "Reboot",
@@ -5922,26 +5922,26 @@ const I18N = (() => {
             "backup.warn.1": "Do not power off the device during backup.",
             "backup.warn.2": "Custom range reads raw bytes; be careful with offsets.",
             "backup.warn.3": "Large backups may take a long time depending on storage speed.",
-            "console.title": "WEB CONSOLE",
-            "console.input": "Input",
-            "console.send": "Send",
-            "console.clear": "Clear",
-            "console.cmd.forbid.hint": "this command has been disabled!",
-            "console.cmd.forbid.reason.common": "This command will cause the HTTPD service to exit abnormally. Do not use it in the web terminal!",
-            "console.cmd.forbid.alt.tftpb": "Use the upload function provided on this page instead.",
-            "console.cmd.nomatch": "no matching command",
-            "console.cmd.placeholder": "help; printenv",
-            "console.cmd.unknown": "unknown command!",
-            "console.status.ready": "Ready",
-            "console.status.running": "Running...",
-            "console.status.done": "Done",
-            "console.status.cleared": "Cleared",
-            "console.status.http": "HTTP error:",
-            "console.status.parse": "Parse error",
-            "console.status.error": "Error:",
-            "console.upload": "Upload",
-            "console.uploading": "Uploading:",
-            "console.upload.success": "Upload successful",
+            "webterm.title": "WEB TERMINAL",
+            "webterm.input": "Input",
+            "webterm.send": "Send",
+            "webterm.clear": "Clear",
+            "webterm.cmd.forbid.hint": "this command has been disabled!",
+            "webterm.cmd.forbid.reason.common": "This command will cause the HTTPD service to exit abnormally. Do not use it in the web terminal!",
+            "webterm.cmd.forbid.alt.tftpb": "Use the upload function provided on this page instead.",
+            "webterm.cmd.nomatch": "no matching command",
+            "webterm.cmd.placeholder": "help; printenv",
+            "webterm.cmd.unknown": "unknown command!",
+            "webterm.status.ready": "Ready",
+            "webterm.status.running": "Running...",
+            "webterm.status.done": "Done",
+            "webterm.status.cleared": "Cleared",
+            "webterm.status.http": "HTTP error:",
+            "webterm.status.parse": "Parse error",
+            "webterm.status.error": "Error:",
+            "webterm.upload": "Upload",
+            "webterm.uploading": "Uploading:",
+            "webterm.upload.success": "Upload successful",
             "env.title": "U-BOOT ENV",
             "env.hint": "Manage <strong>U-Boot environment variables</strong>. Changes will be saved to storage.",
             "env.count": "Variables:",
@@ -6168,7 +6168,7 @@ const I18N = (() => {
             "nav.settings": "主题设置",
             "nav.network": "网络设置",
             "nav.backup": "闪存备份",
-            "nav.console": "网页终端",
+            "nav.webterm": "网页终端",
             "nav.mac": "MAC 管理",
             "nav.env": "环境变量",
             "nav.reboot": "重启",
@@ -6237,26 +6237,26 @@ const I18N = (() => {
             "backup.warn.1": "备份过程中请勿断电。",
             "backup.warn.2": "自定义范围读取原始字节，请谨慎设置偏移量。",
             "backup.warn.3": "大容量备份可能需要较长时间，取决于存储速度。",
-            "console.title": "网页终端",
-            "console.input": "输入",
-            "console.send": "发送",
-            "console.clear": "清空",
-            "console.cmd.forbid.hint": "此命令已被禁止执行！",
-            "console.cmd.forbid.reason.common": "此命令会导致 HTTPD 服务异常退出，请勿在网页终端中使用！",
-            "console.cmd.forbid.alt.tftpb": "请使用本页面提供的上传功能替代。",
-            "console.cmd.nomatch": "没有匹配的命令",
-            "console.cmd.placeholder": "help; printenv",
-            "console.cmd.unknown": "未知命令！",
-            "console.status.ready": "就绪",
-            "console.status.running": "执行中...",
-            "console.status.done": "完成",
-            "console.status.cleared": "已清空",
-            "console.status.http": "HTTP 错误：",
-            "console.status.parse": "解析失败",
-            "console.status.error": "错误：",
-            "console.upload": "上传",
-            "console.uploading": "正在上传：",
-            "console.upload.success": "上传成功",
+            "webterm.title": "网页终端",
+            "webterm.input": "输入",
+            "webterm.send": "发送",
+            "webterm.clear": "清空",
+            "webterm.cmd.forbid.hint": "此命令已被禁止执行！",
+            "webterm.cmd.forbid.reason.common": "此命令会导致 HTTPD 服务异常退出，请勿在网页终端中使用！",
+            "webterm.cmd.forbid.alt.tftpb": "请使用本页面提供的上传功能替代。",
+            "webterm.cmd.nomatch": "没有匹配的命令",
+            "webterm.cmd.placeholder": "help; printenv",
+            "webterm.cmd.unknown": "未知命令！",
+            "webterm.status.ready": "就绪",
+            "webterm.status.running": "执行中...",
+            "webterm.status.done": "完成",
+            "webterm.status.cleared": "已清空",
+            "webterm.status.http": "HTTP 错误：",
+            "webterm.status.parse": "解析失败",
+            "webterm.status.error": "错误：",
+            "webterm.upload": "上传",
+            "webterm.uploading": "正在上传：",
+            "webterm.upload.success": "上传成功",
             "env.title": "U-BOOT 环境变量",
             "env.hint": "管理 <strong>U-Boot 环境变量</strong>。更改将保存到存储设备。",
             "env.count": "变量数:",
